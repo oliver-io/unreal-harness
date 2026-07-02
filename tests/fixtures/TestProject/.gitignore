@@ -1,0 +1,16 @@
+# UnrealMCP test host — generated/engine churn never gets committed.
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+*.sln
+.vs/
+
+# The UnrealMCP plugin is junctioned/symlinked in at test setup, not vendored.
+Plugins/
+
+# Scratch namespace for any test that has to save assets to disk. Tests place
+# created assets under /Game/__MCPTest__/... ; deleting this dir is a full
+# on-disk reset (see tests/harness/editor.py teardown).
+Content/__MCPTest__/

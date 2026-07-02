@@ -1,0 +1,209 @@
+/**
+ * Actor domain — spawn native actors into the transient level, mutate and
+ * inspect them through the *legacy* actor commands, then assert via read-back.
+ * Port of tests/integration/test_actor.py.
+ *
+ * Exercises the legacy spawn_actor / find_actors_by_name / actor_get_in_level /
+ * actor_inspect commands plus the per-actor mutators (actor_set_transform,
+ * actor_set_property, actor_delete) and the material-info / gamemode helpers.
+ *
+ * Native actors live in the unsaved transient level, so editor-quit is a full
+ * reset — no on-disk cleanup needed. Spawns are made re-runnable by deleting any
+ * prior actor of the same name first (spawn_actor refuses a name collision).
+ */
+
+import { test, expect, beforeAll } from "bun:test";
+import { editorSuite, NS as ROOT } from "../harness/suite.ts";
+import { ensureAbsent, assertReady } from "../harness/ops.ts";
+import type { Commandable } from "../harness/ops.ts";
+
+// A StaticMeshActor needs a mesh for get_actor_material_info to report a slot;
+// the engine cube is always present and asset-free for the test project.
+const CUBE_MESH = "/Engine/BasicShapes/Cube.Cube";
+const NS = `${ROOT}/actor`;
+
+/** Arrange helper (mirrors ops.ensureAbsent for assets): drop any actor of this
+ *  name so the following spawn_actor won't hit a name collision. */
+async function deleteActorIfPresent(bridge: Commandable, name: string): Promise<void> {
+  try {
+    await bridge.command("actor_delete", { name });
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Idempotent spawn of a native actor; returns the spawn_actor result
+ *  (ActorToJsonObject: name, class, location[], rotation[], scale[]). */
+async function spawn(
+  bridge: Commandable,
+  name: string,
+  actorType = "StaticMeshActor",
+  extra: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  await deleteActorIfPresent(bridge, name);
+  const params: Record<string, unknown> = { name, type: actorType, ...extra };
+  return bridge.expect("spawn_actor", params);
+}
+
+editorSuite("actor", (ctx) => {
+  // One shared StaticMeshActor (with the engine cube) for the read-only and
+  // non-destructive tests. Lives in the transient level; the editor-quit reset
+  // cleans it up. Spawns at the BRIDGE level: the legacy `spawn_actor` command
+  // has no standalone MCP tool (only `actor_spawn`).
+  let smActor: string;
+
+  beforeAll(async () => {
+    smActor = "MCPTest_SM_Shared";
+    await spawn(ctx.bridge, smActor, "StaticMeshActor", { static_mesh: CUBE_MESH });
+  });
+
+  test("spawn_actor_then_find_and_list", async () => {
+    // A real spawn must be addressable by name and present in the level list.
+    // Stays at the BRIDGE level: the legacy `spawn_actor` command this test
+    // exercises has no standalone MCP tool (only `actor_spawn`).
+    const name = "MCPTest_SM_Spawn";
+    const spawned = await spawn(ctx.bridge, name, "StaticMeshActor", { static_mesh: CUBE_MESH });
+    expect(spawned.name).toEqual(name);
+    expect(String(spawned.class).endsWith("StaticMeshActor")).toBe(true);
+
+    const found = await ctx.bridge.expect("find_actors_by_name", { pattern: name });
+    const names = ((found.actors as any[]) ?? []).map((a) => a.name);
+    expect(names).toContain(name);
+
+    const inLevel = await ctx.bridge.expect("actor_get_in_level", {});
+    const allNames = ((inLevel.actors as any[]) ?? []).map((a) => a.name);
+    expect(allNames).toContain(name);
+  });
+
+  test("actor_inspect_reports_class_and_transform", async () => {
+    const result = await ctx.mcp.expect("actor_inspect", { name: smActor });
+    expect(result.name).toEqual(smActor);
+    // actor_inspect reports the full class path (/Script/Engine.StaticMeshActor).
+    expect(String(result.class)).toContain("StaticMeshActor");
+    // Transform is an object {x,y,z}; components are enumerated.
+    const loc = result.location as Record<string, unknown>;
+    expect(loc.x).toBeDefined();
+    expect(loc.y).toBeDefined();
+    expect(loc.z).toBeDefined();
+    expect(result.components).toBeDefined();
+  });
+
+  test("set_actor_transform_then_inspect", async () => {
+    // Move the actor, then prove the new location through a different command.
+    await ctx.mcp.expect("actor_set_transform", {
+      name: smActor,
+      location: [120.0, 240.0, 360.0],
+    });
+    const result = await ctx.mcp.expect("actor_inspect", { name: smActor });
+    const loc = result.location as Record<string, number>;
+    expect(Math.abs(loc.x! - 120.0) <= 1.0).toBe(true);
+    expect(Math.abs(loc.y! - 240.0) <= 1.0).toBe(true);
+    expect(Math.abs(loc.z! - 360.0) <= 1.0).toBe(true);
+  });
+
+  test("set_actor_transform_dry_run_does_not_mutate", async () => {
+    // dry_run validates and emits a transforms_changed diff without mutating.
+    const result = await ctx.mcp.expect("actor_set_transform", {
+      name: smActor,
+      location: [1.0, 2.0, 3.0],
+      dry_run: true,
+    });
+    expect(result.dry_run).toBe(true);
+    const changed = (result.diff as any).transforms_changed;
+    expect(changed[0].name).toEqual(smActor);
+  });
+
+  test("actor_set_property_then_readback", async () => {
+    // Reflective write of a leaf on a placed actor; the response re-exports the
+    // property after the write, which is the read-back.
+    const result = await ctx.mcp.expect("actor_set_property", {
+      name: smActor,
+      property: "StaticMeshComponent.BoundsScale",
+      value: 2.0,
+    });
+    expect(result.success).toBe(true);
+    // Default BoundsScale is 1.0; the exported 'after' text must reflect 2.0.
+    expect(String(result.after)).toContain("2");
+    expect(result.before).not.toEqual(result.after);
+  });
+
+  test("delete_actor_then_absent", async () => {
+    // Delete a dedicated actor (not the shared one) and prove it's gone. The
+    // setup spawn uses the legacy `spawn_actor` command (no MCP tool) via the
+    // bridge; the tools under test — actor_delete and find_actors_by_name — run
+    // through the real MCP server.
+    const name = "MCPTest_SM_ToDelete";
+    await spawn(ctx.bridge, name, "StaticMeshActor", { static_mesh: CUBE_MESH });
+
+    const result = await ctx.mcp.expect("actor_delete", { name });
+    expect(result.deleted_actor).toBeDefined();
+
+    const found = await ctx.mcp.expect("find_actors_by_name", { pattern: name });
+    const names = ((found.actors as any[]) ?? []).map((a) => a.name);
+    expect(names).not.toContain(name);
+  });
+
+  test("get_actor_material_info", async () => {
+    // The shared actor carries the engine cube, so it must report >=1 slot.
+    const result = await ctx.mcp.expect("mesh_get_actor_material_info", { actor_name: smActor });
+    expect(result.actor_name).toEqual(smActor);
+    expect((result.total_slots as number) >= 1).toBe(true);
+    const slots = result.material_slots as any[];
+    expect(slots && slots.length > 0).toBeTruthy();
+    expect(slots[0].material_path).toBeDefined();
+  });
+
+  test("set_mesh_material_color", async () => {
+    // GAP-009: mesh_set_mesh_material_color targets a Blueprint SCS component
+    // *template* and now REFUSES the dynamic-instance path (a runtime MID baked into
+    // a saved template corrupts level saves). It must return a structured
+    // feature_disabled error directing to the saved-asset path.
+    const bp = `${NS}/BP_MeshColor`;
+    await ensureAbsent(ctx.mcp, bp);
+    await ctx.mcp.expect("bp_create_blueprint", { name: bp, parent_class: "Actor" });
+    await ctx.mcp.expect("bp_add_component", {
+      blueprint_name: bp,
+      component_type: "StaticMeshComponent",
+      component_name: "Mesh",
+    });
+    await ctx.mcp.expect("bp_compile", { blueprint_name: bp });
+
+    // Use call() (not expect()) — the refusal is intentional, not a failure.
+    const result = await ctx.mcp.call("mesh_set_mesh_material_color", {
+      blueprint_name: bp,
+      component_name: "Mesh",
+      color: [1.0, 0.25, 0.0, 1.0],
+      material_path: "/Engine/BasicShapes/BasicShapeMaterial",
+      parameter_name: "BaseColor",
+    });
+    expect(result.status).toBe("error");
+    expect(result.error_code).toBe("feature_disabled");
+    expect(JSON.stringify(result)).toContain("material_create_instance");
+  });
+
+  test("set_world_gamemode_override", async () => {
+    // Bind a level's World Settings GameModeOverride. Requires a saved World
+    // asset to target — the transient untitled level has no /Game path, so we
+    // discover an on-disk level and skip cleanly if the project has none.
+    const listing = await ctx.mcp.expect("asset_list", {
+      directory_path: "/Game/",
+      recursive: true,
+      class_filter: "World",
+    });
+    const data = (listing.data as Record<string, unknown>) ?? listing;
+    const worlds = (((data.assets as any[]) ?? []) as any[]).filter((a) => a.class === "World");
+    if (worlds.length === 0) {
+      console.log("SKIP: no saved World/level asset in the test project to target");
+      return;
+    }
+
+    const levelPath = String(worlds[0].path).split(".")[0];
+    const result = await ctx.mcp.expect("level_set_gamemode_override", {
+      level_path: levelPath,
+      gamemode_class: "/Script/Engine.GameModeBase",
+    });
+    expect(result.success).toBe(true);
+    expect(String(result.gamemode_class ?? "")).toContain("GameMode");
+    await assertReady(ctx.mcp);
+  });
+});

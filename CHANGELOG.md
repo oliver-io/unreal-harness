@@ -1,0 +1,53 @@
+# Changelog — MCP server (`src/server/`)
+
+Notable changes to the Bun/TypeScript MCP server. Newest first; add an entry in the
+same change that alters behavior.
+
+## Unreleased
+
+- `asset_textures_import`: per-image `settings.lod_group` (World/UI/Effects/Skybox/
+  Character/Weapon/Vehicle/Pixels2D) and `settings.mip_gen` (FromTextureGroup/
+  NoMipmaps/SimpleAverage/LeaveExistingMips). UI-group textures are never streamed,
+  so HUD art no longer renders a blurry low mip on first open — previously fixable
+  only via the `py` console hatch. Result entries report the applied values.
+- `/gimp-import` rewritten around two explicit modes. MOCKUP (the old behavior,
+  condensed): one-shot tight-crop + anchor-math recreate of a GIMP layout. CONTRACT
+  (new, genericized from a production region-overlay world-map pipeline): a
+  layer-naming grammar (`<SCOPE>_<MID>_<STATE>[_<NONCE>]`, structurally parsed),
+  co-registered full-canvas exports (zero UMG placement math), filename-as-join-key
+  re-import, a committed per-project export script (in-session or headless
+  `gimp-console-3`; ad-hoc exports rejected) emitting a validating `manifest.json`,
+  and optional CPU hit-mask (`WMSK`) + bounding-box sidecars for irregular-shape
+  interaction. New template: `.claude/skills/gimp-import/scripts/gimp_export_contract.py`.
+- `physics_material_create`: typed creation of `UPhysicalMaterial` assets
+  (friction / static friction / restitution / density; optional per-material
+  combine modes that also flip their override flags). Closes the gap where the
+  `py` console hatch was the only route to a physical material. PIE-blocked,
+  no dry-run, mirrored in `bridge/gates.ts`.
+- Server manifest hoisted to the repo root: `package.json` + `bun.lock` now live
+  at the top level, so `bun install` / `bun run mcp` / `bun test src/server` work
+  straight from a fresh clone (source stays under `src/server/`;
+  `src/server/package.json` is gone). `scripts/run-server.*` and the pytest
+  harness launch from the root.
+- `/onboard` gained a dependency phase: a tiered matrix
+  (`.claude/skills/onboard/DEPENDENCIES.md`, minimal vs full vs custom) with
+  detection + official install sources per platform; the GIMP pipeline's external
+  MCP server is now documented as [maorcc/gimp-mcp](https://github.com/maorcc/gimp-mcp).
+- `pie_record_arm`/`pie_record_disarm`: armed auto-record — every PIE session
+  records itself from its first frames until disarmed (auto-numbered takes,
+  per-take cap). `pie_record_start` gains `wait_for_pie_s` (arm-and-wait for a
+  single take).
+- `pie_record_start` gains `audio` (default true): recordings carry the PIE
+  world's game audio (main-submix mix) as a synced AAC track; result reports
+  `audio`/`audio_sample_rate`/`audio_note`.
+- PIE video capture + analysis: `pie_record_start`/`pie_record_stop`/
+  `pie_record_status` (lease-aware wrappers over the new in-engine recorder),
+  `video_analyze` (MP4 + expected behaviour → structured, timestamped verdict
+  via a Gemini video-understanding model; key from `GEMINI_API_KEY` or
+  `GOOGLE_STUDIO_API_KEY`), and the `pie_analyze` one-shot composite
+  (record → stop → analyze). New `video` domain; analysis provider quarantined
+  behind `src/video/analyzer.ts`. Config knobs: `UNREAL_MCP_VIDEO_MODEL`,
+  `UNREAL_MCP_VIDEO_ANALYSIS_FPS`, `UNREAL_MCP_VIDEO_MAX_ANALYSIS_FPS`,
+  `UNREAL_MCP_VIDEO_PROVIDER`. The repo-root `.env` is now backfilled into the
+  server env regardless of launch cwd.
+- Initial open-source release.

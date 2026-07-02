@@ -1,0 +1,46 @@
+# Unreal build artifacts
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+*.sln
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.log
+temp
+tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Demo/dev-story videos stay out of the repo — README embeds them via
+# GitHub user-attachments URLs instead.
+docs/assets/media/*.mp4
+docs/media/*.mp4
+
+# Claude Code personal/local config + onboarding sentinel
+.claude/settings.local.json
+.claude/.onboard-nudged
+
+projects
+
+# Third-party plugins fetched by scripts/install-plugins (not engine-bundled;
+# have public source). Vendored locally, never committed.
+external/
+
+# Bun MCP server (manifest at repo root, source under src/server)
+node_modules/
+dist/
+
+**/*/node_modules

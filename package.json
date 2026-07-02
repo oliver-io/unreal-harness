@@ -1,0 +1,30 @@
+{
+  "name": "unreal-harness",
+  "version": "0.1.0",
+  "description": "Modern Bun-native MCP server that drives a live Unreal Editor over a TCP bridge.",
+  "type": "module",
+  "module": "src/server/src/main.ts",
+  "license": "MIT",
+  "packageManager": "bun@1.3.14",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "scripts": {
+    "mcp": "bun run src/server/src/main.ts",
+    "mcp:stop": "bun run src/server/scripts/stop.ts",
+    "build": "bun build --compile --minify --outfile dist/unreal-harness src/server/src/main.ts",
+    "typecheck": "tsc --noEmit -p src/server",
+    "test": "bun test --timeout 120000 src/server",
+    "lint:names": "bun run src/server/scripts/lint-canonical-names.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.10.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.5.0"
+  }
+}

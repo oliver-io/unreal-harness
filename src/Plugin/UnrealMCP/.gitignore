@@ -1,0 +1,18 @@
+# UnrealMCP plugin — keep the publishable surface clean.
+# (Source/, Config/, Python/*.py, *.sh, pyproject.toml, the .uplugin and CHANGELOG ship;
+#  everything below is a build/runtime artifact that must not be packaged.)
+
+# Unreal build output
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# Python sidecar artifacts
+Python/.venv/
+**/__pycache__/
+*.pyc
+*.egg-info/
+
+# Runtime logs
+*.log

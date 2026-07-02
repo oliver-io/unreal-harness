@@ -1,0 +1,4625 @@
+{
+"actor_delete": {
+"kwargs": [
+"name",
+"dry_run"
+],
+"required": [
+"name"
+]
+},
+"actor_get_in_level": {
+"kwargs": [
+"random_string"
+],
+"required": []
+},
+"actor_inspect": {
+"kwargs": [
+"name"
+],
+"required": [
+"name"
+]
+},
+"actor_query": {
+"kwargs": [
+"name_pattern",
+"class_filter",
+"direct_only",
+"tag",
+"label",
+"bbox_min",
+"bbox_max",
+"distance_origin",
+"distance_radius",
+"cursor",
+"limit"
+],
+"required": []
+},
+"actor_set_property": {
+"kwargs": [
+"name",
+"property",
+"value",
+"save",
+"dry_run"
+],
+"required": [
+"name",
+"property",
+"value"
+]
+},
+"actor_set_transform": {
+"kwargs": [
+"name",
+"location",
+"rotation",
+"scale",
+"dry_run"
+],
+"required": [
+"name"
+]
+},
+"actor_spawn": {
+"kwargs": [
+"class_path",
+"location",
+"rotation",
+"scale",
+"name",
+"tags",
+"folder_path",
+"dry_run"
+],
+"required": [
+"class_path"
+]
+},
+"anim_notify_add": {
+"kwargs": [
+"anim_path",
+"notify_class",
+"trigger_time",
+"track_index",
+"duration",
+"dry_run"
+],
+"required": [
+"anim_path",
+"notify_class",
+"trigger_time"
+]
+},
+"anim_blend_space_add_sample": {
+"kwargs": [
+"blend_space_path",
+"anim_sequence",
+"x",
+"y",
+"dry_run"
+],
+"required": [
+"blend_space_path",
+"anim_sequence"
+]
+},
+"bp_add_component": {
+"kwargs": [
+"blueprint_name",
+"component_type",
+"component_name",
+"location",
+"rotation",
+"scale",
+"component_properties"
+],
+"required": [
+"blueprint_name",
+"component_type",
+"component_name"
+]
+},
+"eqs_option_add": {
+"kwargs": [
+"asset_path",
+"generator_type",
+"properties",
+"dry_run"
+],
+"required": [
+"asset_path",
+"generator_type"
+]
+},
+"eqs_test_add": {
+"kwargs": [
+"asset_path",
+"option_index",
+"test_type",
+"properties",
+"dry_run"
+],
+"required": [
+"asset_path",
+"option_index",
+"test_type"
+]
+},
+"bp_add_event_node": {
+"kwargs": [
+"blueprint_name",
+"event_name",
+"pos_x",
+"pos_y"
+],
+"required": [
+"blueprint_name",
+"event_name"
+]
+},
+"bp_add_function_input": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type",
+"is_array"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type"
+]
+},
+"bp_add_function_output": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type",
+"is_array"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type"
+]
+},
+"material_add_expression": {
+"kwargs": [
+"material_path",
+"expression_type",
+"position_x",
+"position_y",
+"desc",
+"r",
+"g",
+"b",
+"a",
+"parameter_name",
+"value",
+"default_value",
+"default_r",
+"default_g",
+"default_b",
+"default_a",
+"texture_path",
+"u_tiling",
+"v_tiling",
+"coordinate_index",
+"layers",
+"period",
+"ignore_pause",
+"equals_threshold",
+"code",
+"output_type",
+"inputs",
+"param_names",
+"parameter_index",
+"dry_run"
+],
+"required": [
+"material_path",
+"expression_type"
+]
+},
+"anim_montage_add_section": {
+"kwargs": [
+"montage_path",
+"section_name",
+"start_time"
+],
+"required": [
+"montage_path",
+"section_name"
+]
+},
+"niagara_scratch_pad_module_add": {
+"kwargs": [
+"system_path",
+"module_name",
+"target_usage",
+"hlsl",
+"emitter_name",
+"emitter_index",
+"inputs",
+"outputs",
+"target_index"
+],
+"required": [
+"system_path",
+"module_name",
+"target_usage",
+"hlsl"
+]
+},
+"niagara_user_parameter_add": {
+"kwargs": [
+"system_path",
+"parameter_name",
+"type_name"
+],
+"required": [
+"system_path",
+"parameter_name",
+"type_name"
+]
+},
+"bp_add_node": {
+"kwargs": [
+"blueprint_name",
+"node_type",
+"pos_x",
+"pos_y",
+"message",
+"event_type",
+"variable_name",
+"target_function",
+"target_class",
+"target_blueprint",
+"function_name",
+"anim_asset",
+"slot_name",
+"cache_name",
+"target_bone",
+"linked_class",
+"layer_interface",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_name",
+"node_type"
+]
+},
+"anim_skeleton_add_socket": {
+"kwargs": [
+"skeleton_path",
+"socket_name",
+"bone_name",
+"location_x",
+"location_y",
+"location_z",
+"rotation_pitch",
+"rotation_yaw",
+"rotation_roll",
+"scale_x",
+"scale_y",
+"scale_z",
+"dry_run"
+],
+"required": [
+"skeleton_path",
+"socket_name",
+"bone_name"
+]
+},
+"anim_state_machine_state_add": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"state_name",
+"pos_x",
+"pos_y"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+]
+},
+"anim_state_machine_transition_add": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"from_state",
+"to_state",
+"blend_duration",
+"priority_order",
+"bidirectional",
+"automatic_rule_based_on_sequence_player"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"from_state",
+"to_state"
+]
+},
+"ai_get_awareness": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"ai_get_perception": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"ai_get_state": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"bp_inspect": {
+"kwargs": [
+"blueprint_path",
+"graph_name",
+"include_node_details",
+"include_pin_connections",
+"trace_execution_flow",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_path"
+]
+},
+"anim_anchor_feet_to_floor": {
+"kwargs": [
+"anim_path",
+"foot_bone_substring",
+"pelvis_bone_substring",
+"target_z",
+"sample_frames",
+"output_suffix"
+],
+"required": [
+"anim_path"
+]
+},
+"anim_blend_space_add_sample": {
+"kwargs": [
+"blend_space_path",
+"anim_sequence",
+"x",
+"y",
+"dry_run"
+],
+"required": [
+"blend_space_path",
+"anim_sequence"
+]
+},
+"anim_blend_space_create": {
+"kwargs": [
+"name",
+"skeleton_path",
+"is_2d",
+"is_aim_offset",
+"package_path",
+"x_axis_name",
+"x_axis_min",
+"x_axis_max",
+"x_axis_grid_divisions",
+"y_axis_name",
+"y_axis_min",
+"y_axis_max",
+"y_axis_grid_divisions",
+"samples"
+],
+"required": [
+"name",
+"skeleton_path"
+]
+},
+"anim_blend_space_read": {
+"kwargs": [
+"blend_space_path"
+],
+"required": [
+"blend_space_path"
+]
+},
+"anim_blend_space_remove_sample": {
+"kwargs": [
+"blend_space_path",
+"sample_index",
+"dry_run"
+],
+"required": [
+"blend_space_path",
+"sample_index"
+]
+},
+"anim_blueprint_create": {
+"kwargs": [
+"name",
+"skeleton_path",
+"parent_class",
+"package_path"
+],
+"required": [
+"name",
+"skeleton_path"
+]
+},
+"anim_blueprint_set_skeleton": {
+"kwargs": [
+"blueprint_path",
+"skeleton_path"
+],
+"required": [
+"blueprint_path",
+"skeleton_path"
+]
+},
+"anim_list_blend_spaces": {
+"kwargs": [
+"skeleton_path",
+"package_path"
+],
+"required": []
+},
+"anim_list_blueprints": {
+"kwargs": [
+"skeleton_path"
+],
+"required": []
+},
+"anim_list_layer_interfaces": {
+"kwargs": [],
+"required": []
+},
+"anim_list_montages": {
+"kwargs": [
+"skeleton_path"
+],
+"required": []
+},
+"anim_list_notifies": {
+"kwargs": [
+"anim_path"
+],
+"required": [
+"anim_path"
+]
+},
+"anim_list_sequences": {
+"kwargs": [
+"skeleton_path"
+],
+"required": []
+},
+"anim_list_skeletons": {
+"kwargs": [],
+"required": []
+},
+"anim_montage_add_section": {
+"kwargs": [
+"montage_path",
+"section_name",
+"start_time"
+],
+"required": [
+"montage_path",
+"section_name"
+]
+},
+"anim_montage_create": {
+"kwargs": [
+"name",
+"skeleton_path",
+"source_sequence",
+"package_path",
+"slot_name"
+],
+"required": [
+"name",
+"skeleton_path"
+]
+},
+"anim_montage_read": {
+"kwargs": [
+"montage_path"
+],
+"required": [
+"montage_path"
+]
+},
+"anim_montage_set_blend": {
+"kwargs": [
+"montage_path",
+"blend_in_time",
+"blend_out_time",
+"blend_out_trigger_time"
+],
+"required": [
+"montage_path"
+]
+},
+"anim_montage_set_section_link": {
+"kwargs": [
+"montage_path",
+"section_name",
+"next_section_name"
+],
+"required": [
+"montage_path",
+"section_name",
+"next_section_name"
+]
+},
+"anim_node_bind_property": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"property_name",
+"variable_name",
+"graph_name"
+],
+"required": [
+"blueprint_name",
+"node_id",
+"property_name",
+"variable_name"
+]
+},
+"anim_notify_add": {
+"kwargs": [
+"anim_path",
+"notify_class",
+"trigger_time",
+"track_index",
+"duration",
+"dry_run"
+],
+"required": [
+"anim_path",
+"notify_class",
+"trigger_time"
+]
+},
+"anim_notify_remove": {
+"kwargs": [
+"anim_path",
+"notify_index",
+"dry_run"
+],
+"required": [
+"anim_path",
+"notify_index"
+]
+},
+"anim_physics_inspect": {
+"kwargs": [
+"path"
+],
+"required": [
+"path"
+]
+},
+"anim_sequence_set_property": {
+"kwargs": [
+"anim_path",
+"additive_anim_type",
+"base_pose_type",
+"base_pose_anim",
+"ref_frame_index"
+],
+"required": [
+"anim_path"
+]
+},
+"anim_skeletal_mesh_inspect": {
+"kwargs": [
+"path"
+],
+"required": [
+"path"
+]
+},
+"anim_skeletal_mesh_set_section_disabled": {
+"kwargs": [
+"path",
+"section_index",
+"disabled",
+"lod_index"
+],
+"required": [
+"path",
+"section_index"
+]
+},
+"anim_skeleton_add_socket": {
+"kwargs": [
+"skeleton_path",
+"socket_name",
+"bone_name",
+"location_x",
+"location_y",
+"location_z",
+"rotation_pitch",
+"rotation_yaw",
+"rotation_roll",
+"scale_x",
+"scale_y",
+"scale_z",
+"dry_run"
+],
+"required": [
+"skeleton_path",
+"socket_name",
+"bone_name"
+]
+},
+"anim_skeleton_list_sockets": {
+"kwargs": [
+"skeleton_path"
+],
+"required": [
+"skeleton_path"
+]
+},
+"anim_skeleton_modify_socket": {
+"kwargs": [
+"skeleton_path",
+"socket_name",
+"bone_name",
+"location_x",
+"location_y",
+"location_z",
+"rotation_pitch",
+"rotation_yaw",
+"rotation_roll",
+"scale_x",
+"scale_y",
+"scale_z",
+"force_always_animated"
+],
+"required": [
+"skeleton_path",
+"socket_name"
+]
+},
+"anim_skeleton_remove_socket": {
+"kwargs": [
+"skeleton_path",
+"socket_name"
+],
+"required": [
+"skeleton_path",
+"socket_name"
+]
+},
+"anim_state_machine_create": {
+"kwargs": [
+"blueprint_name",
+"machine_name",
+"pos_x",
+"pos_y",
+"graph_name"
+],
+"required": [
+"blueprint_name"
+]
+},
+"anim_state_machine_modify_transition": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"transition_id",
+"from_state",
+"to_state",
+"blend_duration",
+"priority_order",
+"bidirectional",
+"automatic_rule_based_on_sequence_player"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph"
+]
+},
+"anim_state_machine_set_entry": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+]
+},
+"anim_state_machine_state_add": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"state_name",
+"pos_x",
+"pos_y"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+]
+},
+"anim_state_machine_state_remove": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+]
+},
+"anim_state_machine_transition_add": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"from_state",
+"to_state",
+"blend_duration",
+"priority_order",
+"bidirectional",
+"automatic_rule_based_on_sequence_player"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"from_state",
+"to_state"
+]
+},
+"anim_state_machine_transition_remove": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"transition_id",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph"
+]
+},
+"material_apply_to_actor": {
+"kwargs": [
+"actor_name",
+"material_path",
+"material_slot"
+],
+"required": [
+"actor_name",
+"material_path"
+]
+},
+"material_apply_to_blueprint": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"material_path",
+"material_slot"
+],
+"required": [
+"blueprint_name",
+"component_name",
+"material_path"
+]
+},
+"asset_bake_dynamic_to_static_mesh": {
+"kwargs": [
+"actor_name",
+"target_asset_path",
+"component_name",
+"force_overwrite",
+"material_paths",
+"collision_trace_flag",
+"recompute_normals",
+"recompute_tangents",
+"enable_nanite",
+"replace_source_actor"
+],
+"required": [
+"actor_name",
+"target_asset_path"
+]
+},
+"asset_dataasset_create": {
+"kwargs": [
+"name",
+"asset_class",
+"force_overwrite"
+],
+"required": [
+"name",
+"asset_class"
+]
+},
+"asset_dataasset_read": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"asset_dataasset_set_property": {
+"kwargs": [
+"asset_path",
+"property",
+"value",
+"action",
+"index"
+],
+"required": [
+"asset_path",
+"property"
+]
+},
+"asset_datatable_read": {
+"kwargs": [
+"table_path"
+],
+"required": [
+"table_path"
+]
+},
+"asset_delete": {
+"kwargs": [
+"asset_path",
+"force",
+"dry_run"
+],
+"required": [
+"asset_path"
+]
+},
+"asset_duplicate": {
+"kwargs": [
+"source_path",
+"destination_path",
+"dry_run"
+],
+"required": [
+"source_path",
+"destination_path"
+]
+},
+"asset_fixup_redirectors": {
+"kwargs": [
+"directory_path",
+"dry_run"
+],
+"required": []
+},
+"asset_list": {
+"kwargs": [
+"directory_path",
+"recursive",
+"class_filter"
+],
+"required": []
+},
+"asset_move": {
+"kwargs": [
+"source_path",
+"destination_folder",
+"new_name",
+"dry_run"
+],
+"required": [
+"source_path",
+"destination_folder"
+]
+},
+"asset_open": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"asset_references": {
+"kwargs": [
+"asset_path",
+"direction",
+"depth",
+"cursor",
+"limit",
+"include_hard",
+"include_soft",
+"include_searchable_name"
+],
+"required": [
+"asset_path",
+"direction"
+]
+},
+"asset_rename": {
+"kwargs": [
+"source_path",
+"new_name",
+"dry_run"
+],
+"required": [
+"source_path",
+"new_name"
+]
+},
+"asset_save": {
+"kwargs": [
+"asset_paths"
+],
+"required": []
+},
+"asset_textures_import": {
+"kwargs": [
+"destination_folder",
+"images",
+"force_overwrite"
+],
+"required": [
+"destination_folder",
+"images"
+]
+},
+"asset_bake_dynamic_to_static_mesh": {
+"kwargs": [
+"actor_name",
+"target_asset_path",
+"component_name",
+"force_overwrite",
+"material_paths",
+"collision_trace_flag",
+"recompute_normals",
+"recompute_tangents",
+"enable_nanite",
+"replace_source_actor"
+],
+"required": [
+"actor_name",
+"target_asset_path"
+]
+},
+"anim_node_bind_property": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"property_name",
+"variable_name",
+"graph_name"
+],
+"required": [
+"blueprint_name",
+"node_id",
+"property_name",
+"variable_name"
+]
+},
+"bp_add_component": {
+"kwargs": [
+"blueprint_name",
+"component_type",
+"component_name",
+"location",
+"rotation",
+"scale",
+"component_properties"
+],
+"required": [
+"blueprint_name",
+"component_type",
+"component_name"
+]
+},
+"bp_add_event_node": {
+"kwargs": [
+"blueprint_name",
+"event_name",
+"pos_x",
+"pos_y"
+],
+"required": [
+"blueprint_name",
+"event_name"
+]
+},
+"bp_add_function_input": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type",
+"is_array"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type"
+]
+},
+"bp_add_function_output": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type",
+"is_array"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name",
+"param_type"
+]
+},
+"bp_add_node": {
+"kwargs": [
+"blueprint_name",
+"node_type",
+"pos_x",
+"pos_y",
+"message",
+"event_type",
+"variable_name",
+"target_function",
+"target_class",
+"target_blueprint",
+"function_name",
+"anim_asset",
+"slot_name",
+"cache_name",
+"target_bone",
+"linked_class",
+"layer_interface",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_name",
+"node_type"
+]
+},
+"bp_brief": {
+"kwargs": [
+"bp_path"
+],
+"required": [
+"bp_path"
+]
+},
+"bp_compile": {
+"kwargs": [
+"blueprint_name"
+],
+"required": [
+"blueprint_name"
+]
+},
+"bp_connect_pins": {
+"kwargs": [
+"blueprint_name",
+"source_node_id",
+"source_pin_name",
+"target_node_id",
+"target_pin_name",
+"function_name",
+"from_state",
+"to_state",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"source_node_id",
+"source_pin_name",
+"target_node_id",
+"target_pin_name"
+]
+},
+"bp_create_blueprint": {
+"kwargs": [
+"name",
+"parent_class",
+"target_skeleton"
+],
+"required": [
+"name",
+"parent_class"
+]
+},
+"bp_create_function": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"return_type"
+],
+"required": [
+"blueprint_name",
+"function_name"
+]
+},
+"bp_create_variable": {
+"kwargs": [
+"blueprint_name",
+"variable_name",
+"variable_type",
+"default_value",
+"is_public",
+"tooltip",
+"category",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"variable_name",
+"variable_type"
+]
+},
+"bp_delete_function": {
+"kwargs": [
+"blueprint_name",
+"function_name"
+],
+"required": [
+"blueprint_name",
+"function_name"
+]
+},
+"bp_delete_node": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"function_name",
+"from_state",
+"to_state",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"node_id"
+]
+},
+"bp_delete_variable": {
+"kwargs": [
+"blueprint_name",
+"variable_name"
+],
+"required": [
+"blueprint_name",
+"variable_name"
+]
+},
+"bp_disconnect_pin": {
+"kwargs": [
+"bp_path",
+"node_id",
+"pin_name",
+"target_node_id",
+"target_pin_name",
+"dry_run"
+],
+"required": [
+"bp_path",
+"node_id",
+"pin_name"
+]
+},
+"bp_function_references": {
+"kwargs": [
+"bp_path",
+"function_name",
+"direction"
+],
+"required": [
+"bp_path",
+"function_name",
+"direction"
+]
+},
+"bp_get_function_details": {
+"kwargs": [
+"blueprint_path",
+"function_name",
+"include_graph"
+],
+"required": [
+"blueprint_path"
+]
+},
+"bp_get_parent_class": {
+"kwargs": [
+"bp_path"
+],
+"required": [
+"bp_path"
+]
+},
+"bp_get_variable_details": {
+"kwargs": [
+"blueprint_path",
+"variable_name"
+],
+"required": [
+"blueprint_path"
+]
+},
+"bp_inspect": {
+"kwargs": [
+"blueprint_path",
+"graph_name",
+"include_node_details",
+"include_pin_connections",
+"trace_execution_flow",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_path"
+]
+},
+"bp_list_components": {
+"kwargs": [
+"bp_path"
+],
+"required": [
+"bp_path"
+]
+},
+"bp_list_graphs": {
+"kwargs": [
+"blueprint_path"
+],
+"required": [
+"blueprint_path"
+]
+},
+"bp_list_node_pins": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"graph_name",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_name",
+"node_id"
+]
+},
+"bp_read": {
+"kwargs": [
+"blueprint_path",
+"include_event_graph",
+"include_functions",
+"include_variables",
+"include_components",
+"include_interfaces",
+"include_variable_defaults",
+"include_component_properties",
+"include_inherited_components"
+],
+"required": [
+"blueprint_path"
+]
+},
+"bp_remove_component": {
+"kwargs": [
+"bp_path",
+"component_name",
+"reparent_children",
+"dry_run"
+],
+"required": [
+"bp_path",
+"component_name"
+]
+},
+"bp_remove_function_input": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name"
+]
+},
+"bp_remove_function_output": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name"
+]
+},
+"bp_rename_function": {
+"kwargs": [
+"blueprint_name",
+"old_function_name",
+"new_function_name"
+],
+"required": [
+"blueprint_name",
+"old_function_name",
+"new_function_name"
+]
+},
+"bp_reparent": {
+"kwargs": [
+"blueprint_path",
+"new_parent_class"
+],
+"required": [
+"blueprint_path",
+"new_parent_class"
+]
+},
+"bp_set_default_value": {
+"kwargs": [
+"blueprint_name",
+"property",
+"value"
+],
+"required": [
+"blueprint_name",
+"property",
+"value"
+]
+},
+"bp_set_inner_node_property": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"property_name",
+"property_value",
+"graph_name"
+],
+"required": [
+"blueprint_name",
+"node_id",
+"property_name",
+"property_value"
+]
+},
+"bp_set_node_property": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"property_name",
+"property_value",
+"function_name",
+"from_state",
+"to_state",
+"action",
+"pin_type",
+"pin_name",
+"enum_type",
+"new_type",
+"target_type",
+"target_function",
+"target_class",
+"event_type",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"node_id"
+]
+},
+"bp_set_variable_properties": {
+"kwargs": [
+"blueprint_name",
+"variable_name",
+"var_name",
+"var_type",
+"is_blueprint_readable",
+"is_blueprint_writable",
+"is_public",
+"is_editable_in_instance",
+"tooltip",
+"category",
+"default_value",
+"expose_on_spawn",
+"expose_to_cinematics",
+"slider_range_min",
+"slider_range_max",
+"value_range_min",
+"value_range_max",
+"units",
+"bitmask",
+"bitmask_enum",
+"replication_enabled",
+"replication_condition",
+"is_private",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"variable_name"
+]
+},
+"editor_build_game_target": {
+"kwargs": [
+"project_root",
+"target"
+],
+"required": []
+},
+"class_inspect": {
+"kwargs": [
+"class_name",
+"include",
+"include_inherited"
+],
+"required": [
+"class_name"
+]
+},
+"class_query": {
+"kwargs": [
+"name_pattern",
+"parent",
+"recursive",
+"include_hidden",
+"cursor",
+"limit"
+],
+"required": []
+},
+"bp_compile": {
+"kwargs": [
+"blueprint_name"
+],
+"required": [
+"blueprint_name"
+]
+},
+"material_compile": {
+"kwargs": [
+"material_path"
+],
+"required": [
+"material_path"
+]
+},
+"statetree_compile": {
+"kwargs": [
+"asset_path",
+"auto_save"
+],
+"required": [
+"asset_path"
+]
+},
+"material_connect": {
+"kwargs": [
+"material_path",
+"source_expression",
+"target_input",
+"target_expression",
+"source_output_index",
+"dry_run"
+],
+"required": [
+"material_path",
+"source_expression",
+"target_input"
+]
+},
+"bp_connect_pins": {
+"kwargs": [
+"blueprint_name",
+"source_node_id",
+"source_pin_name",
+"target_node_id",
+"target_pin_name",
+"function_name",
+"from_state",
+"to_state",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"source_node_id",
+"source_pin_name",
+"target_node_id",
+"target_pin_name"
+]
+},
+"construct_house": {
+"kwargs": [
+"width",
+"depth",
+"height",
+"location",
+"name_prefix",
+"mesh",
+"house_style"
+],
+"required": []
+},
+"construct_mansion": {
+"kwargs": [
+"mansion_scale",
+"location",
+"name_prefix"
+],
+"required": []
+},
+"editor_content_browser_refresh": {
+"kwargs": [
+"path",
+"force_rescan"
+],
+"required": []
+},
+"anim_blueprint_create": {
+"kwargs": [
+"name",
+"skeleton_path",
+"parent_class",
+"package_path"
+],
+"required": [
+"name",
+"skeleton_path"
+]
+},
+"anim_montage_create": {
+"kwargs": [
+"name",
+"skeleton_path",
+"source_sequence",
+"package_path",
+"slot_name"
+],
+"required": [
+"name",
+"skeleton_path"
+]
+},
+"anim_blend_space_create": {
+"kwargs": [
+"name",
+"skeleton_path",
+"is_2d",
+"is_aim_offset",
+"package_path",
+"x_axis_name",
+"x_axis_min",
+"x_axis_max",
+"x_axis_grid_divisions",
+"y_axis_name",
+"y_axis_min",
+"y_axis_max",
+"y_axis_grid_divisions",
+"samples"
+],
+"required": [
+"name",
+"skeleton_path"
+]
+},
+"bp_create_blueprint": {
+"kwargs": [
+"name",
+"parent_class",
+"target_skeleton"
+],
+"required": [
+"name",
+"parent_class"
+]
+},
+"asset_dataasset_create": {
+"kwargs": [
+"name",
+"asset_class",
+"force_overwrite"
+],
+"required": [
+"name",
+"asset_class"
+]
+},
+"eqs_create": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"bp_create_function": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"return_type"
+],
+"required": [
+"blueprint_name",
+"function_name"
+]
+},
+"ik_retarget_create": {
+"kwargs": [
+"asset_path",
+"path",
+"name",
+"source_ik_rig_path",
+"target_ik_rig_path"
+],
+"required": []
+},
+"material_create": {
+"kwargs": [
+"material_path",
+"blend_mode",
+"two_sided",
+"shading_model",
+"material_domain"
+],
+"required": [
+"material_path"
+]
+},
+"material_create_instance": {
+"kwargs": [
+"asset_path",
+"parent_material",
+"force_overwrite"
+],
+"required": [
+"asset_path",
+"parent_material"
+]
+},
+"anim_state_machine_create": {
+"kwargs": [
+"blueprint_name",
+"machine_name",
+"pos_x",
+"pos_y",
+"graph_name"
+],
+"required": [
+"blueprint_name"
+]
+},
+"statetree_create": {
+"kwargs": [
+"asset_path",
+"schema_class"
+],
+"required": [
+"asset_path"
+]
+},
+"bp_create_variable": {
+"kwargs": [
+"blueprint_name",
+"variable_name",
+"variable_type",
+"default_value",
+"is_public",
+"tooltip",
+"category",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"variable_name",
+"variable_type"
+]
+},
+"datatable_create": {
+"kwargs": [
+"row_struct",
+"path",
+"name",
+"asset_path"
+],
+"required": [
+"row_struct"
+]
+},
+"actor_delete": {
+"kwargs": [
+"name",
+"dry_run"
+],
+"required": [
+"name"
+]
+},
+"asset_delete": {
+"kwargs": [
+"asset_path",
+"force",
+"dry_run"
+],
+"required": [
+"asset_path"
+]
+},
+"bp_delete_function": {
+"kwargs": [
+"blueprint_name",
+"function_name"
+],
+"required": [
+"blueprint_name",
+"function_name"
+]
+},
+"material_delete_expression": {
+"kwargs": [
+"material_path",
+"expression_name",
+"dry_run"
+],
+"required": [
+"material_path",
+"expression_name"
+]
+},
+"bp_delete_node": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"function_name",
+"from_state",
+"to_state",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"node_id"
+]
+},
+"bp_delete_variable": {
+"kwargs": [
+"blueprint_name",
+"variable_name"
+],
+"required": [
+"blueprint_name",
+"variable_name"
+]
+},
+"asset_duplicate": {
+"kwargs": [
+"source_path",
+"destination_path",
+"dry_run"
+],
+"required": [
+"source_path",
+"destination_path"
+]
+},
+"editor_build_game_target": {
+"kwargs": [
+"project_root",
+"target"
+],
+"required": []
+},
+"editor_console_exec": {
+"kwargs": [
+"command"
+],
+"required": [
+"command"
+]
+},
+"editor_content_browser_refresh": {
+"kwargs": [
+"path",
+"force_rescan"
+],
+"required": []
+},
+"editor_live_coding_compile": {
+"kwargs": [],
+"required": []
+},
+"editor_perf_snapshot": {
+"kwargs": [],
+"required": []
+},
+"editor_read_logs": {
+"kwargs": [
+"tail",
+"offset",
+"limit",
+"since_seq",
+"sources",
+"category",
+"grep"
+],
+"required": []
+},
+"editor_screenshot": {
+"kwargs": [
+"filename",
+"directory",
+"mode"
+],
+"required": []
+},
+"editor_window_screenshot": {
+"kwargs": [
+"viewport",
+"tab_name",
+"window_title"
+],
+"required": []
+},
+"enum_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"members"
+],
+"required": []
+},
+"enum_inspect": {
+"kwargs": [
+"enum_name"
+],
+"required": [
+"enum_name"
+]
+},
+"eqs_create": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"eqs_list_types": {
+"kwargs": [
+"base_class"
+],
+"required": []
+},
+"eqs_option_add": {
+"kwargs": [
+"asset_path",
+"generator_type",
+"properties",
+"dry_run"
+],
+"required": [
+"asset_path",
+"generator_type"
+]
+},
+"eqs_option_remove": {
+"kwargs": [
+"asset_path",
+"option_index",
+"dry_run"
+],
+"required": [
+"asset_path",
+"option_index"
+]
+},
+"eqs_read": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"eqs_set_property": {
+"kwargs": [
+"asset_path",
+"option_index",
+"target",
+"property_name",
+"property_value"
+],
+"required": [
+"asset_path",
+"option_index",
+"target",
+"property_name",
+"property_value"
+]
+},
+"eqs_test_add": {
+"kwargs": [
+"asset_path",
+"option_index",
+"test_type",
+"properties",
+"dry_run"
+],
+"required": [
+"asset_path",
+"option_index",
+"test_type"
+]
+},
+"eqs_test_remove": {
+"kwargs": [
+"asset_path",
+"option_index",
+"test_index",
+"dry_run"
+],
+"required": [
+"asset_path",
+"option_index",
+"test_index"
+]
+},
+"editor_console_exec": {
+"kwargs": [
+"command"
+],
+"required": [
+"command"
+]
+},
+"anim_extract_between_notifies": {
+"kwargs": [
+"source_path",
+"dest_name",
+"start_notify",
+"end_notify",
+"start_time",
+"end_time",
+"start_occurrence",
+"end_occurrence",
+"dest_path"
+],
+"required": [
+"source_path",
+"dest_name"
+]
+},
+"find_actors_by_name": {
+"kwargs": [
+"pattern"
+],
+"required": [
+"pattern"
+]
+},
+"asset_fixup_redirectors": {
+"kwargs": [
+"directory_path",
+"dry_run"
+],
+"required": []
+},
+"gas_ability_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"parent_class"
+],
+"required": []
+},
+"gas_attributeset_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"parent_class"
+],
+"required": []
+},
+"gas_effect_apply": {
+"kwargs": [
+"target_actor",
+"effect_class",
+"level",
+"instigator"
+],
+"required": [
+"target_actor",
+"effect_class"
+]
+},
+"gas_effect_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"parent_class",
+"duration_policy"
+],
+"required": []
+},
+"mesh_get_actor_material_info": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"actor_get_in_level": {
+"kwargs": [
+"random_string"
+],
+"required": []
+},
+"ai_get_awareness": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"ai_get_perception": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"ai_get_state": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"material_get_available": {
+"kwargs": [
+"search_path",
+"include_engine_materials"
+],
+"required": []
+},
+"bp_get_function_details": {
+"kwargs": [
+"blueprint_path",
+"function_name",
+"include_graph"
+],
+"required": [
+"blueprint_path"
+]
+},
+"bp_get_variable_details": {
+"kwargs": [
+"blueprint_path",
+"variable_name"
+],
+"required": [
+"blueprint_path"
+]
+},
+"reflection_class_properties": {
+"kwargs": [
+"class_name",
+"include_inherited",
+"property_name"
+],
+"required": [
+"class_name"
+]
+},
+"niagara_module_get_inputs": {
+"kwargs": [
+"system_path",
+"emitter_name",
+"emitter_index",
+"script_usage"
+],
+"required": [
+"system_path"
+]
+},
+"pie_get_state": {
+"kwargs": [
+"random_string"
+],
+"required": []
+},
+"mesh_get_collision": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"ik_retarget_run_batch": {
+"kwargs": [
+"retargeter_path",
+"source_animations",
+"name_search",
+"name_replace",
+"name_prefix",
+"name_suffix",
+"include_referenced_assets",
+"overwrite_existing"
+],
+"required": [
+"retargeter_path",
+"source_animations"
+]
+},
+"ik_retarget_align_bones": {
+"kwargs": [
+"retargeter_path",
+"source_or_target",
+"reset_first",
+"excluded_bones"
+],
+"required": [
+"retargeter_path"
+]
+},
+"ik_retarget_auto_map_chains": {
+"kwargs": [
+"retargeter_path",
+"match_type",
+"force_remap",
+"align_target_pose"
+],
+"required": [
+"retargeter_path"
+]
+},
+"ik_retarget_import_pose_from_animation": {
+"kwargs": [
+"retargeter_path",
+"anim_sequence_path",
+"source_or_target",
+"frame_index",
+"make_current",
+"exclude_bone_substrings"
+],
+"required": [
+"retargeter_path",
+"anim_sequence_path"
+]
+},
+"ik_retarget_import_pose_from_pose_asset": {
+"kwargs": [
+"retargeter_path",
+"pose_asset_path",
+"source_or_target",
+"pose_name",
+"make_current"
+],
+"required": [
+"retargeter_path",
+"pose_asset_path"
+]
+},
+"asset_textures_import": {
+"kwargs": [
+"destination_folder",
+"images",
+"force_overwrite"
+],
+"required": [
+"destination_folder",
+"images"
+]
+},
+"input_create": {
+"kwargs": [
+"type",
+"path",
+"name",
+"asset_path",
+"value_type"
+],
+"required": [
+"type"
+]
+},
+"anim_physics_inspect": {
+"kwargs": [
+"path"
+],
+"required": [
+"path"
+]
+},
+"anim_skeletal_mesh_inspect": {
+"kwargs": [
+"path"
+],
+"required": [
+"path"
+]
+},
+"kinematics_probe": {
+"kwargs": [
+"actor",
+"rotations",
+"probe_points",
+"mesh",
+"intent_direction",
+"forward_axis_local",
+"mode",
+"screenshot"
+],
+"required": [
+"actor",
+"rotations",
+"probe_points"
+]
+},
+"kinematics_read_transform": {
+"kwargs": [
+"actor",
+"queries",
+"mesh"
+],
+"required": [
+"actor",
+"queries"
+]
+},
+"kinematics_solve": {
+"kwargs": [
+"actor",
+"chain",
+"effector",
+"desired_direction",
+"mesh",
+"forward_axis_local",
+"verify"
+],
+"required": [
+"actor",
+"chain",
+"effector",
+"desired_direction"
+]
+},
+"level_inspect": {
+"kwargs": [],
+"required": []
+},
+"level_set_gamemode_override": {
+"kwargs": [
+"level_path",
+"gamemode_class"
+],
+"required": [
+"level_path",
+"gamemode_class"
+]
+},
+"anim_list_blueprints": {
+"kwargs": [
+"skeleton_path"
+],
+"required": []
+},
+"anim_list_layer_interfaces": {
+"kwargs": [],
+"required": []
+},
+"anim_list_montages": {
+"kwargs": [
+"skeleton_path"
+],
+"required": []
+},
+"anim_list_notifies": {
+"kwargs": [
+"anim_path"
+],
+"required": [
+"anim_path"
+]
+},
+"anim_list_sequences": {
+"kwargs": [
+"skeleton_path"
+],
+"required": []
+},
+"asset_list": {
+"kwargs": [
+"directory_path",
+"recursive",
+"class_filter"
+],
+"required": []
+},
+"anim_list_blend_spaces": {
+"kwargs": [
+"skeleton_path",
+"package_path"
+],
+"required": []
+},
+"bp_list_graphs": {
+"kwargs": [
+"blueprint_path"
+],
+"required": [
+"blueprint_path"
+]
+},
+"eqs_list_types": {
+"kwargs": [
+"base_class"
+],
+"required": []
+},
+"ik_rig_list_chains": {
+"kwargs": [
+"ik_rig_path"
+],
+"required": [
+"ik_rig_path"
+]
+},
+"niagara_list_systems": {
+"kwargs": [
+"path_filter"
+],
+"required": []
+},
+"bp_list_node_pins": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"graph_name",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_name",
+"node_id"
+]
+},
+"anim_skeleton_list_sockets": {
+"kwargs": [
+"skeleton_path"
+],
+"required": [
+"skeleton_path"
+]
+},
+"anim_list_skeletons": {
+"kwargs": [],
+"required": []
+},
+"statetree_list_node_types": {
+"kwargs": [
+"base_class",
+"name_pattern"
+],
+"required": []
+},
+"statetree_list_schemas": {
+"kwargs": [],
+"required": []
+},
+"editor_live_coding_compile": {
+"kwargs": [],
+"required": []
+},
+"material_add_expression": {
+"kwargs": [
+"material_path",
+"expression_type",
+"position_x",
+"position_y",
+"desc",
+"r",
+"g",
+"b",
+"a",
+"parameter_name",
+"value",
+"default_value",
+"default_r",
+"default_g",
+"default_b",
+"default_a",
+"texture_path",
+"u_tiling",
+"v_tiling",
+"coordinate_index",
+"layers",
+"period",
+"ignore_pause",
+"equals_threshold",
+"code",
+"output_type",
+"inputs",
+"param_names",
+"parameter_index",
+"dry_run"
+],
+"required": [
+"material_path",
+"expression_type"
+]
+},
+"material_apply_to_actor": {
+"kwargs": [
+"actor_name",
+"material_path",
+"material_slot"
+],
+"required": [
+"actor_name",
+"material_path"
+]
+},
+"material_apply_to_blueprint": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"material_path",
+"material_slot"
+],
+"required": [
+"blueprint_name",
+"component_name",
+"material_path"
+]
+},
+"material_compile": {
+"kwargs": [
+"material_path"
+],
+"required": [
+"material_path"
+]
+},
+"material_connect": {
+"kwargs": [
+"material_path",
+"source_expression",
+"target_input",
+"target_expression",
+"source_output_index",
+"dry_run"
+],
+"required": [
+"material_path",
+"source_expression",
+"target_input"
+]
+},
+"material_create": {
+"kwargs": [
+"material_path",
+"blend_mode",
+"two_sided",
+"shading_model",
+"material_domain"
+],
+"required": [
+"material_path"
+]
+},
+"material_create_instance": {
+"kwargs": [
+"asset_path",
+"parent_material",
+"force_overwrite"
+],
+"required": [
+"asset_path",
+"parent_material"
+]
+},
+"material_delete_expression": {
+"kwargs": [
+"material_path",
+"expression_name",
+"dry_run"
+],
+"required": [
+"material_path",
+"expression_name"
+]
+},
+"material_function_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"description",
+"expose_to_library"
+],
+"required": []
+},
+"material_get_available": {
+"kwargs": [
+"search_path",
+"include_engine_materials"
+],
+"required": []
+},
+"material_instance_set_parameter": {
+"kwargs": [
+"instance_path",
+"parameter_name",
+"parameter_type",
+"value",
+"r",
+"g",
+"b",
+"a",
+"texture_path",
+"override",
+"dry_run"
+],
+"required": [
+"instance_path",
+"parameter_name",
+"parameter_type"
+]
+},
+"material_read": {
+"kwargs": [
+"material_path"
+],
+"required": [
+"material_path"
+]
+},
+"material_read_function": {
+"kwargs": [
+"function_path"
+],
+"required": [
+"function_path"
+]
+},
+"material_read_instance": {
+"kwargs": [
+"instance_path"
+],
+"required": [
+"instance_path"
+]
+},
+"material_reparent_instance": {
+"kwargs": [
+"instance_path",
+"new_parent_path"
+],
+"required": [
+"instance_path",
+"new_parent_path"
+]
+},
+"material_set_expression_property": {
+"kwargs": [
+"material_path",
+"expression_name",
+"position_x",
+"position_y",
+"desc",
+"r",
+"g",
+"b",
+"a",
+"parameter_name",
+"value",
+"default_value",
+"default_r",
+"default_g",
+"default_b",
+"default_a",
+"texture_path",
+"u_tiling",
+"v_tiling",
+"dry_run"
+],
+"required": [
+"material_path",
+"expression_name"
+]
+},
+"mcp_status": {
+"kwargs": [],
+"required": []
+},
+"mesh_get_actor_material_info": {
+"kwargs": [
+"actor_name"
+],
+"required": [
+"actor_name"
+]
+},
+"mesh_set_mesh_material_color": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"color",
+"material_path",
+"parameter_name",
+"material_slot"
+],
+"required": [
+"blueprint_name",
+"component_name",
+"color"
+]
+},
+"mesh_set_static_mesh_material": {
+"kwargs": [
+"mesh_path",
+"material_path",
+"slot_index"
+],
+"required": [
+"mesh_path",
+"material_path"
+]
+},
+"mesh_set_static_mesh_properties": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"static_mesh"
+],
+"required": [
+"blueprint_name",
+"component_name"
+]
+},
+"anim_skeleton_modify_socket": {
+"kwargs": [
+"skeleton_path",
+"socket_name",
+"bone_name",
+"location_x",
+"location_y",
+"location_z",
+"rotation_pitch",
+"rotation_yaw",
+"rotation_roll",
+"scale_x",
+"scale_y",
+"scale_z",
+"force_always_animated"
+],
+"required": [
+"skeleton_path",
+"socket_name"
+]
+},
+"anim_state_machine_modify_transition": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"transition_id",
+"from_state",
+"to_state",
+"blend_duration",
+"priority_order",
+"bidirectional",
+"automatic_rule_based_on_sequence_player"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph"
+]
+},
+"asset_move": {
+"kwargs": [
+"source_path",
+"destination_folder",
+"new_name",
+"dry_run"
+],
+"required": [
+"source_path",
+"destination_folder"
+]
+},
+"mpc_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"parameters"
+],
+"required": []
+},
+"niagara_emitter_add": {
+"kwargs": [
+"system_path",
+"emitter_name",
+"sim_target"
+],
+"required": [
+"system_path",
+"emitter_name"
+]
+},
+"niagara_emitter_add_renderer": {
+"kwargs": [
+"system_path",
+"emitter_name",
+"emitter_index",
+"renderer_type",
+"material_path"
+],
+"required": [
+"system_path"
+]
+},
+"niagara_emitter_read": {
+"kwargs": [
+"system_path",
+"emitter_name",
+"emitter_index"
+],
+"required": [
+"system_path"
+]
+},
+"niagara_emitter_set_enabled": {
+"kwargs": [
+"system_path",
+"enabled",
+"emitter_name",
+"emitter_index"
+],
+"required": [
+"system_path",
+"enabled"
+]
+},
+"niagara_list_systems": {
+"kwargs": [
+"path_filter"
+],
+"required": []
+},
+"niagara_module_add": {
+"kwargs": [
+"system_path",
+"target_usage",
+"module_script_path",
+"emitter_name",
+"emitter_index",
+"target_index"
+],
+"required": [
+"system_path",
+"target_usage",
+"module_script_path"
+]
+},
+"niagara_module_get_inputs": {
+"kwargs": [
+"system_path",
+"emitter_name",
+"emitter_index",
+"script_usage"
+],
+"required": [
+"system_path"
+]
+},
+"niagara_module_set_input": {
+"kwargs": [
+"system_path",
+"parameter_name",
+"emitter_name",
+"emitter_index",
+"value",
+"x",
+"y",
+"z",
+"w",
+"r",
+"g",
+"b",
+"a"
+],
+"required": [
+"system_path",
+"parameter_name"
+]
+},
+"niagara_renderer_set_material": {
+"kwargs": [
+"system_path",
+"material_path",
+"emitter_name",
+"emitter_index",
+"renderer_index"
+],
+"required": [
+"system_path",
+"material_path"
+]
+},
+"niagara_renderer_set_material_binding": {
+"kwargs": [
+"system_path",
+"user_param_name",
+"emitter_name",
+"emitter_index",
+"renderer_index"
+],
+"required": [
+"system_path",
+"user_param_name"
+]
+},
+"niagara_scratch_pad_module_add": {
+"kwargs": [
+"system_path",
+"module_name",
+"target_usage",
+"hlsl",
+"emitter_name",
+"emitter_index",
+"inputs",
+"outputs",
+"target_index"
+],
+"required": [
+"system_path",
+"module_name",
+"target_usage",
+"hlsl"
+]
+},
+"niagara_script_create": {
+"kwargs": [
+"usage",
+"path",
+"name",
+"asset_path"
+],
+"required": [
+"usage"
+]
+},
+"niagara_system_create": {
+"kwargs": [
+"system_path"
+],
+"required": [
+"system_path"
+]
+},
+"niagara_system_read": {
+"kwargs": [
+"system_path"
+],
+"required": [
+"system_path"
+]
+},
+"niagara_user_parameter_add": {
+"kwargs": [
+"system_path",
+"parameter_name",
+"type_name"
+],
+"required": [
+"system_path",
+"parameter_name",
+"type_name"
+]
+},
+"niagara_user_parameter_remove": {
+"kwargs": [
+"system_path",
+"parameter_name"
+],
+"required": [
+"system_path",
+"parameter_name"
+]
+},
+"niagara_user_parameter_set": {
+"kwargs": [
+"system_path",
+"parameter_name",
+"value",
+"x",
+"y",
+"z",
+"w",
+"r",
+"g",
+"b",
+"a"
+],
+"required": [
+"system_path",
+"parameter_name"
+]
+},
+"anim_normalize_z_offset": {
+"kwargs": [
+"anim_path",
+"target_z",
+"bone_substring_filter",
+"output_suffix"
+],
+"required": [
+"anim_path"
+]
+},
+"asset_open": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"physics_set_body_collision": {
+"kwargs": [
+"path",
+"collision_enabled",
+"body_names",
+"save"
+],
+"required": [
+"path"
+]
+},
+"physics_set_constraint_motion": {
+"kwargs": [
+"path",
+"joint_name",
+"bone1",
+"bone2",
+"delete",
+"swing1",
+"swing2",
+"twist",
+"linear_x",
+"linear_y",
+"linear_z",
+"save"
+],
+"required": [
+"path"
+]
+},
+"physics_set_properties": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"simulate_physics",
+"gravity_enabled",
+"mass",
+"linear_damping",
+"angular_damping"
+],
+"required": [
+"blueprint_name",
+"component_name"
+]
+},
+"physics_spawn_blueprint_actor": {
+"kwargs": [
+"name",
+"mesh_path",
+"location",
+"mass",
+"simulate_physics",
+"gravity_enabled",
+"color",
+"scale"
+],
+"required": [
+"name"
+]
+},
+"pie_get_state": {
+"kwargs": [
+"random_string"
+],
+"required": []
+},
+"pie_query": {
+"kwargs": [
+"query",
+"filter",
+"limit"
+],
+"required": []
+},
+"pie_send_keystrokes": {
+"kwargs": [
+"actions"
+],
+"required": [
+"actions"
+]
+},
+"pie_send_mouse": {
+"kwargs": [
+"x",
+"y",
+"event_type",
+"button"
+],
+"required": [
+"x",
+"y"
+]
+},
+"pie_start": {
+"kwargs": [
+"map_path"
+],
+"required": []
+},
+"pie_stop": {
+"kwargs": [
+"session_id"
+],
+"required": []
+},
+"project_context": {
+"kwargs": [],
+"required": []
+},
+"anim_montage_read": {
+"kwargs": [
+"montage_path"
+],
+"required": [
+"montage_path"
+]
+},
+"anim_blend_space_read": {
+"kwargs": [
+"blend_space_path"
+],
+"required": [
+"blend_space_path"
+]
+},
+"bp_read": {
+"kwargs": [
+"blueprint_path",
+"include_event_graph",
+"include_functions",
+"include_variables",
+"include_components",
+"include_interfaces",
+"include_variable_defaults",
+"include_component_properties",
+"include_inherited_components"
+],
+"required": [
+"blueprint_path"
+]
+},
+"asset_dataasset_read": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"asset_datatable_read": {
+"kwargs": [
+"table_path"
+],
+"required": [
+"table_path"
+]
+},
+"eqs_read": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"ik_retarget_read": {
+"kwargs": [
+"retargeter_path"
+],
+"required": [
+"retargeter_path"
+]
+},
+"editor_read_logs": {
+"kwargs": [
+"tail",
+"offset",
+"limit",
+"since_seq",
+"sources",
+"category",
+"grep"
+],
+"required": []
+},
+"material_read_function": {
+"kwargs": [
+"function_path"
+],
+"required": [
+"function_path"
+]
+},
+"material_read": {
+"kwargs": [
+"material_path"
+],
+"required": [
+"material_path"
+]
+},
+"material_read_instance": {
+"kwargs": [
+"instance_path"
+],
+"required": [
+"instance_path"
+]
+},
+"niagara_emitter_read": {
+"kwargs": [
+"system_path",
+"emitter_name",
+"emitter_index"
+],
+"required": [
+"system_path"
+]
+},
+"niagara_system_read": {
+"kwargs": [
+"system_path"
+],
+"required": [
+"system_path"
+]
+},
+"statetree_read": {
+"kwargs": [
+"asset_path",
+"include_node_properties",
+"include_bindings",
+"state_id",
+"max_depth"
+],
+"required": [
+"asset_path"
+]
+},
+"reflection_class_properties": {
+"kwargs": [
+"class_name",
+"include_inherited",
+"property_name"
+],
+"required": [
+"class_name"
+]
+},
+"anim_notify_remove": {
+"kwargs": [
+"anim_path",
+"notify_index",
+"dry_run"
+],
+"required": [
+"anim_path",
+"notify_index"
+]
+},
+"anim_blend_space_remove_sample": {
+"kwargs": [
+"blend_space_path",
+"sample_index",
+"dry_run"
+],
+"required": [
+"blend_space_path",
+"sample_index"
+]
+},
+"eqs_option_remove": {
+"kwargs": [
+"asset_path",
+"option_index",
+"dry_run"
+],
+"required": [
+"asset_path",
+"option_index"
+]
+},
+"eqs_test_remove": {
+"kwargs": [
+"asset_path",
+"option_index",
+"test_index",
+"dry_run"
+],
+"required": [
+"asset_path",
+"option_index",
+"test_index"
+]
+},
+"bp_remove_function_input": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name"
+]
+},
+"bp_remove_function_output": {
+"kwargs": [
+"blueprint_name",
+"function_name",
+"param_name"
+],
+"required": [
+"blueprint_name",
+"function_name",
+"param_name"
+]
+},
+"niagara_user_parameter_remove": {
+"kwargs": [
+"system_path",
+"parameter_name"
+],
+"required": [
+"system_path",
+"parameter_name"
+]
+},
+"anim_skeleton_remove_socket": {
+"kwargs": [
+"skeleton_path",
+"socket_name"
+],
+"required": [
+"skeleton_path",
+"socket_name"
+]
+},
+"anim_state_machine_state_remove": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+]
+},
+"anim_state_machine_transition_remove": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"transition_id",
+"from_state",
+"to_state"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph"
+]
+},
+"asset_rename": {
+"kwargs": [
+"source_path",
+"new_name",
+"dry_run"
+],
+"required": [
+"source_path",
+"new_name"
+]
+},
+"bp_rename_function": {
+"kwargs": [
+"blueprint_name",
+"old_function_name",
+"new_function_name"
+],
+"required": [
+"blueprint_name",
+"old_function_name",
+"new_function_name"
+]
+},
+"bp_reparent": {
+"kwargs": [
+"blueprint_path",
+"new_parent_class"
+],
+"required": [
+"blueprint_path",
+"new_parent_class"
+]
+},
+"material_reparent_instance": {
+"kwargs": [
+"instance_path",
+"new_parent_path"
+],
+"required": [
+"instance_path",
+"new_parent_path"
+]
+},
+"asset_save": {
+"kwargs": [
+"asset_paths"
+],
+"required": []
+},
+"statetree_save": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"scene_brief": {
+"kwargs": [],
+"required": []
+},
+"pie_send_keystrokes": {
+"kwargs": [
+"actions"
+],
+"required": [
+"actions"
+]
+},
+"pie_send_mouse": {
+"kwargs": [
+"x",
+"y",
+"event_type",
+"button"
+],
+"required": [
+"x",
+"y"
+]
+},
+"actor_set_transform": {
+"kwargs": [
+"name",
+"location",
+"rotation",
+"scale",
+"dry_run"
+],
+"required": [
+"name"
+]
+},
+"anim_blueprint_set_skeleton": {
+"kwargs": [
+"blueprint_path",
+"skeleton_path"
+],
+"required": [
+"blueprint_path",
+"skeleton_path"
+]
+},
+"anim_sequence_set_property": {
+"kwargs": [
+"anim_path",
+"additive_anim_type",
+"base_pose_type",
+"base_pose_anim",
+"ref_frame_index"
+],
+"required": [
+"anim_path"
+]
+},
+"bp_set_default_value": {
+"kwargs": [
+"blueprint_name",
+"property",
+"value"
+],
+"required": [
+"blueprint_name",
+"property",
+"value"
+]
+},
+"bp_set_variable_properties": {
+"kwargs": [
+"blueprint_name",
+"variable_name",
+"var_name",
+"var_type",
+"is_blueprint_readable",
+"is_blueprint_writable",
+"is_public",
+"is_editable_in_instance",
+"tooltip",
+"category",
+"default_value",
+"expose_on_spawn",
+"expose_to_cinematics",
+"slider_range_min",
+"slider_range_max",
+"value_range_min",
+"value_range_max",
+"units",
+"bitmask",
+"bitmask_enum",
+"replication_enabled",
+"replication_condition",
+"is_private",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"variable_name"
+]
+},
+"asset_dataasset_set_property": {
+"kwargs": [
+"asset_path",
+"property",
+"value",
+"action",
+"index"
+],
+"required": [
+"asset_path",
+"property"
+]
+},
+"anim_state_machine_set_entry": {
+"kwargs": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+],
+"required": [
+"blueprint_name",
+"state_machine_graph",
+"state_name"
+]
+},
+"eqs_set_property": {
+"kwargs": [
+"asset_path",
+"option_index",
+"target",
+"property_name",
+"property_value"
+],
+"required": [
+"asset_path",
+"option_index",
+"target",
+"property_name",
+"property_value"
+]
+},
+"ik_retarget_set_chain_mapping": {
+"kwargs": [
+"retargeter_path",
+"target_chain",
+"source_chain"
+],
+"required": [
+"retargeter_path",
+"target_chain"
+]
+},
+"ik_retarget_set_pelvis_settings": {
+"kwargs": [
+"retargeter_path",
+"translation_alpha",
+"scale_horizontal",
+"scale_vertical",
+"blend_to_source_translation",
+"blend_to_source_x",
+"blend_to_source_y",
+"blend_to_source_z",
+"rotation_alpha",
+"affect_ik_horizontal",
+"affect_ik_vertical",
+"floor_constraint_weight"
+],
+"required": [
+"retargeter_path"
+]
+},
+"ik_retarget_set_rigs": {
+"kwargs": [
+"retargeter_path",
+"source_ik_rig_path",
+"target_ik_rig_path",
+"rebuild_ops"
+],
+"required": [
+"retargeter_path"
+]
+},
+"ik_retarget_set_root_motion_settings": {
+"kwargs": [
+"retargeter_path",
+"root_motion_source",
+"root_height_source",
+"rotate_with_pelvis",
+"maintain_offset_from_pelvis",
+"propagate_to_non_retargeted_children"
+],
+"required": [
+"retargeter_path"
+]
+},
+"bp_set_inner_node_property": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"property_name",
+"property_value",
+"graph_name"
+],
+"required": [
+"blueprint_name",
+"node_id",
+"property_name",
+"property_value"
+]
+},
+"material_set_expression_property": {
+"kwargs": [
+"material_path",
+"expression_name",
+"position_x",
+"position_y",
+"desc",
+"r",
+"g",
+"b",
+"a",
+"parameter_name",
+"value",
+"default_value",
+"default_r",
+"default_g",
+"default_b",
+"default_a",
+"texture_path",
+"u_tiling",
+"v_tiling",
+"coordinate_index",
+"dry_run"
+],
+"required": [
+"material_path",
+"expression_name"
+]
+},
+"material_instance_set_parameter": {
+"kwargs": [
+"instance_path",
+"parameter_name",
+"parameter_type",
+"value",
+"r",
+"g",
+"b",
+"a",
+"texture_path",
+"override",
+"dry_run"
+],
+"required": [
+"instance_path",
+"parameter_name",
+"parameter_type"
+]
+},
+"mesh_set_mesh_material_color": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"color",
+"material_path",
+"parameter_name",
+"material_slot"
+],
+"required": [
+"blueprint_name",
+"component_name",
+"color"
+]
+},
+"anim_montage_set_blend": {
+"kwargs": [
+"montage_path",
+"blend_in_time",
+"blend_out_time",
+"blend_out_trigger_time"
+],
+"required": [
+"montage_path"
+]
+},
+"anim_montage_set_section_link": {
+"kwargs": [
+"montage_path",
+"section_name",
+"next_section_name"
+],
+"required": [
+"montage_path",
+"section_name",
+"next_section_name"
+]
+},
+"niagara_emitter_set_enabled": {
+"kwargs": [
+"system_path",
+"enabled",
+"emitter_name",
+"emitter_index"
+],
+"required": [
+"system_path",
+"enabled"
+]
+},
+"niagara_module_set_input": {
+"kwargs": [
+"system_path",
+"parameter_name",
+"emitter_name",
+"emitter_index",
+"value",
+"x",
+"y",
+"z",
+"w",
+"r",
+"g",
+"b",
+"a"
+],
+"required": [
+"system_path",
+"parameter_name"
+]
+},
+"niagara_user_parameter_set": {
+"kwargs": [
+"system_path",
+"parameter_name",
+"value",
+"x",
+"y",
+"z",
+"w",
+"r",
+"g",
+"b",
+"a"
+],
+"required": [
+"system_path",
+"parameter_name"
+]
+},
+"bp_set_node_property": {
+"kwargs": [
+"blueprint_name",
+"node_id",
+"property_name",
+"property_value",
+"function_name",
+"from_state",
+"to_state",
+"action",
+"pin_type",
+"pin_name",
+"enum_type",
+"new_type",
+"target_type",
+"target_function",
+"target_class",
+"event_type",
+"dry_run"
+],
+"required": [
+"blueprint_name",
+"node_id"
+]
+},
+"physics_set_body_collision": {
+"kwargs": [
+"path",
+"collision_enabled",
+"body_names",
+"save"
+],
+"required": [
+"path"
+]
+},
+"physics_set_constraint_motion": {
+"kwargs": [
+"path",
+"joint_name",
+"bone1",
+"bone2",
+"delete",
+"swing1",
+"swing2",
+"twist",
+"linear_x",
+"linear_y",
+"linear_z",
+"save"
+],
+"required": [
+"path"
+]
+},
+"physics_set_properties": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"simulate_physics",
+"gravity_enabled",
+"mass",
+"linear_damping",
+"angular_damping"
+],
+"required": [
+"blueprint_name",
+"component_name"
+]
+},
+"mesh_set_physics_asset": {
+"kwargs": [
+"path",
+"physics_asset",
+"save"
+],
+"required": [
+"path",
+"physics_asset"
+]
+},
+"anim_skeletal_mesh_set_section_disabled": {
+"kwargs": [
+"path",
+"section_index",
+"disabled",
+"lod_index"
+],
+"required": [
+"path",
+"section_index"
+]
+},
+"mesh_set_collision": {
+"kwargs": [
+"asset_path",
+"shape",
+"replace_existing",
+"hull_count",
+"max_hull_verts",
+"hull_precision",
+"collision_trace_flag",
+"save"
+],
+"required": [
+"asset_path",
+"shape"
+]
+},
+"mesh_set_static_mesh_material": {
+"kwargs": [
+"mesh_path",
+"material_path",
+"slot_index"
+],
+"required": [
+"mesh_path",
+"material_path"
+]
+},
+"mesh_set_static_mesh_properties": {
+"kwargs": [
+"blueprint_name",
+"component_name",
+"static_mesh"
+],
+"required": [
+"blueprint_name",
+"component_name"
+]
+},
+"level_set_gamemode_override": {
+"kwargs": [
+"level_path",
+"gamemode_class"
+],
+"required": [
+"level_path",
+"gamemode_class"
+]
+},
+"mesh_build_bend_chain": {
+"kwargs": [
+"path",
+"num_bones",
+"axis",
+"base_fraction",
+"segment_ratio",
+"bone_prefix",
+"root_bone_name",
+"dry_run"
+],
+"required": [
+"path"
+]
+},
+"anim_smooth_sequence": {
+"kwargs": [
+"anim_path",
+"window_size",
+"filter_type",
+"sigma_frames",
+"output_suffix",
+"bone_substring_filter",
+"smooth_positions"
+],
+"required": [
+"anim_path"
+]
+},
+"actor_spawn_physics": {
+"kwargs": [
+"name",
+"mesh_path",
+"location",
+"mass",
+"simulate_physics",
+"gravity_enabled",
+"color",
+"scale"
+],
+"required": [
+"name"
+]
+},
+"st_add_node": {
+"kwargs": [
+"asset_path",
+"node_type",
+"target",
+"properties",
+"operand",
+"indent",
+"insert_index"
+],
+"required": [
+"asset_path",
+"node_type",
+"target"
+]
+},
+"st_add_property_binding": {
+"kwargs": [
+"asset_path",
+"source_node_id",
+"source_property",
+"target_node_id",
+"target_property"
+],
+"required": [
+"asset_path",
+"source_node_id",
+"source_property",
+"target_node_id",
+"target_property"
+]
+},
+"st_add_state": {
+"kwargs": [
+"asset_path",
+"name",
+"parent",
+"state_type",
+"selection_behavior",
+"enabled",
+"insert_index",
+"tasks",
+"enter_conditions",
+"dry_run"
+],
+"required": [
+"asset_path",
+"name"
+]
+},
+"st_add_transition": {
+"kwargs": [
+"asset_path",
+"state",
+"trigger",
+"target",
+"event_tag",
+"priority",
+"delay",
+"delay_variance",
+"conditions",
+"dry_run"
+],
+"required": [
+"asset_path",
+"state",
+"trigger",
+"target"
+]
+},
+"st_duplicate_state": {
+"kwargs": [
+"asset_path",
+"state",
+"new_name"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"st_get_node_properties": {
+"kwargs": [
+"asset_path",
+"node_id"
+],
+"required": [
+"asset_path",
+"node_id"
+]
+},
+"st_list_bindable_properties": {
+"kwargs": [
+"asset_path",
+"node_id"
+],
+"required": [
+"asset_path",
+"node_id"
+]
+},
+"st_list_property_bindings": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"st_list_states": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"st_move_state": {
+"kwargs": [
+"asset_path",
+"state",
+"new_parent",
+"insert_index"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"st_remove_node": {
+"kwargs": [
+"asset_path",
+"node_id"
+],
+"required": [
+"asset_path",
+"node_id"
+]
+},
+"st_remove_property_binding": {
+"kwargs": [
+"asset_path",
+"target_node_id",
+"target_property"
+],
+"required": [
+"asset_path",
+"target_node_id",
+"target_property"
+]
+},
+"st_remove_state": {
+"kwargs": [
+"asset_path",
+"state",
+"dry_run"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"st_remove_transition": {
+"kwargs": [
+"asset_path",
+"transition_id",
+"dry_run"
+],
+"required": [
+"asset_path",
+"transition_id"
+]
+},
+"st_rename_state": {
+"kwargs": [
+"asset_path",
+"state",
+"new_name"
+],
+"required": [
+"asset_path",
+"state",
+"new_name"
+]
+},
+"st_set_node_property": {
+"kwargs": [
+"asset_path",
+"node_id",
+"property_name",
+"property_value"
+],
+"required": [
+"asset_path",
+"node_id",
+"property_name",
+"property_value"
+]
+},
+"st_set_state_properties": {
+"kwargs": [
+"asset_path",
+"state",
+"name",
+"state_type",
+"selection_behavior",
+"enabled",
+"weight"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"st_set_transition_properties": {
+"kwargs": [
+"asset_path",
+"transition_id",
+"trigger",
+"target",
+"priority",
+"event_tag",
+"delay",
+"delay_variance",
+"enabled"
+],
+"required": [
+"asset_path",
+"transition_id"
+]
+},
+"pie_start": {
+"kwargs": [
+"map_path"
+],
+"required": []
+},
+"statetree_binding_add": {
+"kwargs": [
+"asset_path",
+"source_node_id",
+"source_property",
+"target_node_id",
+"target_property"
+],
+"required": [
+"asset_path",
+"source_node_id",
+"source_property",
+"target_node_id",
+"target_property"
+]
+},
+"statetree_binding_list": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"statetree_binding_list_bindable": {
+"kwargs": [
+"asset_path",
+"node_id"
+],
+"required": [
+"asset_path",
+"node_id"
+]
+},
+"statetree_binding_remove": {
+"kwargs": [
+"asset_path",
+"target_node_id",
+"target_property"
+],
+"required": [
+"asset_path",
+"target_node_id",
+"target_property"
+]
+},
+"statetree_compile": {
+"kwargs": [
+"asset_path",
+"auto_save"
+],
+"required": [
+"asset_path"
+]
+},
+"statetree_create": {
+"kwargs": [
+"asset_path",
+"schema_class"
+],
+"required": [
+"asset_path"
+]
+},
+"statetree_list_node_types": {
+"kwargs": [
+"base_class",
+"name_pattern"
+],
+"required": []
+},
+"statetree_list_schemas": {
+"kwargs": [],
+"required": []
+},
+"statetree_node_add": {
+"kwargs": [
+"asset_path",
+"node_type",
+"target",
+"properties",
+"operand",
+"indent",
+"insert_index"
+],
+"required": [
+"asset_path",
+"node_type",
+"target"
+]
+},
+"statetree_node_get_properties": {
+"kwargs": [
+"asset_path",
+"node_id"
+],
+"required": [
+"asset_path",
+"node_id"
+]
+},
+"statetree_node_remove": {
+"kwargs": [
+"asset_path",
+"node_id"
+],
+"required": [
+"asset_path",
+"node_id"
+]
+},
+"statetree_node_set_property": {
+"kwargs": [
+"asset_path",
+"node_id",
+"property_name",
+"property_value"
+],
+"required": [
+"asset_path",
+"node_id",
+"property_name",
+"property_value"
+]
+},
+"statetree_read": {
+"kwargs": [
+"asset_path",
+"include_node_properties",
+"include_bindings",
+"state_id",
+"max_depth"
+],
+"required": [
+"asset_path"
+]
+},
+"statetree_save": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"statetree_state_add": {
+"kwargs": [
+"asset_path",
+"name",
+"parent",
+"state_type",
+"selection_behavior",
+"enabled",
+"insert_index",
+"tasks",
+"enter_conditions",
+"dry_run"
+],
+"required": [
+"asset_path",
+"name"
+]
+},
+"statetree_state_duplicate": {
+"kwargs": [
+"asset_path",
+"state",
+"new_name"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"statetree_state_list": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"statetree_state_move": {
+"kwargs": [
+"asset_path",
+"state",
+"new_parent",
+"insert_index"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"statetree_state_remove": {
+"kwargs": [
+"asset_path",
+"state",
+"dry_run"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"statetree_state_rename": {
+"kwargs": [
+"asset_path",
+"state",
+"new_name"
+],
+"required": [
+"asset_path",
+"state",
+"new_name"
+]
+},
+"statetree_state_set_properties": {
+"kwargs": [
+"asset_path",
+"state",
+"name",
+"state_type",
+"selection_behavior",
+"enabled",
+"weight"
+],
+"required": [
+"asset_path",
+"state"
+]
+},
+"statetree_transition_add": {
+"kwargs": [
+"asset_path",
+"state",
+"trigger",
+"target",
+"event_tag",
+"priority",
+"delay",
+"delay_variance",
+"conditions",
+"dry_run"
+],
+"required": [
+"asset_path",
+"state",
+"trigger",
+"target"
+]
+},
+"statetree_transition_remove": {
+"kwargs": [
+"asset_path",
+"transition_id",
+"dry_run"
+],
+"required": [
+"asset_path",
+"transition_id"
+]
+},
+"statetree_transition_set_properties": {
+"kwargs": [
+"asset_path",
+"transition_id",
+"trigger",
+"target",
+"priority",
+"event_tag",
+"delay",
+"delay_variance",
+"enabled"
+],
+"required": [
+"asset_path",
+"transition_id"
+]
+},
+"statetree_verify": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"pie_stop": {
+"kwargs": [
+"session_id"
+],
+"required": []
+},
+"struct_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path"
+],
+"required": []
+},
+"tag_add": {
+"kwargs": [
+"tag",
+"dev_comment",
+"source",
+"dry_run"
+],
+"required": [
+"tag"
+]
+},
+"tag_list": {
+"kwargs": [
+"prefix",
+"include_dev_comments"
+],
+"required": []
+},
+"tag_move": {
+"kwargs": [
+"from_tag",
+"to_tag",
+"rename_children",
+"dry_run"
+],
+"required": [
+"from_tag",
+"to_tag"
+]
+},
+"tag_remove": {
+"kwargs": [
+"tag",
+"force",
+"dry_run"
+],
+"required": [
+"tag"
+]
+},
+"editor_screenshot": {
+"kwargs": [
+"filename",
+"directory",
+"mode"
+],
+"required": []
+},
+"statetree_verify": {
+"kwargs": [
+"asset_path"
+],
+"required": [
+"asset_path"
+]
+},
+"widget_add_child": {
+"kwargs": [
+"widget_path",
+"child_class",
+"parent_name",
+"child_name"
+],
+"required": [
+"widget_path",
+"child_class"
+]
+},
+"widget_bind_handler": {
+"kwargs": [
+"widget_path",
+"widget_name",
+"event_name"
+],
+"required": [
+"widget_path",
+"widget_name",
+"event_name"
+]
+},
+"widget_create": {
+"kwargs": [
+"path",
+"name",
+"asset_path",
+"parent_class"
+],
+"required": []
+},
+"widget_set_property": {
+"kwargs": [
+"widget_path",
+"widget_name",
+"property_name",
+"property_value",
+"target"
+],
+"required": [
+"widget_path",
+"widget_name",
+"property_name",
+"property_value"
+]
+},
+"widget_tree_read": {
+"kwargs": [
+"widget_path"
+],
+"required": [
+"widget_path"
+]
+}
+}

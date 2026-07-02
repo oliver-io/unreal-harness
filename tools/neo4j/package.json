@@ -1,0 +1,26 @@
+{
+  "name": "ue-neo4j-ingest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic, env-driven ingester that projects a live Unreal project's assets into Neo4j via the harness's canonical MCP read tools. No game-specific logic.",
+  "bin": {
+    "ue-neo4j": "src/cli.ts"
+  },
+  "scripts": {
+    "ingest": "bun run src/cli.ts ingest",
+    "discover": "bun run src/cli.ts discover",
+    "pull": "bun run src/cli.ts pull",
+    "query": "bun run src/cli.ts query",
+    "verify": "bun run src/cli.ts verify",
+    "clear": "bun run src/cli.ts clear"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "neo4j-driver": "^5.28.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.0"
+  }
+}

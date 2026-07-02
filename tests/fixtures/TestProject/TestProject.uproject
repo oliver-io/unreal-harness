@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.7",
+	"Category": "",
+	"Description": "Minimal C++ host project for UnrealMCP integration tests. The UnrealMCP plugin is junctioned into Plugins/ at test setup; Binaries/Intermediate/Saved are gitignored and rebuilt on demand.",
+	"Modules": [
+		{
+			"Name": "TestProject",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "UnrealMCP",
+			"Enabled": true
+		}
+	]
+}

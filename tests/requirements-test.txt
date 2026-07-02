@@ -1,0 +1,7 @@
+# Integration harness deps.
+#  - pytest: the runner.
+#  - mcp: the MCP SDK client, so tests can drive the real Python MCP server over
+#    its streamable-HTTP endpoint (the product surface). The bridge-level path
+#    needs nothing extra (raw TCP/JSON to the C++ plugin).
+pytest>=8.0
+mcp[cli]>=1.10.0

@@ -1,0 +1,6 @@
+# Bun configuration for the Unreal MCP server.
+# Pure-logic unit tests run by default with `bun test`. Live-editor integration
+# tests (P2) require a running editor on :55557 and are opt-in via their own
+# describe-level guards.
+[install]
+exact = false
