@@ -250,6 +250,7 @@ ffmpeg -y -ss <t> -i out.mp4 -frames:v 1 -vf scale=480:270 chk_<t>.png
 | `vstack`/`hstack` input length mismatch | default repeats last frame at EOF; overshoot columns slightly + `shortest=1` so the main pane decides length |
 | zoompan on 9:16 output | any zoom crops a full-width 16:9 pane horizontally — vertical cuts stay static |
 | labels clipped mid-pan | expected: text drawn outside the tight window slides in with the reveal; use alpha fade-in if that reads badly |
+| output silently encodes as H.264 4:4:4 (`yuv444p`) | per-branch `format=yuv420p` does NOT pin the final `xfade` output — format negotiation drifts to 4:4:4, which browsers play but WMP/hardware decoders refuse ("corrupted" reports). ALWAYS put `-pix_fmt yuv420p -movflags +faststart` on the output; verify with `ffprobe ... stream=profile,pix_fmt` |
 
 ## Variants & extensions
 
