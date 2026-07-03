@@ -72,8 +72,7 @@ name-vs-manifest diff: 20 of those are legacy `command:`-override bridge tools (
 of which `catalog_*`/`code_*` (6) are covered in `disclosure.test.ts`. The gate's current missing
 list is exactly the items below; landing each test with its `covers(...)` annotation shrinks it.
 
-- [ ] `editor_build_game_target` — full offline UBT build (minutes, toolchain-dependent); expected
-  outcome: #DEFERRED with that reason unless a cheap observable exists.
+(none open — the gate is green as of 2026-07-02.)
 
 ## D. Hollow tests — op is "covered" but the assertion is the mutator's echo or bare success
 (The independent read primitive already exists in nearly every case; fixes are usually 3 lines.
@@ -201,6 +200,16 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
+
+- `editor_build_game_target` positive path (2026-07-02) — the validation-gate slice is covered in
+  `src/server/test/editor_build_game_target.test.ts` (real registry handler, real dirs/files, no
+  mocks: no-root `invalid_argument`, the Unix-path → env-root fallback, the exactly-one-`.uproject`
+  scan, and the engine `Build.bat` probe — the last gate before `spawnSync`, so no UBT process is
+  ever spawned). The POSITIVE path (an actual UBT Game-target build) stays untested: it is a
+  multi-minute, toolchain-dependent offline build that would contend the shared build lock and
+  toolchain other agents use (docs/USAGE.md §3.6 exit-75 semantics), and the only cheap alternative
+  would be mocking the spawn — which tests the mock, not UBT. No `coverage.test.ts` EXEMPT entry
+  needed: the guard slice satisfies the gate honestly.
 
 - `video_analyze` / `pie_analyze` positive path (2026-07-02) — the guard slice is covered in
   `src/server/test/video_analyze.test.ts` (real registry handlers, no mocks: `feature_disabled`
