@@ -15,12 +15,6 @@ each group.
 
 ## docs/ARCHITECTURE.md
 
-### DOC-032 — Boot-gate attribution: pending is server-side, not plugin-side
-ARCH attributes all three gates (boot → PIE → dry-run) to "the plugin side," but the
-*pend-during-boot* behavior lives in the server (`bridge/connection.ts:12-14`); the C++ side
-only refuses with `editor_not_ready` (`MCPCommonUtils.h:86`).
-**Fix:** One-line clarification of which side pends vs refuses.
-
 ### DOC-033 — Concepts described but concrete surfaces unnamed
 ARCH §2 describes the searchable-catalog mode, code-execution mode, and result compaction
 but never names `catalog_*`, `code_api`/`code_run`, `result_read`, or the
@@ -162,8 +156,6 @@ Do **not** edit docs from these without first verifying; if verified, promote to
   — route confirmed, exact field names in `build/lock.ts` not opened.
 - USAGE §1.2 table grouping (`ambiguous_target`, `unsupported_class`) may not mirror the
   enum's grouping — cosmetic.
-- ARCH claim of fixed gate *ordering* (boot → PIE → dry-run) in C++ dispatch — all three
-  gates confirmed to exist; sequence in `FMCPBridge::ExecuteCommand` not traced.
 - TESTING §6 "passing dry-run implies passing commit" parity invariant — behavioral claim
   not audited.
 - Whether each pytest `@covers` truly has a Bun mirror (§8/§9) — filenames line up 1:1;

@@ -45,8 +45,10 @@ Two cooperating processes bridge the MCP world and the Unreal world:
 A tool call flows: client → schema validation (server) → TCP → **gates** → domain
 handler → envelope back. The gates run in a fixed order on the plugin side:
 
-1. **Boot gate** — nothing but status probes dispatches until the editor is fully
-   initialized; the server pends calls during boot instead of failing them.
+1. **Boot gate** — nothing but status probes dispatches until the editor is
+   fully initialized. The plugin *refuses* mid-boot calls (`editor_not_ready`);
+   it is the *server* that pends calls during boot instead of failing them, so
+   agents normally never see that refusal.
 2. **PIE gate** — asset mutators are refused while a Play-In-Editor session runs.
 3. **Dry-run gate** — a mutation called with `dry_run: true` returns a diff
    instead of applying; mutators that can't preview yet refuse rather than
