@@ -46,9 +46,6 @@ anything — do not take these descriptions at face value.
   `niagara_renderer_set_enabled`, `niagara_renderer_set_alignment`,
   `niagara_mesh_renderer_set_mesh` — each observed via `niagara_emitter_read`.
 - [ ] `material_set_property` — observe via `material_read` (e.g. two-sided / blend-mode flip).
-- [ ] `mesh_get_bounds` — bun `mesh.test.ts:100-123` tests it DEEP; pytest has nothing. Port the
-  parity test (known engine-cube extents). Note the legacy `get_mesh_bounds` wire duplicate for
-  the manifest task.
 - [ ] `editor_viewport_get_camera` — arrange a known camera pose (console exec / a set-camera
   primitive; add one if missing), read back and assert the pose.
 - [ ] `editor_build_reflection_captures` — investigate a log-marker observation via
@@ -193,8 +190,8 @@ Keep the pytest and bun mirror in lockstep when fixing.)
 ## F. Bun-mirror parity drift (silent — the bun side has no coverage gate)
 - [ ] `reads.test.ts` omits `input_add_mapping` entirely — the strongest test in the Python module
   (read-back + negative path, `test_reads.py:179-217`). Port it.
-- [ ] pytest `test_mesh.py` lacks the bun-only `mesh_get_bounds` + engine-refuse socket tests
-  (`mesh.test.ts:100-123`, `:229-234`). Port to pytest so `@covers` sees them.
+- [ ] pytest `test_mesh.py` lacks the bun-only engine-refuse socket test (`mesh.test.ts:229-234`).
+  Port to pytest so `@covers` sees it. (`mesh_get_bounds` parity landed 2026-07-02.)
 - [ ] `gas_effect_apply` has no positive-path observation anywhere (only the `not_in_pie` guard).
   A PIE-tier test observing an applied effect (attribute readback or log marker) — scope it; if
   it needs primitives that don't exist, add them or defer.

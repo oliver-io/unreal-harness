@@ -109,6 +109,27 @@ def test_set_static_mesh_collision_refuses_engine_content(bridge):
     assert_ready(bridge)
 
 
+# ── static mesh: local bounds (read-only) ───────────────────────────────────
+
+@covers("mesh_get_bounds")
+def test_get_static_mesh_bounds_reads_engine_cube(bridge):
+    """Pure read against engine content. /Engine/BasicShapes/Cube is a 100u cube
+    centered at the origin, so the handler must report local box_extent
+    (50,50,50), origin (0,0,0), size (100,100,100), box_min/box_max at ±50, and
+    sphere_radius = |(50,50,50)| ≈ 86.6 (parity with the bun assertions in
+    src/server/test/integration/mesh.test.ts)."""
+    result = bridge.expect("mesh_get_bounds", {"static_mesh_path": ENGINE_CUBE})
+    assert result.get("success") is True, result
+    lb = result["local_bounds"]
+    for axis in ("x", "y", "z"):
+        assert abs(lb["box_extent"][axis] - 50) < 0.1, lb
+        assert abs(lb["origin"][axis]) < 0.1, lb
+        assert abs(result["size"][axis] - 100) < 0.1, result
+        assert abs(result["box_min"][axis] - (-50)) < 0.1, result
+        assert abs(result["box_max"][axis] - 50) < 0.1, result
+    assert abs(lb["sphere_radius"] - 86.6) < 0.5, lb
+
+
 # ── static mesh: sockets ────────────────────────────────────────────────────
 
 @covers("mesh_add_socket", "mesh_list_sockets", "mesh_modify_socket", "mesh_remove_socket")
