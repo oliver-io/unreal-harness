@@ -42,25 +42,68 @@ editorSuite("animation", (ctx) => {
   // asset_list once rather than per test.
   const discovery = new Map<string, string | null>();
 
-  /** Return the path of a TRUE UAnimSequence in the project, or null. */
+  /** Return the path of a TRUE UAnimSequence in the project, or null.
+   *  Prior test-run artifacts (namespaced dupes, "_MCP*" output-suffix
+   *  leftovers) are excluded so discovery is stable across re-runs. */
   async function findAnimSequence(client: Commandable, skeleton = ""): Promise<string | null> {
     const key = skeleton || "*";
     if (discovery.has(key)) return discovery.get(key) ?? null;
     let path: string | null = null;
     try {
-      const result = await client.expect("asset_list", {
-        directory_path: "/Game",
-        recursive: true,
-        class_filter: "AnimSequence",
-      });
-      const assets = (payload(result).assets as any[]) ?? [];
-      const seqs = assets.filter((a: any) => a.class === "AnimSequence" && a.path);
+      let assets: any[];
+      if (skeleton) {
+        // Skeleton-compatible discovery (blend-space samples reject sequences
+        // from a different skeleton): anim_list_sequences applies the registry
+        // Skeleton-tag filter that asset_list lacks.
+        const listed = await client.expect("anim_list_sequences", { skeleton_path: skeleton });
+        assets = (listed.anim_sequences as any[]) ?? [];
+      } else {
+        const result = await client.expect("asset_list", {
+          directory_path: "/Game",
+          recursive: true,
+          class_filter: "AnimSequence",
+        });
+        assets = ((payload(result).assets as any[]) ?? []).filter(
+          (a: any) => a.class === "AnimSequence",
+        );
+      }
+      const seqs = assets.filter(
+        (a: any) =>
+          a.path &&
+          String(a.path).startsWith("/Game/") &&
+          !String(a.path).includes("_MCP") &&
+          !String(a.path).includes("__MCPTest__"),
+      );
       path = seqs.length ? (seqs[0].path as string) : null;
     } catch {
       path = null;
     }
     discovery.set(key, path);
     return path;
+  }
+
+  /** Attach-safe /Game/... -> Content/....uasset via the LIVE editor's own
+   *  project root (B6/D3 precedent — see material.test.ts). */
+  async function liveUassetDiskPath(gamePath: string): Promise<string> {
+    const pctx = await ctx.mcp.expect("project_context", {});
+    const root = (pctx.settings_paths as string[])[0]!;
+    const pkg = gamePath.split(".")[0]!;
+    return join(root, "Content", pkg.slice("/Game/".length) + ".uasset");
+  }
+
+  /** Duplicate a discovered project UAnimSequence into the test namespace so
+   *  the mutating sequence ops act on a TEST-OWNED asset. Null when the
+   *  project ships no UAnimSequence (callers skip). */
+  async function dupeSequence(destName: string): Promise<string | null> {
+    const src = await findAnimSequence(ctx.mcp);
+    if (!src) return null;
+    const dest = `${NS}/${destName}`;
+    await ensureAbsent(ctx.mcp, dest);
+    await ctx.mcp.expect("asset_duplicate", {
+      source_path: src.split(".")[0],
+      destination_path: dest,
+    });
+    return dest;
   }
 
   beforeAll(async () => {
@@ -125,35 +168,59 @@ editorSuite("animation", (ctx) => {
   });
 
   test("test_bind_anim_node_property", async () => {
+    // Bind a SequencePlayer node's PlayRate (a pin-optional FAnimNode property)
+    // to a float variable, and PROVE the bind through an independent reader:
+    // binding toggles ShowPinForProperties + ReconstructNode, which materializes
+    // the PlayRate pin — absent from bp_list_node_pins before, present after
+    // (verified live). The PropertyBindings TMap itself is unobservable (no
+    // typed reader; no Python glue for its value struct), so the reconstructed
+    // pin is the deepest available observation of the write.
     const name = "ABP_Bind";
     const path = `${NS}/${name}`;
     await ensureAbsent(ctx.mcp, path);
-    const created = await ctx.mcp.expect("anim_blueprint_create", {
+    await ctx.mcp.expect("anim_blueprint_create", {
       name,
       skeleton_path: SKELETON,
       package_path: NS,
     });
-    const nodeId = created.output_pose_node_id;
-    if (!nodeId) {
-      console.log("created AnimBP exposed no output-pose node id to bind against");
-      return;
-    }
+    const added = await ctx.mcp.expect("bp_add_node", {
+      blueprint_name: path,
+      node_type: "SequencePlayer",
+      function_name: "AnimGraph",
+    });
+    const nodeId = added.node_id;
+    expect(nodeId).toBeTruthy();
     // A variable for the binding to reference.
     await ctx.mcp.expect("bp_create_variable", {
       blueprint_name: path,
-      variable_name: "MCPBindVar",
+      variable_name: "MCPBindRate",
       variable_type: "float",
     });
-    // Use command (not expect): binding onto the Root node may legitimately
-    // error (no such bindable property) — we only require a graceful answer.
-    const resp = await ctx.mcp.command("anim_node_bind_property", {
+
+    const pinNames = async (): Promise<string[]> => {
+      const listed = await ctx.mcp.expect("bp_list_node_pins", {
+        blueprint_name: path,
+        node_id: nodeId,
+        graph_name: "AnimGraph",
+      });
+      return ((listed.pins as any[]) ?? []).map((p: any) => p.name);
+    };
+
+    // Before: the hidden-by-default PlayRate pin is not serialized.
+    expect(await pinNames()).not.toContain("PlayRate");
+
+    const result = await ctx.mcp.expect("anim_node_bind_property", {
       blueprint_name: path,
       node_id: nodeId,
-      property_name: "Sequence",
-      variable_name: "MCPBindVar",
+      property_name: "PlayRate",
+      variable_name: "MCPBindRate",
+      graph_name: "AnimGraph",
     });
-    expect(resp && typeof resp === "object").toBeTruthy();
-    expect(["success", "error"]).toContain(resp.status);
+    expect(result.success).toBe(true);
+    expect(result.pin_toggled_visible).toBe(true);
+
+    // Independent readback: the bound pin now exists on the reconstructed node.
+    expect(await pinNames()).toContain("PlayRate");
     await assertReady(ctx.mcp);
   });
 
@@ -335,84 +402,154 @@ editorSuite("animation", (ctx) => {
   });
 
   // ── UAnimSequence-gated ops (skip when the project ships no sequence) ──────
-  test("test_set_anim_sequence_property", async () => {
-    const seq = await findAnimSequence(ctx.mcp);
+  // Each test duplicates a discovered project sequence into the namespace
+  // first (asset_duplicate) and acts on the DUPE — real project content is
+  // never mutated, and the output-suffix ops' new assets land inside the
+  // namespace.
+
+  test("test_list_anim_sequences_enumerates_created_sequence", async () => {
+    // Actually CALL anim_list_sequences and prove it against independent
+    // state: a freshly-duplicated namespaced sequence must enumerate, count
+    // must equal the list length, and every /Game AnimSequence known to the
+    // asset registry (asset_list — a different reader) must appear.
+    const seq = await dupeSequence("Seq_ListProbe");
     if (!seq) {
       console.log("no anim sequence asset in project");
       return;
     }
-    const result = await ctx.mcp.expect("anim_sequence_set_property", {
-      anim_path: seq,
-      additive_anim_type: "LocalSpace",
-    });
-    // Response echoes the engine-canonical short name (round-trip-safe).
-    expect(result.additive_anim_type).toEqual("AAT_LocalSpaceBase");
-    expect(result.success).toBe(true);
+    try {
+      const listed = await ctx.mcp.expect("anim_list_sequences", {});
+      expect(listed.success).toBe(true);
+      const entries = (listed.anim_sequences as any[]) ?? [];
+      expect(listed.count).toEqual(entries.length);
+      const paths = new Set(entries.map((e: any) => String(e.path ?? "").split(".")[0]));
+      expect(paths.has(seq)).toBe(true);
+      // Cross-check against the independent asset-registry reader.
+      const registry = (payload(
+        await ctx.mcp.expect("asset_list", {
+          directory_path: "/Game",
+          recursive: true,
+          class_filter: "AnimSequence",
+        }),
+      ).assets as any[]) ?? [];
+      for (const a of registry.filter((a: any) => a.class === "AnimSequence")) {
+        expect(paths.has(String(a.path ?? "").split(".")[0])).toBe(true);
+      }
+      // Documented negative path: a bogus skeleton filter errors loudly.
+      const bad = await ctx.mcp.command("anim_list_sequences", {
+        skeleton_path: `${NS}/NoSuchSkeleton`,
+      });
+      expect(bad.status).toEqual("error");
+    } finally {
+      await ensureAbsent(ctx.mcp, seq);
+    }
+  });
+
+  test("test_set_anim_sequence_property", async () => {
+    const seq = await dupeSequence("Seq_SetProp");
+    if (!seq) {
+      console.log("no anim sequence asset in project");
+      return;
+    }
+    try {
+      const result = await ctx.mcp.expect("anim_sequence_set_property", {
+        anim_path: seq,
+        additive_anim_type: "LocalSpace",
+      });
+      // Response echoes the engine-canonical short name (round-trip-safe).
+      expect(result.additive_anim_type).toEqual("AAT_LocalSpaceBase");
+      expect(result.success).toBe(true);
+      // Independent readback via the sanctioned py console hatch: the loaded
+      // UAnimSequence's AdditiveAnimType UPROPERTY now reports LocalSpaceBase
+      // (no typed reader exposes sequence properties).
+      const name = seq.split("/").pop();
+      const probe = await ctx.mcp.expect("editor_console_exec", {
+        command:
+          "py import unreal; " +
+          `s = unreal.load_object(None, '${seq}.${name}'); ` +
+          "print('MCPTEST_AAT=' + (str(s.get_editor_property('additive_anim_type')) if s else 'NOTFOUND'))",
+      });
+      expect(String(probe.output ?? "")).toContain("AAT_LOCAL_SPACE_BASE");
+    } finally {
+      await ensureAbsent(ctx.mcp, seq);
+    }
   });
 
   test("test_extract_anim_between_notifies", async () => {
-    const seq = await findAnimSequence(ctx.mcp);
+    const seq = await dupeSequence("Seq_ExtractSrc");
     if (!seq) {
       console.log("no anim sequence asset in project to slice");
       return;
     }
-    const result = await ctx.mcp.expect("anim_extract_between_notifies", {
-      source_path: seq,
-      dest_name: "Anim_Extracted",
-      start_time: 0.0,
-      end_time: 0.1,
-      dest_path: NS,
-    });
-    expect(result.name === "Anim_Extracted" || result.path).toBeTruthy();
+    const out = `${NS}/Anim_Extracted`;
+    await ensureAbsent(ctx.mcp, out);
+    try {
+      const result = await ctx.mcp.expect("anim_extract_between_notifies", {
+        source_path: seq,
+        dest_name: "Anim_Extracted",
+        start_time: 0.0,
+        end_time: 0.1,
+        dest_path: NS,
+      });
+      expect(result.success).toBe(true);
+      expect(result.name).toEqual("Anim_Extracted");
+      // The handler SaveAsset()s the sliced clip — the new .uasset must exist
+      // on disk (attach-safe path via the live editor's own project root).
+      expect(existsSync(await liveUassetDiskPath(out))).toBe(true);
+    } finally {
+      await ensureAbsent(ctx.mcp, out);
+      await ensureAbsent(ctx.mcp, seq);
+    }
   });
 
-  test("test_smooth_anim_sequence", async () => {
-    const seq = await findAnimSequence(ctx.mcp);
+  /** Shared deep assertion for the output-suffix ops: act on a namespaced
+   *  dupe, assert the echoed output_path is the dupe+suffix INSIDE the
+   *  namespace, then confirm the new .uasset on disk (the handlers SaveAsset
+   *  the output — verified against MCPIKCommands.cpp). */
+  async function outputSuffixRoundtrip(
+    dupeName: string,
+    op: string,
+    suffix: string,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const seq = await dupeSequence(dupeName);
     if (!seq) {
-      console.log("no anim sequence asset in project to smooth");
+      console.log("no anim sequence asset in project");
       return;
     }
-    const result = await ctx.mcp.expect("anim_smooth_sequence", {
-      anim_path: seq,
+    const expectedOut = `${seq}${suffix}`;
+    await ensureAbsent(ctx.mcp, expectedOut);
+    try {
+      const result = await ctx.mcp.expect(op, { anim_path: seq, output_suffix: suffix, ...params });
+      expect(result.success).toBe(true);
+      expect(String(result.output_path ?? "").split(".")[0]).toEqual(expectedOut);
+      expect(existsSync(await liveUassetDiskPath(expectedOut))).toBe(true);
+    } finally {
+      await ensureAbsent(ctx.mcp, expectedOut);
+      await ensureAbsent(ctx.mcp, seq);
+    }
+  }
+
+  test("test_smooth_anim_sequence", async () => {
+    await outputSuffixRoundtrip("Seq_SmoothSrc", "anim_smooth_sequence", "_MCPSmoothed", {
       window_size: 3,
       filter_type: "box",
-      output_suffix: "_MCPSmoothed",
       smooth_positions: false,
     });
-    expect(result.success).toBe(true);
-    expect(result.output_path).toBeTruthy();
   });
 
   test("test_normalize_anim_z_offset", async () => {
-    const seq = await findAnimSequence(ctx.mcp);
-    if (!seq) {
-      console.log("no anim sequence asset in project to normalize");
-      return;
-    }
-    const result = await ctx.mcp.expect("anim_normalize_z_offset", {
-      anim_path: seq,
+    await outputSuffixRoundtrip("Seq_ZNormSrc", "anim_normalize_z_offset", "_MCPZNorm", {
       target_z: 0.0,
-      output_suffix: "_MCPZNorm",
     });
-    expect(result.success).toBe(true);
-    expect(result.output_path).toBeTruthy();
   });
 
   test("test_anchor_feet_to_floor", async () => {
-    const seq = await findAnimSequence(ctx.mcp);
-    if (!seq) {
-      console.log("no anim sequence asset in project to anchor");
-      return;
-    }
-    const result = await ctx.mcp.expect("anim_anchor_feet_to_floor", {
-      anim_path: seq,
+    await outputSuffixRoundtrip("Seq_AnchorSrc", "anim_anchor_feet_to_floor", "_MCPFootAnchored", {
       foot_bone_substring: "foot_l",
       pelvis_bone_substring: "pelvis",
       target_z: 0.0,
       sample_frames: 10,
-      output_suffix: "_MCPFootAnchored",
     });
-    expect(result.success).toBe(true);
-    expect(result.output_path).toBeTruthy();
   });
 });

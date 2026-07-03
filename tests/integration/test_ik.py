@@ -20,7 +20,7 @@ import pytest
 
 from harness import config
 from harness.coverage import covers
-from harness.ops import ensure_absent, assert_ready, first_asset_of
+from harness.ops import ensure_absent, assert_ready, payload
 
 NS = "/Game/__MCPTest__/ik"
 RETARGETER = f"{NS}/RTG_MCPTest"
@@ -28,13 +28,25 @@ RETARGETER = f"{NS}/RTG_MCPTest"
 
 def _find_asset(bridge, class_filter: str):
     """First /Game asset of a given class, or None. Used to gate content-
-    dependent ops (IK rigs, anim sequences, pose assets)."""
-    item = first_asset_of(bridge, "asset_list", {
-        "directory_path": "/Game/",
-        "recursive": True,
-        "class_filter": class_filter,
-    }, items_key="assets")
-    return item.get("path") if item else None
+    dependent ops (IK rigs, anim sequences, pose assets).
+
+    NOTE: asset_list nests its fields under the AssetManager `data` envelope,
+    so the result must be unwrapped via payload() — first_asset_of cannot see
+    the nested list (this silently skipped every rig-gated test, even against
+    a project that ships IK rigs). Prior-run "_MCP*" artifacts are excluded."""
+    try:
+        result = payload(bridge.expect("asset_list", {
+            "directory_path": "/Game/",
+            "recursive": True,
+            "class_filter": class_filter,
+        }))
+    except Exception:
+        return None
+    for a in result.get("assets") or []:
+        p = str(a.get("path", "")).split(".")[0]
+        if p and "_MCP" not in p and "__MCPTest__" not in p:
+            return p
+    return None
 
 
 @pytest.fixture(scope="module")
@@ -109,7 +121,7 @@ def test_set_ik_retargeter_rigs(mcp):
     assert rb.get("target_ik_rig_path"), rb
 
 
-@covers("ik_retarget_auto_map_chains")
+@covers("ik_retarget_auto_map_chains", "ik_retarget_read")
 def test_ik_retargeter_auto_map_chains(mcp, configured_retargeter):
     result = mcp.expect("ik_retarget_auto_map_chains", {
         "retargeter_path": configured_retargeter["path"],
@@ -119,6 +131,14 @@ def test_ik_retargeter_auto_map_chains(mcp, configured_retargeter):
     })
     assert isinstance(result.get("chain_mappings"), list), result
     assert_ready(mcp)
+    # Independent readback (ik_retarget_read, not the mutator's echo): with an
+    # IDENTITY rig on both sides, fuzzy auto-map must wire every target chain
+    # to its same-named source chain (verified live: 50/50 identity mappings).
+    rb = mcp.expect("ik_retarget_read", {"retargeter_path": configured_retargeter["path"]})
+    mappings = rb.get("chain_mappings") or []
+    assert mappings, rb
+    unmapped = [m for m in mappings if m.get("source_chain") != m.get("target_chain")]
+    assert not unmapped, f"identity auto-map left non-identity mappings: {unmapped}"
 
 
 @covers("ik_retarget_set_chain_mapping", "ik_retarget_read")
@@ -156,13 +176,27 @@ def test_ik_retargeter_align_bones(mcp, configured_retargeter):
 def test_set_ik_retargeter_pelvis_settings(mcp, configured_retargeter):
     # Needs the Pelvis Motion op, which only exists once the default op stack is
     # built (create with rigs -> AddDefaultOps). Hence the configured fixture.
+    # ik_retarget_read does not surface op settings and the 5.7 FInstancedStruct
+    # op stack has no Python glue, so the readback is a SECOND setter call
+    # writing an unrelated field: its response reports the STORED settings
+    # struct, which must reflect the first call's write (the physics-constraint
+    # from-value precedent).
     result = mcp.expect("ik_retarget_set_pelvis_settings", {
         "retargeter_path": configured_retargeter["path"],
-        "scale_vertical": 0.0,
+        "scale_vertical": 0.25,
     })
     assert result.get("success") is not False, result
-    assert "written_fields" in result, result
-    assert "scale_vertical" in result.get("written_fields", []), result
+    written = result.get("written_fields") or []
+    # Entries are "key=value" strings (e.g. "scale_vertical=0.2500").
+    assert any(str(w).startswith("scale_vertical=") for w in written), result
+    assert result.get("scale_vertical") == pytest.approx(0.25), result
+    # Independent re-read: a call that writes ONLY rotation_alpha must report
+    # the previously-stored scale_vertical.
+    reread = mcp.expect("ik_retarget_set_pelvis_settings", {
+        "retargeter_path": configured_retargeter["path"],
+        "rotation_alpha": 1.0,
+    })
+    assert reread.get("scale_vertical") == pytest.approx(0.25), reread
 
 
 @covers("ik_retarget_set_root_motion_settings")
@@ -172,7 +206,16 @@ def test_set_ik_retargeter_root_motion_settings(mcp, configured_retargeter):
         "root_height_source": "snap_to_ground",
     })
     assert result.get("success") is not False, result
-    assert "written_fields" in result, result
+    written = result.get("written_fields") or []
+    assert any(str(w).startswith("root_height_source=") for w in written), result
+    assert result.get("root_height_source") == "snap_to_ground", result
+    # Independent re-read via a call writing only an unrelated boolean: the
+    # stored Root Motion op settings must still report snap_to_ground.
+    reread = mcp.expect("ik_retarget_set_root_motion_settings", {
+        "retargeter_path": configured_retargeter["path"],
+        "maintain_offset_from_pelvis": True,
+    })
+    assert reread.get("root_height_source") == "snap_to_ground", reread
 
 
 # ── Anim/pose-dependent: skip when the project ships no source content ────────
@@ -206,17 +249,63 @@ def test_import_ik_retargeter_pose_from_pose_asset(mcp, configured_retargeter):
     assert result.get("success") is not False, result
 
 
-@covers("ik_retarget_run_batch")
+def _rig_compatible_sequence(mcp, rig_path: str):
+    """Find a UAnimSequence compatible with the rig's skeleton by walking the
+    typed chain rig -> preview_mesh (ik_rig_list_chains) -> skeleton
+    (anim_skeletal_mesh_inspect) -> anim_list_sequences(skeleton_path).
+    Returns a package path or None. Prior-run "_MCP*" artifacts are excluded."""
+    chains = mcp.expect("ik_rig_list_chains", {"ik_rig_path": rig_path})
+    mesh = str(chains.get("preview_mesh", "")).split(".")[0]
+    if not mesh:
+        return None
+    info = payload(mcp.expect("anim_skeletal_mesh_inspect", {"path": mesh}))
+    skeleton = str(info.get("skeleton", "")).split(".")[0]
+    if not skeleton:
+        return None
+    listed = mcp.expect("anim_list_sequences", {"skeleton_path": skeleton})
+    for entry in listed.get("anim_sequences") or []:
+        p = str(entry.get("path", "")).split(".")[0]
+        if p.startswith("/Game/") and "_MCP" not in p and "__MCPTest__" not in p:
+            return p
+    return None
+
+
+@covers("ik_retarget_run_batch", "ik_rig_list_chains")
 def test_ik_retarget_run_batch(mcp, configured_retargeter):
-    anim = _find_asset(mcp, "AnimSequence")
-    if not anim:
-        pytest.skip("no source UAnimSequence to duplicate-and-retarget")
-    result = mcp.expect("ik_retarget_run_batch", {
-        "retargeter_path": configured_retargeter["path"],
-        "source_animations": [anim],
-        "name_suffix": "_MCPRetarget",
-        "include_referenced_assets": True,
-        "overwrite_existing": False,
-    })
-    assert isinstance(result.get("new_assets"), list), result
-    assert_ready(mcp)
+    """Duplicate-and-retarget a namespaced dupe of a rig-compatible sequence.
+    Deep assertion: the batch's new assets exist in the ASSET REGISTRY
+    (asset_list — independent of the mutator's echo). Note the engine's
+    DuplicateAndRetarget drops outputs at the /Game content root and does NOT
+    save them to disk (verified live), so the registry is the observable and
+    every output is deleted in finally."""
+    src = _rig_compatible_sequence(mcp, configured_retargeter["rig"])
+    if not src:
+        pytest.skip("no rig-compatible UAnimSequence to duplicate-and-retarget")
+    dupe = f"{NS}/Seq_BatchSrc"
+    ensure_absent(mcp, dupe)
+    mcp.expect("asset_duplicate", {"source_path": src, "destination_path": dupe})
+    new_paths = []
+    try:
+        result = mcp.expect("ik_retarget_run_batch", {
+            "retargeter_path": configured_retargeter["path"],
+            "source_animations": [dupe],
+            "name_suffix": "_MCPRetarget",
+            "include_referenced_assets": False,
+            "overwrite_existing": False,
+        })
+        new_paths = [str(p).split(".")[0] for p in (result.get("new_assets") or [])]
+        assert new_paths, f"batch retarget produced no new assets: {result}"
+        # Independent registry readback: each new asset enumerates with the
+        # right class in its containing folder.
+        for pkg in new_paths:
+            folder = pkg.rsplit("/", 1)[0] or "/Game"
+            listing = payload(mcp.expect("asset_list", {
+                "directory_path": folder + "/", "recursive": False,
+                "class_filter": "AnimSequence"}))
+            found = {str(a.get("path", "")).split(".")[0] for a in (listing.get("assets") or [])}
+            assert pkg in found, f"batch output {pkg} not in registry listing {sorted(found)}"
+        assert_ready(mcp)
+    finally:
+        for pkg in new_paths:
+            ensure_absent(mcp, pkg)
+        ensure_absent(mcp, dupe)

@@ -42,6 +42,8 @@ Headless-safe: every op is a pure graph/asset mutation via NewObject / factory /
 reflection — none open an asset-editor window — so no ``gui_only`` marker.
 """
 
+import re
+
 import pytest
 
 from harness.coverage import covers
@@ -96,6 +98,23 @@ def _graphs(bridge, abp):
 def _machine_graphs(bridge, abp, machine: str):
     """Entries whose parent_state_machine is the given machine (states + transitions)."""
     return [g for g in _graphs(bridge, abp) if g.get("parent_state_machine") == machine]
+
+
+def _graph_node_path(abp, machine_node_id: str, *inner) -> str:
+    """Full object path of a graph node inside the AnimBP, e.g.
+    /Game/.../ABP.ABP:AnimGraph.AnimGraphNode_StateMachine_0[.SM_X.NodeName].
+    Verified live against a UE 5.7 editor."""
+    path = abp["path"]
+    name = path.rsplit("/", 1)[-1]
+    parts = [f"{path}.{name}:{abp['anim_graph']}", machine_node_id, *inner]
+    return ".".join(parts)
+
+
+def _py_probe(bridge, source: str) -> str:
+    """Run a one-line py snippet via the sanctioned console hatch and return
+    the raw output (house pattern — see test_widget.py)."""
+    probe = bridge.expect("editor_console_exec", {"command": f"py {source}"})
+    return probe.get("output", "")
 
 
 # ── fixture: the shared Anim Blueprint ───────────────────────────────────────
@@ -197,7 +216,7 @@ def test_add_transition(mcp, sample_abp):
 
 @covers("anim_state_machine_modify_transition", "anim_state_machine_transition_add", "anim_state_machine_state_add", "anim_state_machine_create")
 def test_modify_transition(mcp, sample_abp):
-    machine, _ = _new_machine(mcp, sample_abp, "SM_ModTrans")
+    machine, machine_node = _new_machine(mcp, sample_abp, "SM_ModTrans")
     _add_state(mcp, sample_abp, machine, "S_M0")
     _add_state(mcp, sample_abp, machine, "S_M1")
     added = mcp.expect("anim_state_machine_transition_add", {
@@ -223,6 +242,21 @@ def test_modify_transition(mcp, sample_abp):
     trans = [g for g in _machine_graphs(mcp, sample_abp, machine)
              if g.get("category") == "transition"]
     assert any(g.get("from_state") == "S_M0" and g.get("to_state") == "S_M1" for g in trans), trans
+    # Independent readback of the WRITTEN VALUES via the py hatch: the
+    # UAnimStateTransitionNode's CrossfadeDuration / PriorityOrder UPROPERTYs
+    # (no typed reader exposes transition-node properties — bp_list_graphs
+    # serializes only topology, verified live).
+    node_path = _graph_node_path(sample_abp, machine_node, machine, tid)
+    out = _py_probe(mcp, (
+        "import unreal; "
+        f"t = unreal.find_object(None, '{node_path}'); "
+        "print('MCPTEST_TRANS=' + ('%s|%s' % (t.get_editor_property('crossfade_duration'), "
+        "t.get_editor_property('priority_order')) if t else 'NOTFOUND'))"
+    ))
+    m = re.search(r"MCPTEST_TRANS=([^|\r\n]+)\|(-?\d+)", out)
+    assert m, f"transition node not readable at {node_path}: {out}"
+    assert float(m.group(1)) == pytest.approx(0.35), out
+    assert int(m.group(2)) == 2, out
 
 
 @covers("anim_state_machine_transition_remove", "anim_state_machine_transition_add", "anim_state_machine_state_add", "anim_state_machine_create")
@@ -256,10 +290,17 @@ def test_remove_transition(mcp, sample_abp):
 
 # ── entry state ──────────────────────────────────────────────────────────────
 
-@covers("anim_state_machine_set_entry", "anim_state_machine_state_add", "anim_state_machine_create")
+@covers("anim_state_machine_set_entry", "anim_state_machine_state_add", "anim_state_machine_create",
+        "bp_list_node_pins")
 def test_set_entry_state(mcp, sample_abp):
+    """set_entry rewires the UAnimStateEntryNode's output pin. Two states, entry
+    set to the SECOND — the independent readback (bp_list_node_pins on each
+    state node, scoped to the machine graph) must show the entry-node link on
+    the second state's In pin and not on the first's (verified live: the
+    connection serializes as node_id 'AnimStateEntryNode_*', pin 'Entry')."""
     machine, _ = _new_machine(mcp, sample_abp, "SM_Entry")
-    _add_state(mcp, sample_abp, machine, "S_Entry")
+    first_nid, _ = _add_state(mcp, sample_abp, machine, "S_First")
+    entry_nid, _ = _add_state(mcp, sample_abp, machine, "S_Entry")
     result = mcp.expect("anim_state_machine_set_entry", {
         "blueprint_name": sample_abp["path"],
         "state_machine_graph": machine,
@@ -268,6 +309,21 @@ def test_set_entry_state(mcp, sample_abp):
     assert result.get("success") is True, result
     assert result.get("entry_state") == "S_Entry", result
     assert_ready(mcp)
+
+    def _entry_links(state_node_id):
+        listed = mcp.expect("bp_list_node_pins", {
+            "blueprint_name": sample_abp["path"],
+            "node_id": state_node_id,
+            "graph_name": machine,
+        })
+        in_pin = next((p for p in (listed.get("pins") or [])
+                       if p.get("name") == "In"), None)
+        assert in_pin is not None, listed
+        return [c for c in (in_pin.get("connections") or [])
+                if "AnimStateEntryNode" in str(c.get("node_id"))]
+
+    assert _entry_links(entry_nid), "entry node not wired to the designated state"
+    assert not _entry_links(first_nid), "entry node still wired to the other state"
 
 
 # ── inner AnimNode property ──────────────────────────────────────────────────
@@ -290,3 +346,16 @@ def test_set_inner_node_property(mcp, sample_abp):
     assert result.get("success") is True, result
     assert result.get("value") == "5", result
     assert_ready(mcp)
+    # Independent readback of the inner FAnimNode_StateMachine struct via the
+    # py hatch (no typed reader exposes inner-node properties): the node's
+    # `Node.MaxTransitionsPerFrame` must now be 5 (engine default is 3).
+    node_path = _graph_node_path(sample_abp, node_id)
+    out = _py_probe(mcp, (
+        "import unreal; "
+        f"n = unreal.find_object(None, '{node_path}'); "
+        "print('MCPTEST_INNER=' + (str(n.get_editor_property('node')"
+        ".get_editor_property('max_transitions_per_frame')) if n else 'NOTFOUND'))"
+    ))
+    m = re.search(r"MCPTEST_INNER=(-?\d+)", out)
+    assert m, f"state machine node not readable at {node_path}: {out}"
+    assert int(m.group(1)) == 5, out

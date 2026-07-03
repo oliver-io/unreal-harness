@@ -7,12 +7,14 @@ Mostly self-contained: AnimBP / Montage / BlendSpace are all authorable from
 scratch given only a USkeleton, and the engine ships a stock one
 (`/Engine/EngineMeshes/SkeletalCube_Skeleton`, confirmed present in every
 install). The handful of ops that strictly require a pre-existing
-UAnimSequence — `set_anim_sequence_property`, `extract_anim_between_notifies`,
-`smooth_anim_sequence`, `normalize_anim_z_offset`, `anchor_feet_to_floor`, and
-blend-space sample add/remove — DISCOVER one via `list_anim_sequences` and
-`pytest.skip` when the project has none (the default for the fixture project).
-The MCP exposes no op that authors a UAnimSequence, so those skips are expected;
-the ops still count toward coverage via `@covers`.
+UAnimSequence — `anim_sequence_set_property`, `anim_extract_between_notifies`,
+`anim_smooth_sequence`, `anim_normalize_z_offset`, `anim_anchor_feet_to_floor`,
+and blend-space sample add/remove — DISCOVER one via `asset_list`, duplicate it
+into the test namespace (`asset_duplicate`) and act on the DUPE, so real
+project content is never mutated and every output lands inside the namespace.
+They `pytest.skip` when the project has none (the default for the fixture
+project). The MCP exposes no op that authors a UAnimSequence from nothing, so
+those skips are expected.
 
 Created assets live under `/Game/__MCPTest__/anim/...`; the session-end disk
 wipe (Content/__MCPTest__) cleans them up. Each create is preceded by
@@ -28,6 +30,9 @@ project.
 Pattern for every test: arrange prerequisite state -> dispatch the op (raises on
 a non-success envelope) -> assert the resulting state via a read/inspect op.
 """
+
+import re
+from pathlib import Path
 
 import pytest
 
@@ -56,7 +61,10 @@ def _find_anim_sequence(mcp, skeleton: str = ""):
     Uses an exact class filter — NOT list_anim_sequences, which also returns
     UAnimMontage (a UAnimSequenceBase). The smooth/normalize/anchor/extract ops
     require a real UAnimSequence; a montage makes them fail rather than skip. The
-    fixture project ships none, so these tests skip — but RUN if one is imported."""
+    fixture project ships none, so these tests skip — but RUN if one is imported.
+
+    Prior test-run artifacts (namespaced dupes, "_MCP*" output-suffix leftovers)
+    are excluded so discovery is stable across re-runs against a live project."""
     key = skeleton or "*"
     if key in _DISCOVERY:
         return _DISCOVERY[key]
@@ -66,16 +74,51 @@ def _find_anim_sequence(mcp, skeleton: str = ""):
     # sequence, so these tests skip — and RUN if one is imported.
     path = None
     try:
-        result = mcp.expect("asset_list", {
-            "directory_path": "/Game", "recursive": True, "class_filter": "AnimSequence"})
-        from harness.ops import payload
-        assets = payload(result).get("assets") or []
-        seqs = [a for a in assets if a.get("class") == "AnimSequence" and a.get("path")]
+        if skeleton:
+            # Skeleton-compatible discovery (blend-space samples reject
+            # sequences from a different skeleton): anim_list_sequences
+            # applies the registry Skeleton-tag filter that asset_list lacks.
+            listed = mcp.expect("anim_list_sequences", {"skeleton_path": skeleton})
+            assets = listed.get("anim_sequences") or []
+        else:
+            result = mcp.expect("asset_list", {
+                "directory_path": "/Game", "recursive": True,
+                "class_filter": "AnimSequence"})
+            from harness.ops import payload
+            assets = [a for a in (payload(result).get("assets") or [])
+                      if a.get("class") == "AnimSequence"]
+        seqs = [a for a in assets
+                if a.get("path") and str(a["path"]).startswith("/Game/")
+                and "_MCP" not in a["path"] and "__MCPTest__" not in a["path"]]
         path = seqs[0]["path"] if seqs else None
     except Exception:
         path = None
     _DISCOVERY[key] = path
     return path
+
+
+def _live_uasset_disk_path(client, game_path: str) -> Path:
+    """Attach-safe /Game/... -> Content/....uasset mapping using the live
+    editor's own project root (B6 precedent — see test_asset.py/test_material.py)."""
+    ctx = client.expect("project_context", {})
+    root = Path(ctx["settings_paths"][0])
+    pkg = game_path.split(".")[0]
+    assert pkg.startswith("/Game/"), game_path
+    return root / "Content" / (pkg[len("/Game/"):] + ".uasset")
+
+
+def _dupe_sequence(mcp, dest_name: str):
+    """Duplicate a discovered project UAnimSequence into the test namespace so
+    the mutating sequence ops act on a TEST-OWNED asset (never real project
+    content). Returns the dupe's package path, or None when the project ships
+    no UAnimSequence (fixture default — callers pytest.skip)."""
+    src = _find_anim_sequence(mcp)
+    if not src:
+        return None
+    dest = f"{NS}/{dest_name}"
+    ensure_absent(mcp, dest)
+    mcp.expect("asset_duplicate", {"source_path": src.split(".")[0], "destination_path": dest})
+    return dest
 
 
 # ── module-scoped sample assets ─────────────────────────────────────────────
@@ -151,40 +194,62 @@ def test_set_anim_blueprint_skeleton(mcp, sample_abp):
     assert "SkeletalCube_Skeleton" in str(entry.get("target_skeleton")), entry
 
 
-@covers("anim_node_bind_property", "anim_blueprint_create", "bp_create_variable")
+@covers("anim_node_bind_property", "anim_blueprint_create", "bp_create_variable",
+        "add_blueprint_node", "bp_list_node_pins")  # bp_add_node's wire name
 def test_bind_anim_node_property(mcp):
-    """bind_anim_node_property targets an AnimGraph node. A freshly-created
-    AnimBP only owns its output-pose (Root) node, whose FAnimNode struct has no
-    bindable scalar pin, so a real bind may be a graceful no-op/error rather
-    than a success. Dispatch it against that node and assert the handler answers
-    cleanly (status present) and the editor survives — the binding write path is
-    exercised either way."""
+    """Bind a SequencePlayer node's PlayRate (a pin-optional FAnimNode property)
+    to a float variable, and PROVE the bind through an independent reader:
+    binding toggles ShowPinForProperties + ReconstructNode, which materializes
+    the PlayRate pin — absent from bp_list_node_pins before the bind, present
+    after (verified live). The PropertyBindings TMap itself is not observable:
+    no typed reader exposes it and the py hatch cannot read a
+    TMap<FName, FAnimGraphNodePropertyBinding> (the value struct has no Python
+    glue — verified live), so the reconstructed pin is the deepest available
+    observation of the write."""
     name = "ABP_Bind"
     path = f"{NS}/{name}"
     ensure_absent(mcp, path)
-    created = mcp.expect("anim_blueprint_create", {
+    mcp.expect("anim_blueprint_create", {
         "name": name,
         "skeleton_path": SKELETON,
         "package_path": NS,
     })
-    node_id = created.get("output_pose_node_id")
-    if not node_id:
-        pytest.skip("created AnimBP exposed no output-pose node id to bind against")
+    # A SequencePlayer node — FAnimNode_SequencePlayer.PlayRate is a real,
+    # pin-optional (PinHiddenByDefault) bindable scalar.
+    added = mcp.expect("bp_add_node", {
+        "blueprint_name": path,
+        "node_type": "SequencePlayer",
+        "function_name": "AnimGraph",
+    })
+    node_id = added.get("node_id")
+    assert node_id, added
     # A variable for the binding to reference.
     mcp.expect("bp_create_variable", {
         "blueprint_name": path,
-        "variable_name": "MCPBindVar",
+        "variable_name": "MCPBindRate",
         "variable_type": "float",
     })
-    # Use command (not expect): binding onto the Root node may legitimately
-    # error (no such bindable property) — we only require a graceful answer.
-    resp = mcp.command("anim_node_bind_property", {
+
+    def _pin_names():
+        listed = mcp.expect("bp_list_node_pins", {
+            "blueprint_name": path, "node_id": node_id, "graph_name": "AnimGraph"})
+        return {p.get("name") for p in (listed.get("pins") or [])}
+
+    # Before: the hidden-by-default PlayRate pin is not serialized.
+    assert "PlayRate" not in _pin_names(), "PlayRate pin visible before binding"
+
+    result = mcp.expect("anim_node_bind_property", {
         "blueprint_name": path,
         "node_id": node_id,
-        "property_name": "Sequence",
-        "variable_name": "MCPBindVar",
+        "property_name": "PlayRate",
+        "variable_name": "MCPBindRate",
+        "graph_name": "AnimGraph",
     })
-    assert isinstance(resp, dict) and resp.get("status") in ("success", "error"), resp
+    assert result.get("success") is True, result
+    assert result.get("pin_toggled_visible") is True, result
+
+    # Independent readback: the bound pin now exists on the reconstructed node.
+    assert "PlayRate" in _pin_names(), "bound PlayRate pin did not materialize"
     assert_ready(mcp)
 
 
@@ -359,78 +424,141 @@ def test_blend_space_sample_lifecycle(mcp):
 
 
 # ── UAnimSequence-gated ops (skip when the project ships no sequence) ────────
+# Each test duplicates a discovered project sequence into the namespace first
+# (asset_duplicate) and acts on the DUPE — real project content is never
+# mutated, and the output-suffix ops' new assets land inside the namespace.
 
-@covers("anim_sequence_set_property", "anim_list_sequences")
-def test_set_anim_sequence_property(mcp):
-    seq = _find_anim_sequence(mcp)
+@covers("anim_list_sequences")
+def test_list_anim_sequences_enumerates_created_sequence(mcp):
+    """Actually CALL anim_list_sequences (it was previously only @covers-tagged,
+    never invoked) and prove it against independent state: a freshly-duplicated
+    namespaced UAnimSequence must enumerate, the count must equal the list
+    length, and every /Game AnimSequence known to the asset registry
+    (asset_list — a different reader) must appear in its output. Also pins the
+    documented bad-skeleton error contract."""
+    seq = _dupe_sequence(mcp, "Seq_ListProbe")
     if not seq:
         pytest.skip("no anim sequence asset in project")
-    result = mcp.expect("anim_sequence_set_property", {
-        "anim_path": seq,
-        "additive_anim_type": "LocalSpace",
-    })
-    # Response echoes the engine-canonical short name (round-trip-safe).
-    assert result.get("additive_anim_type") == "AAT_LocalSpaceBase", result
-    assert result.get("success") is True, result
+    try:
+        listed = mcp.expect("anim_list_sequences", {})
+        assert listed.get("success") is True, listed
+        entries = listed.get("anim_sequences") or []
+        assert listed.get("count") == len(entries), listed
+        paths = {str(e.get("path", "")).split(".")[0] for e in entries}
+        assert seq in paths, f"created dupe {seq} not enumerated: {sorted(paths)[:10]}"
+        # Cross-check against the independent asset-registry reader.
+        from harness.ops import payload
+        registry = payload(mcp.expect("asset_list", {
+            "directory_path": "/Game", "recursive": True,
+            "class_filter": "AnimSequence"})).get("assets") or []
+        reg_paths = {str(a.get("path", "")).split(".")[0] for a in registry
+                     if a.get("class") == "AnimSequence"}
+        assert reg_paths <= paths, f"registry sequences missing from list: {reg_paths - paths}"
+        # Documented negative path: a bogus skeleton filter errors loudly.
+        bad = mcp.command("anim_list_sequences", {"skeleton_path": f"{NS}/NoSuchSkeleton"})
+        assert bad.get("status") == "error", bad
+    finally:
+        ensure_absent(mcp, seq)
 
 
-@covers("anim_extract_between_notifies", "anim_list_sequences")
+@covers("anim_sequence_set_property")
+def test_set_anim_sequence_property(mcp):
+    seq = _dupe_sequence(mcp, "Seq_SetProp")
+    if not seq:
+        pytest.skip("no anim sequence asset in project")
+    try:
+        result = mcp.expect("anim_sequence_set_property", {
+            "anim_path": seq,
+            "additive_anim_type": "LocalSpace",
+        })
+        # Response echoes the engine-canonical short name (round-trip-safe).
+        assert result.get("additive_anim_type") == "AAT_LocalSpaceBase", result
+        assert result.get("success") is True, result
+        # Independent readback via the sanctioned py console hatch: the loaded
+        # UAnimSequence's AdditiveAnimType UPROPERTY now reports LocalSpaceBase
+        # (no typed reader exposes sequence properties).
+        name = seq.rsplit("/", 1)[-1]
+        probe = mcp.expect("editor_console_exec", {"command": (
+            "py import unreal; "
+            f"s = unreal.load_object(None, '{seq}.{name}'); "
+            "print('MCPTEST_AAT=' + (str(s.get_editor_property('additive_anim_type')) if s else 'NOTFOUND'))"
+        )})
+        m = re.search(r"MCPTEST_AAT=([^\r\n]+)", probe.get("output", ""))
+        assert m, probe
+        assert "AAT_LOCAL_SPACE_BASE" in m.group(1), m.group(1)
+    finally:
+        ensure_absent(mcp, seq)
+
+
+@covers("anim_extract_between_notifies")
 def test_extract_anim_between_notifies(mcp):
-    seq = _find_anim_sequence(mcp)
+    seq = _dupe_sequence(mcp, "Seq_ExtractSrc")
     if not seq:
         pytest.skip("no anim sequence asset in project to slice")
-    result = mcp.expect("anim_extract_between_notifies", {
-        "source_path": seq,
-        "dest_name": "Anim_Extracted",
-        "start_time": 0.0,
-        "end_time": 0.1,
-        "dest_path": NS,
-    })
-    assert result.get("name") == "Anim_Extracted" or result.get("path"), result
+    out = f"{NS}/Anim_Extracted"
+    ensure_absent(mcp, out)
+    try:
+        result = mcp.expect("anim_extract_between_notifies", {
+            "source_path": seq,
+            "dest_name": "Anim_Extracted",
+            "start_time": 0.0,
+            "end_time": 0.1,
+            "dest_path": NS,
+        })
+        assert result.get("success") is True, result
+        assert result.get("name") == "Anim_Extracted", result
+        # The handler SaveAsset()s the sliced clip — the new .uasset must exist
+        # on disk (attach-safe path via the live editor's own project root).
+        disk = _live_uasset_disk_path(mcp, out)
+        assert disk.is_file(), f"expected {disk} after extract"
+    finally:
+        ensure_absent(mcp, out)
+        ensure_absent(mcp, seq)
 
 
-@covers("anim_smooth_sequence", "anim_list_sequences")
-def test_smooth_anim_sequence(mcp):
-    seq = _find_anim_sequence(mcp)
+def _output_suffix_roundtrip(mcp, dupe_name: str, op: str, suffix: str, params: dict):
+    """Shared deep assertion for the output-suffix ops: act on a namespaced
+    dupe, assert the echoed output_path is the dupe+suffix INSIDE the
+    namespace, then confirm the new .uasset on disk (the handlers SaveAsset the
+    output — verified against MCPIKCommands.cpp)."""
+    seq = _dupe_sequence(mcp, dupe_name)
     if not seq:
-        pytest.skip("no anim sequence asset in project to smooth")
-    result = mcp.expect("anim_smooth_sequence", {
-        "anim_path": seq,
+        pytest.skip("no anim sequence asset in project")
+    expected_out = f"{seq}{suffix}"
+    ensure_absent(mcp, expected_out)
+    try:
+        result = mcp.expect(op, {"anim_path": seq, "output_suffix": suffix, **params})
+        assert result.get("success") is True, result
+        out = str(result.get("output_path", "")).split(".")[0]
+        assert out == expected_out, result
+        disk = _live_uasset_disk_path(mcp, expected_out)
+        assert disk.is_file(), f"expected {disk} after {op}"
+    finally:
+        ensure_absent(mcp, expected_out)
+        ensure_absent(mcp, seq)
+
+
+@covers("anim_smooth_sequence")
+def test_smooth_anim_sequence(mcp):
+    _output_suffix_roundtrip(mcp, "Seq_SmoothSrc", "anim_smooth_sequence", "_MCPSmoothed", {
         "window_size": 3,
         "filter_type": "box",
-        "output_suffix": "_MCPSmoothed",
         "smooth_positions": False,
     })
-    assert result.get("success") is True, result
-    assert result.get("output_path"), result
 
 
-@covers("anim_normalize_z_offset", "anim_list_sequences")
+@covers("anim_normalize_z_offset")
 def test_normalize_anim_z_offset(mcp):
-    seq = _find_anim_sequence(mcp)
-    if not seq:
-        pytest.skip("no anim sequence asset in project to normalize")
-    result = mcp.expect("anim_normalize_z_offset", {
-        "anim_path": seq,
+    _output_suffix_roundtrip(mcp, "Seq_ZNormSrc", "anim_normalize_z_offset", "_MCPZNorm", {
         "target_z": 0.0,
-        "output_suffix": "_MCPZNorm",
     })
-    assert result.get("success") is True, result
-    assert result.get("output_path"), result
 
 
-@covers("anim_anchor_feet_to_floor", "anim_list_sequences")
+@covers("anim_anchor_feet_to_floor")
 def test_anchor_feet_to_floor(mcp):
-    seq = _find_anim_sequence(mcp)
-    if not seq:
-        pytest.skip("no anim sequence asset in project to anchor")
-    result = mcp.expect("anim_anchor_feet_to_floor", {
-        "anim_path": seq,
+    _output_suffix_roundtrip(mcp, "Seq_AnchorSrc", "anim_anchor_feet_to_floor", "_MCPFootAnchored", {
         "foot_bone_substring": "foot_l",
         "pelvis_bone_substring": "pelvis",
         "target_z": 0.0,
         "sample_frames": 10,
-        "output_suffix": "_MCPFootAnchored",
     })
-    assert result.get("success") is True, result
-    assert result.get("output_path"), result

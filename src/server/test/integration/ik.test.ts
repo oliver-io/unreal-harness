@@ -14,7 +14,7 @@ import { test, expect, beforeAll } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { editorSuite, NS as ROOT } from "../harness/suite.ts";
-import { ensureAbsent, assertReady, firstAssetOf, type Commandable } from "../harness/ops.ts";
+import { ensureAbsent, assertReady, payload, type Commandable } from "../harness/ops.ts";
 import { projectDir } from "../harness/env.ts";
 
 const NS = `${ROOT}/ik`;
@@ -28,15 +28,30 @@ function uassetDiskPath(gamePath: string, ext = ".uasset"): string {
 }
 
 /** First /Game asset of a given class, or null. Used to gate content-dependent
- *  ops (IK rigs, anim sequences, pose assets). */
+ *  ops (IK rigs, anim sequences, pose assets).
+ *
+ *  NOTE: asset_list nests its fields under the AssetManager `data` envelope,
+ *  so the result must be unwrapped via payload() — firstAssetOf cannot see the
+ *  nested list (this silently skipped every rig-gated test, even against a
+ *  project that ships IK rigs). Prior-run "_MCP*" artifacts are excluded. */
 async function findAsset(bridge: Commandable, classFilter: string): Promise<string | null> {
-  const item = await firstAssetOf(
-    bridge,
-    "asset_list",
-    { directory_path: "/Game/", recursive: true, class_filter: classFilter },
-    "assets",
-  );
-  return item ? ((item.path as string) ?? null) : null;
+  let result: Record<string, unknown>;
+  try {
+    result = payload(
+      await bridge.expect("asset_list", {
+        directory_path: "/Game/",
+        recursive: true,
+        class_filter: classFilter,
+      }),
+    );
+  } catch {
+    return null;
+  }
+  for (const a of (result.assets as any[]) ?? []) {
+    const p = String(a?.path ?? "").split(".")[0]!;
+    if (p && !p.includes("_MCP") && !p.includes("__MCPTest__")) return p;
+  }
+  return null;
 }
 
 editorSuite("ik", (ctx) => {
@@ -126,6 +141,17 @@ editorSuite("ik", (ctx) => {
     });
     expect(Array.isArray(result.chain_mappings)).toBe(true);
     await assertReady(ctx.mcp);
+    // Independent readback (ik_retarget_read, not the mutator's echo): with an
+    // IDENTITY rig on both sides, fuzzy auto-map must wire every target chain
+    // to its same-named source chain (verified live: 50/50 identity mappings).
+    const rb = await ctx.mcp.expect("ik_retarget_read", {
+      retargeter_path: configuredRetargeter.path,
+    });
+    const mappings = (rb.chain_mappings as Record<string, unknown>[]) ?? [];
+    expect(mappings.length).toBeGreaterThan(0);
+    for (const m of mappings) {
+      expect(m.source_chain).toEqual(m.target_chain);
+    }
   });
 
   test("set_ik_retargeter_chain_mapping", async () => {
@@ -177,13 +203,26 @@ editorSuite("ik", (ctx) => {
     }
     // Needs the Pelvis Motion op, which only exists once the default op stack is
     // built (create with rigs -> AddDefaultOps). Hence the configured fixture.
+    // ik_retarget_read does not surface op settings and the 5.7 FInstancedStruct
+    // op stack has no Python glue, so the readback is a SECOND setter call
+    // writing an unrelated field: its response reports the STORED settings
+    // struct, which must reflect the first call's write.
     const result = await ctx.mcp.expect("ik_retarget_set_pelvis_settings", {
       retargeter_path: configuredRetargeter.path,
-      scale_vertical: 0.0,
+      scale_vertical: 0.25,
     });
     expect(result.success).not.toBe(false);
-    expect(result.written_fields).toBeDefined();
-    expect((result.written_fields as unknown[]) ?? []).toContain("scale_vertical");
+    // written_fields entries are "key=value" strings (e.g. "scale_vertical=0.2500").
+    const written = ((result.written_fields as unknown[]) ?? []).map(String);
+    expect(written.some((w) => w.startsWith("scale_vertical="))).toBe(true);
+    expect(Number(result.scale_vertical)).toBeCloseTo(0.25);
+    // Independent re-read: a call writing ONLY rotation_alpha must report the
+    // previously-stored scale_vertical.
+    const reread = await ctx.mcp.expect("ik_retarget_set_pelvis_settings", {
+      retargeter_path: configuredRetargeter.path,
+      rotation_alpha: 1.0,
+    });
+    expect(Number(reread.scale_vertical)).toBeCloseTo(0.25);
   });
 
   test("set_ik_retargeter_root_motion_settings", async () => {
@@ -196,7 +235,16 @@ editorSuite("ik", (ctx) => {
       root_height_source: "snap_to_ground",
     });
     expect(result.success).not.toBe(false);
-    expect(result.written_fields).toBeDefined();
+    const written = ((result.written_fields as unknown[]) ?? []).map(String);
+    expect(written.some((w) => w.startsWith("root_height_source="))).toBe(true);
+    expect(result.root_height_source).toEqual("snap_to_ground");
+    // Independent re-read via a call writing only an unrelated boolean: the
+    // stored Root Motion op settings must still report snap_to_ground.
+    const reread = await ctx.mcp.expect("ik_retarget_set_root_motion_settings", {
+      retargeter_path: configuredRetargeter.path,
+      maintain_offset_from_pelvis: true,
+    });
+    expect(reread.root_height_source).toEqual("snap_to_ground");
   });
 
   // ── Anim/pose-dependent: skip when the project ships no source content ───────
@@ -240,24 +288,75 @@ editorSuite("ik", (ctx) => {
     expect(result.success).not.toBe(false);
   });
 
+  /** Find a UAnimSequence compatible with the rig's skeleton by walking the
+   *  typed chain rig -> preview_mesh (ik_rig_list_chains) -> skeleton
+   *  (anim_skeletal_mesh_inspect) -> anim_list_sequences(skeleton_path).
+   *  Prior-run "_MCP*" artifacts are excluded. */
+  async function rigCompatibleSequence(rigPath: string): Promise<string | null> {
+    const chains = await ctx.mcp.expect("ik_rig_list_chains", { ik_rig_path: rigPath });
+    const mesh = String(chains.preview_mesh ?? "").split(".")[0];
+    if (!mesh) return null;
+    const info = payload(await ctx.mcp.expect("anim_skeletal_mesh_inspect", { path: mesh }));
+    const skeleton = String(info.skeleton ?? "").split(".")[0];
+    if (!skeleton) return null;
+    const listed = await ctx.mcp.expect("anim_list_sequences", { skeleton_path: skeleton });
+    for (const entry of (listed.anim_sequences as any[]) ?? []) {
+      const p = String(entry.path ?? "").split(".")[0]!;
+      if (p.startsWith("/Game/") && !p.includes("_MCP") && !p.includes("__MCPTest__")) return p;
+    }
+    return null;
+  }
+
   test("ik_retarget_run_batch", async () => {
+    // Duplicate-and-retarget a namespaced dupe of a rig-compatible sequence.
+    // Deep assertion: the batch's new assets exist in the ASSET REGISTRY
+    // (asset_list — independent of the mutator's echo). Note the engine's
+    // DuplicateAndRetarget drops outputs at the /Game content root and does
+    // NOT save them to disk (verified live), so the registry is the observable
+    // and every output is deleted in finally.
     if (!configuredRetargeter) {
       console.log("SKIP: no IKRigDefinition assets to build a configured retargeter");
       return;
     }
-    const anim = await findAsset(ctx.mcp, "AnimSequence");
-    if (!anim) {
-      console.log("SKIP: no source UAnimSequence to duplicate-and-retarget");
+    const src = await rigCompatibleSequence(configuredRetargeter.rig);
+    if (!src) {
+      console.log("SKIP: no rig-compatible UAnimSequence to duplicate-and-retarget");
       return;
     }
-    const result = await ctx.mcp.expect("ik_retarget_run_batch", {
-      retargeter_path: configuredRetargeter.path,
-      source_animations: [anim],
-      name_suffix: "_MCPRetarget",
-      include_referenced_assets: true,
-      overwrite_existing: false,
-    });
-    expect(Array.isArray(result.new_assets)).toBe(true);
-    await assertReady(ctx.mcp);
+    const dupe = `${NS}/Seq_BatchSrc`;
+    await ensureAbsent(ctx.mcp, dupe);
+    await ctx.mcp.expect("asset_duplicate", { source_path: src, destination_path: dupe });
+    let newPaths: string[] = [];
+    try {
+      const result = await ctx.mcp.expect("ik_retarget_run_batch", {
+        retargeter_path: configuredRetargeter.path,
+        source_animations: [dupe],
+        name_suffix: "_MCPRetarget",
+        include_referenced_assets: false,
+        overwrite_existing: false,
+      });
+      newPaths = ((result.new_assets as unknown[]) ?? []).map((p) => String(p).split(".")[0]!);
+      expect(newPaths.length).toBeGreaterThan(0);
+      // Independent registry readback: each new asset enumerates with the
+      // right class in its containing folder.
+      for (const pkg of newPaths) {
+        const folder = pkg.slice(0, pkg.lastIndexOf("/")) || "/Game";
+        const listing = payload(
+          await ctx.mcp.expect("asset_list", {
+            directory_path: folder + "/",
+            recursive: false,
+            class_filter: "AnimSequence",
+          }),
+        );
+        const found = ((listing.assets as any[]) ?? []).map((a: any) =>
+          String(a.path ?? "").split(".")[0],
+        );
+        expect(found).toContain(pkg);
+      }
+      await assertReady(ctx.mcp);
+    } finally {
+      for (const pkg of newPaths) await ensureAbsent(ctx.mcp, pkg);
+      await ensureAbsent(ctx.mcp, dupe);
+    }
   });
 });

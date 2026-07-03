@@ -109,29 +109,52 @@ auto-saves — asserted via the attach-safe live-project-root `.uasset` (B6/D3 m
 precedent). The three renderer ops moved to the consolidated #DEFERRED niagara entry.)
 
 ### Animation / IK / state machines / StateTree
-- [ ] `anim_list_sequences` — tagged in FIVE `@covers` decorators (`test_animation.py:363-422`) but
-  NEVER invoked (discovery uses `asset_list`) — the ledger is lying. Actually call and assert it.
-- [ ] **Anim output-suffix ops (one task):** `anim_extract_between_notifies` (:389),
-  `anim_smooth_sequence` (:404), `anim_normalize_z_offset` (:418), `anim_anchor_feet_to_floor`
-  (:435) — all trust the echoed output_path; assert the new `.uasset` exists on disk.
-- [ ] `anim_sequence_set_property` (`test_animation.py:372`) — echo; NO read primitive exists for
-  sequence properties — add an `anim_sequence_read` (or extend an existing read), then assert.
-- [ ] `anim_node_bind_property` (`test_animation.py:181`) — currently passes on success OR error;
-  prove the binding via a node-pin/variable readback.
-- [ ] **IK echo cluster (one task):** `ik_retarget_auto_map_chains` (:120 — assert mappings
-  populated via `ik_retarget_read`), `ik_retarget_set_pelvis_settings` (:163) /
-  `set_root_motion_settings` (:174) — read written values back; `ik_retarget_run_batch` (:221) —
-  assert new_assets on disk. Note: these skip in the stock fixture (no IKRigDefinition ships);
-  arranging a minimal IK rig fixture is part of the task — if infeasible, #DEFERRED with reason.
-- [ ] `anim_state_machine_modify_transition` (`test_statemachine.py:213`) — sets blend 0.35 /
-  priority 2 but only re-checks the edge exists; read the values back.
-- [ ] `anim_state_machine_set_entry` (`test_statemachine.py:268`) — echo; read the entry target back.
-- [ ] `bp_set_inner_node_property` (`test_statemachine.py:283`) — echo value=="5"; re-read the
-  inner-node property (add the read counterpart if missing).
-- [ ] `st_set_node_property` (`test_statetree.py:333`) — echo; re-read via
-  `statetree_node_get_properties` (pattern already used two tests up).
-- [ ] `statetree_compile` (`test_statetree.py:386`) — own compilation_status; assert
-  `statetree_verify.ready_to_run` flips true after compile.
+(all 10 landed 2026-07-03; pytest + bun mirrors in lockstep, green live against the GUI trong
+editor in attach mode — animation 15 pass/1 honest skip, ik 11/11 pass with the rig-gated tests
+now RUNNING positive, statemachine+statetree 23/23. Oracle notes for future auditors:
+`anim_list_sequences` is now actually invoked (dedicated test: created namespaced dupe
+enumerates, count==len, asset_list registry subset cross-check, bad-skeleton `asset_not_found`
+negative) and its five lying `@covers` tags were consolidated; `bp_add_node`'s pytest `@covers`
+name is its WIRE name `add_blueprint_node`. The UAnimSequence-gated ops now `asset_duplicate` a
+discovered sequence into the namespace and act on the DUPE — real project content is never
+mutated and every output lands in-namespace (the old tests mutated + leaked `_MCP*` outputs next
+to real trong sequences; those prior-session leaks were LEFT in place — user project content —
+and discovery now filters `_MCP`/`__MCPTest__` so they're inert). The output-suffix ops all
+SaveAsset their output (MCPIKCommands.cpp) → on-disk `.uasset` assert via the live-project-root
+path; `anim_sequence_set_property` is observed via the py-hatch `additive_anim_type` readback
+(`AAT_LOCAL_SPACE_BASE`). `anim_node_bind_property`: the PropertyBindings TMap is UNOBSERVABLE —
+no typed reader, and the py hatch cannot read `TMap<FName, FAnimGraphNodePropertyBinding>` (the
+value struct has no Python glue, verified live) — so the test binds SequencePlayer.PlayRate (a
+real pin-optional property; the old Root-node "Sequence" bind was a graceful-answer non-test)
+and observes the bind's ReconstructNode side effect: the PlayRate pin ABSENT from
+`bp_list_node_pins` before, PRESENT after (note: pin does NOT materialize for non-pin-optional
+props like MaxTransitionsPerFrame even though `pin_toggled_visible` echoes true). IK: the
+module's `_find_asset` never unwrapped asset_list's `data` envelope, so every rig-gated test
+SILENTLY SKIPPED everywhere — even against trong which ships 2 IKRigDefinitions (and the old
+`"scale_vertical" in written_fields` assertion could never have passed: entries are
+"key=value" strings); fixed, so auto-map is observed via `ik_retarget_read` (identity rig ⇒
+every target_chain maps to itself, 50/50 live), pelvis/root-motion settings are re-read via a
+SECOND setter call writing an unrelated field (its response reports the STORED op-settings
+struct — ik_retarget_read exposes no op settings and the 5.7 FInstancedStruct op stack has no
+py glue), and `run_batch` acts on a namespaced dupe found via the typed chain
+rig → preview_mesh → skeleton → anim_list_sequences(skeleton_path); its outputs land at the
+/GAME CONTENT ROOT and are NOT saved to disk (verified live) → observed via asset_list registry
+presence, deleted in finally. State machines: graph-node object paths are deterministic
+(`<pkg>.<ABP>:AnimGraph.<MachineNode>[.<Machine>.<Node>]`) so modify_transition's
+crossfade_duration/priority_order and set_inner_node_property's Node.MaxTransitionsPerFrame are
+py-hatch `find_object` readbacks; set_entry is observed via `bp_list_node_pins` on each state
+node scoped by `graph_name=<machine>` — the entry link serializes as an In-pin connection from
+`AnimStateEntryNode_*` pin "Entry" (two states, entry on the second, first must have none).
+StateTree: `st_set_node_property` re-reads the DISTINCTIVE value (7.25/42) via
+`statetree_node_get_properties`, using a scalar-bearing task type (StateTreeDelayTask preferred —
+the generic types[0] pick is StateTreeBlueprintTaskWrapper with NO instance properties, which
+made the old test silently skip); `statetree_compile`'s suggested oracle was WRONG:
+`statetree_verify.ready_to_run` does NOT flip — it stays true even when stale (previously-linked
+compiled data remains loaded) — the real observable is `hash_matches`/`status` (stale → ok) plus
+`stored_hash == compile.editor_data_hash`. Attach-mode note: the animation/ik disk asserts and
+the module fixtures need `UE_MCP_TEST_PROJECT` pointed at the live project
+(`projects/trong`) — without it the pre-existing `config.uasset_disk_path` create-tests in these
+modules fail against the fixture path, which is how they were latently broken under attach.)
 
 ### PIE / bun-editor tier
 - [ ] `pie_record_disarm` (`test_pie.py:170-180`) — arm is verified via an independent

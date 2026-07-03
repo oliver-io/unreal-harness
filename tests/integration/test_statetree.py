@@ -89,8 +89,11 @@ def _add_task(bridge, asset, state_id, node_type) -> str:
 
 def _settable_property(props):
     """Pick a trivially-settable (scalar) property from a node's serialized
-    instance_data, returning (name, value) or None. Avoids struct/enum props
-    whose text import is finicky."""
+    instance_data, returning (name, value, matcher) — matcher validates the
+    re-read serialized text form ("7.250000", "True", "4211", "MCPTest").
+    Values are DISTINCTIVE so a readback can never pass on defaults. Avoids
+    struct/enum props whose text import is finicky. Returns None if the node
+    exposes no scalar."""
     for p in props:
         if not isinstance(p, dict):
             continue
@@ -98,14 +101,41 @@ def _settable_property(props):
         if not name:
             continue
         if cpp == "bool":
-            return name, True
+            return name, True, (lambda v: str(v) == "True")
         if cpp in ("float", "double"):
-            return name, 1.5
+            return name, 7.25, (lambda v: abs(float(v) - 7.25) < 1e-4)
         if cpp in ("int32", "int64", "int", "uint8", "uint32"):
-            return name, 2
+            return name, 42, (lambda v: int(float(v)) == 42)
         if cpp in ("FString", "FName"):
-            return name, "MCPTest"
+            return name, "MCPTest", (lambda v: str(v) == "MCPTest")
     return None
+
+
+def _scalar_task_type(bridge):
+    """A task node type whose instance data carries a plain scalar, so the
+    set-property test can actually WRITE and RE-READ a value. Prefers the
+    engine-shipped StateTreeDelayTask (Duration float); falls back to the first
+    type advertising a scalar in statetree_list_node_types. None when the
+    editor exposes no such task (the generic types[0] pick is often
+    StateTreeBlueprintTaskWrapper, which has no instance properties)."""
+    if "scalar_task" in _DISCOVERY:
+        return _DISCOVERY["scalar_task"]
+    result = bridge.expect("statetree_list_node_types", {"base_class": "task"})
+    types = [t for t in (result.get("types") or []) if isinstance(t, dict)]
+    scalar = {"bool", "float", "double", "int32", "int64", "int", "uint8", "uint32",
+              "FString", "FName"}
+
+    def has_scalar(t):
+        return any(isinstance(p, dict) and p.get("type") in scalar
+                   for p in (t.get("properties") or []))
+
+    name = None
+    if any(t.get("name") == "StateTreeDelayTask" and has_scalar(t) for t in types):
+        name = "StateTreeDelayTask"
+    else:
+        name = next((t.get("name") for t in types if has_scalar(t)), None)
+    _DISCOVERY["scalar_task"] = name
+    return name
 
 
 @pytest.fixture(scope="module")
@@ -316,26 +346,37 @@ def test_node_lifecycle(mcp, sample_st):
     assert gone.get("status") == "error", gone
 
 
-@covers("st_set_node_property", "st_add_node", "st_add_state")
+@covers("st_set_node_property", "st_add_node", "st_add_state", "st_get_node_properties")
 def test_set_node_property(mcp, sample_st):
-    node_type = _first_task_type(mcp)
+    # A scalar-bearing task type (e.g. StateTreeDelayTask.Duration) — the
+    # generic first-type pick is often StateTreeBlueprintTaskWrapper, whose
+    # instance data has no scalar, which used to silently skip this test.
+    node_type = _scalar_task_type(mcp)
     if not node_type:
-        pytest.skip("editor exposes no StateTree task node types")
+        pytest.skip("editor exposes no StateTree task type with a scalar property")
     sid = _add_state(mcp, sample_st, "S_SetNodeProp")
     nid = _add_task(mcp, sample_st, sid, node_type)
 
     props = mcp.expect("statetree_node_get_properties", {"asset_path": sample_st, "node_id": nid})
     instance = props.get("instance_data") or {}
     chosen = _settable_property(instance.get("properties") or [])
-    if not chosen:
-        pytest.skip(f"node type {node_type} has no trivially-settable scalar property")
-    name, value = chosen
+    assert chosen, f"scalar task type {node_type} exposed no scalar instance property: {props}"
+    name, value, matches = chosen
     result = mcp.expect("statetree_node_set_property", {
         "asset_path": sample_st, "node_id": nid,
         "property_name": name, "property_value": value,
     })
     assert result.get("success") is True, result
     assert result.get("property_name") == name, result
+    # Independent readback via statetree_node_get_properties (the pattern the
+    # node-lifecycle test above already uses): the instance-data property must
+    # now serialize the distinctive written value, not its default.
+    reread = mcp.expect("statetree_node_get_properties", {
+        "asset_path": sample_st, "node_id": nid})
+    entry = next((p for p in ((reread.get("instance_data") or {}).get("properties") or [])
+                  if p.get("name") == name), None)
+    assert entry, reread
+    assert matches(entry.get("value")), f"{name} re-read as {entry.get('value')!r}, wrote {value!r}"
 
 
 # ── property bindings ───────────────────────────────────────────────────────
@@ -378,13 +419,26 @@ def test_property_binding_lifecycle(mcp, sample_st):
 
 @covers("statetree_compile", "statetree_verify", "statetree_read", "statetree_save")
 def test_compile_verify_and_save(mcp):
+    """statetree_compile is observed through statetree_verify (an independent,
+    non-mutating diagnostic): after mutation the tree verifies STALE (author
+    hash diverged), after compile it verifies OK with hash_matches true and the
+    stored hash equal to the compile's stamped editor_data_hash. Note (verified
+    live): ready_to_run does NOT discriminate — it stays true even when stale,
+    because the previously-linked compiled data remains loaded; hash_matches /
+    status is the compile's real observable."""
     path = f"{NS}/ST_Compile"
     ensure_absent(mcp, path)
     mcp.expect("statetree_create", {"asset_path": path, "schema_class": _pick_schema(mcp)})
     sid = _add_state(mcp, path, "S_Compiled")
 
+    # Before: the state-add diverged the author-time hash from the compiled stamp.
+    before = mcp.expect("statetree_verify", {"asset_path": path})
+    assert before.get("hash_matches") is not True, before
+    assert before.get("status") in ("stale", "never_compiled"), before
+
     compiled = mcp.expect("statetree_compile", {"asset_path": path, "auto_save": False})
-    assert "compilation_status" in compiled, compiled
+    assert compiled.get("success") is True, compiled
+    assert compiled.get("compilation_status") == "success", compiled
     assert "editor_data_hash" in compiled, compiled
     assert_ready(mcp)
 
@@ -392,10 +446,12 @@ def test_compile_verify_and_save(mcp):
     read = mcp.expect("statetree_read", {"asset_path": path})
     assert sid in str(read.get("states")), read
 
-    # Non-mutating diagnostic — always answers with a status + the hash flags.
+    # After: the independent diagnostic reports the compile landed.
     verified = mcp.expect("statetree_verify", {"asset_path": path})
-    assert "status" in verified, verified
-    assert "ready_to_run" in verified, verified
+    assert verified.get("status") == "ok", verified
+    assert verified.get("hash_matches") is True, verified
+    assert verified.get("ready_to_run") is True, verified
+    assert verified.get("stored_hash") == compiled.get("editor_data_hash"), (verified, compiled)
 
     saved = mcp.expect("statetree_save", {"asset_path": path})
     assert saved.get("success") is True, saved

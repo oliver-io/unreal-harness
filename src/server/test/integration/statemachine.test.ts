@@ -77,6 +77,21 @@ editorSuite("statemachine", (ctx) => {
     return (await graphs(abp)).filter((g) => g.parent_state_machine === machine);
   }
 
+  /** Full object path of a graph node inside the AnimBP, e.g.
+   *  /Game/.../ABP.ABP:AnimGraph.AnimGraphNode_StateMachine_0[.SM_X.NodeName].
+   *  Verified live against a UE 5.7 editor. */
+  function graphNodePath(abp: Abp, machineNodeId: string, ...inner: string[]): string {
+    const name = abp.path.split("/").pop();
+    return [`${abp.path}.${name}:${abp.anim_graph}`, machineNodeId, ...inner].join(".");
+  }
+
+  /** Run a one-line py snippet via the sanctioned console hatch and return the
+   *  raw output (house pattern — see widget.test.ts / test_widget.py). */
+  async function pyProbe(source: string): Promise<string> {
+    const probe = await ctx.mcp.expect("editor_console_exec", { command: `py ${source}` });
+    return String(probe.output ?? "");
+  }
+
   // ── fixture: the shared Anim Blueprint ─────────────────────────────────────
   let sampleAbp: Abp | null = null;
 
@@ -188,7 +203,7 @@ editorSuite("statemachine", (ctx) => {
       console.log("skip: could not create an Anim Blueprint from any skeleton");
       return;
     }
-    const [machine] = await newMachine(sampleAbp, "SM_ModTrans");
+    const [machine, machineNode] = await newMachine(sampleAbp, "SM_ModTrans");
     await addState(sampleAbp, machine, "S_M0");
     await addState(sampleAbp, machine, "S_M1");
     const added = await ctx.mcp.expect("anim_state_machine_transition_add", {
@@ -213,6 +228,21 @@ editorSuite("statemachine", (ctx) => {
     // The transition still resolves after the edit.
     const trans = (await machineGraphs(sampleAbp, machine)).filter((g) => g.category === "transition");
     expect(trans.some((g) => g.from_state === "S_M0" && g.to_state === "S_M1")).toBeTruthy();
+    // Independent readback of the WRITTEN VALUES via the py hatch: the
+    // UAnimStateTransitionNode's CrossfadeDuration / PriorityOrder UPROPERTYs
+    // (no typed reader exposes transition-node properties — bp_list_graphs
+    // serializes only topology, verified live).
+    const nodePath = graphNodePath(sampleAbp, String(machineNode), machine, String(tid));
+    const out = await pyProbe(
+      "import unreal; " +
+        `t = unreal.find_object(None, '${nodePath}'); ` +
+        "print('MCPTEST_TRANS=' + ('%s|%s' % (t.get_editor_property('crossfade_duration'), " +
+        "t.get_editor_property('priority_order')) if t else 'NOTFOUND'))",
+    );
+    const m = /MCPTEST_TRANS=([^|\r\n]+)\|(-?\d+)/.exec(out);
+    expect(m).toBeTruthy();
+    expect(Number(m![1])).toBeCloseTo(0.35);
+    expect(Number(m![2])).toEqual(2);
   });
 
   test("remove_transition", async () => {
@@ -251,20 +281,43 @@ editorSuite("statemachine", (ctx) => {
   // ── entry state ──────────────────────────────────────────────────────────────
 
   test("set_entry_state", async () => {
+    // set_entry rewires the UAnimStateEntryNode's output pin. Two states,
+    // entry set to the SECOND — the independent readback (bp_list_node_pins on
+    // each state node, scoped to the machine graph) must show the entry-node
+    // link on the second state's In pin and not on the first's (verified live:
+    // the connection serializes as node_id 'AnimStateEntryNode_*', pin 'Entry').
     if (!sampleAbp) {
       console.log("skip: could not create an Anim Blueprint from any skeleton");
       return;
     }
-    const [machine] = await newMachine(sampleAbp, "SM_Entry");
-    await addState(sampleAbp, machine, "S_Entry");
+    const abp = sampleAbp;
+    const [machine] = await newMachine(abp, "SM_Entry");
+    const [firstNid] = await addState(abp, machine, "S_First");
+    const [entryNid] = await addState(abp, machine, "S_Entry");
     const result = await ctx.mcp.expect("anim_state_machine_set_entry", {
-      blueprint_name: sampleAbp.path,
+      blueprint_name: abp.path,
       state_machine_graph: machine,
       state_name: "S_Entry",
     });
     expect(result.success).toBe(true);
     expect(result.entry_state).toEqual("S_Entry");
     await assertReady(ctx.mcp);
+
+    const entryLinks = async (stateNodeId: unknown): Promise<unknown[]> => {
+      const listed = await ctx.mcp.expect("bp_list_node_pins", {
+        blueprint_name: abp.path,
+        node_id: stateNodeId,
+        graph_name: machine,
+      });
+      const inPin = ((listed.pins as any[]) ?? []).find((p: any) => p.name === "In");
+      expect(inPin).toBeTruthy();
+      return ((inPin.connections as any[]) ?? []).filter((c: any) =>
+        String(c.node_id).includes("AnimStateEntryNode"),
+      );
+    };
+
+    expect((await entryLinks(entryNid)).length).toBeGreaterThan(0);
+    expect((await entryLinks(firstNid)).length).toBe(0);
   });
 
   // ── inner AnimNode property ──────────────────────────────────────────────────
@@ -289,5 +342,18 @@ editorSuite("statemachine", (ctx) => {
     expect(result.success).toBe(true);
     expect(result.value).toEqual("5");
     await assertReady(ctx.mcp);
+    // Independent readback of the inner FAnimNode_StateMachine struct via the
+    // py hatch (no typed reader exposes inner-node properties): the node's
+    // Node.MaxTransitionsPerFrame must now be 5 (engine default is 3).
+    const nodePath = graphNodePath(sampleAbp, String(nodeId));
+    const out = await pyProbe(
+      "import unreal; " +
+        `n = unreal.find_object(None, '${nodePath}'); ` +
+        "print('MCPTEST_INNER=' + (str(n.get_editor_property('node')" +
+        ".get_editor_property('max_transitions_per_frame')) if n else 'NOTFOUND'))",
+    );
+    const m = /MCPTEST_INNER=(-?\d+)/.exec(out);
+    expect(m).toBeTruthy();
+    expect(Number(m![1])).toEqual(5);
   });
 });

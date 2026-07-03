@@ -93,20 +93,51 @@ async function addTask(client: any, asset: string, stateId: string, nodeType: st
 }
 
 /** Pick a trivially-settable (scalar) property from a node's serialized
- *  instance_data, returning [name, value] or null. Avoids struct/enum props
- *  whose text import is finicky. */
-function settableProperty(props: any[]): [string, any] | null {
+ *  instance_data, returning [name, value, matcher] — matcher validates the
+ *  re-read serialized text form ("7.250000", "True", "42", "MCPTest").
+ *  Values are DISTINCTIVE so a readback can never pass on defaults. Avoids
+ *  struct/enum props whose text import is finicky. */
+function settableProperty(props: any[]): [string, any, (v: unknown) => boolean] | null {
   for (const p of props) {
     if (!p || typeof p !== "object") continue;
     const name = p.name,
       cpp = p.type;
     if (!name) continue;
-    if (cpp === "bool") return [name, true];
-    if (cpp === "float" || cpp === "double") return [name, 1.5];
-    if (["int32", "int64", "int", "uint8", "uint32"].includes(cpp)) return [name, 2];
-    if (cpp === "FString" || cpp === "FName") return [name, "MCPTest"];
+    if (cpp === "bool") return [name, true, (v) => String(v) === "True"];
+    if (cpp === "float" || cpp === "double")
+      return [name, 7.25, (v) => Math.abs(Number(v) - 7.25) < 1e-4];
+    if (["int32", "int64", "int", "uint8", "uint32"].includes(cpp))
+      return [name, 42, (v) => Math.trunc(Number(v)) === 42];
+    if (cpp === "FString" || cpp === "FName") return [name, "MCPTest", (v) => String(v) === "MCPTest"];
   }
   return null;
+}
+
+// Cache for the scalar-bearing task type (see scalarTaskType).
+let scalarTaskComputed = false;
+let scalarTask: string | null = null;
+
+/** A task node type whose instance data carries a plain scalar, so the
+ *  set-property test can actually WRITE and RE-READ a value. Prefers the
+ *  engine-shipped StateTreeDelayTask (Duration float); falls back to the first
+ *  type advertising a scalar (the generic types[0] pick is often
+ *  StateTreeBlueprintTaskWrapper, which has no instance properties). */
+async function scalarTaskType(client: any): Promise<string | null> {
+  if (scalarTaskComputed) return scalarTask;
+  const result = await client.expect("statetree_list_node_types", { base_class: "task" });
+  const types = ((result.types as any[]) || []).filter((t) => t && typeof t === "object");
+  const scalarKinds = new Set([
+    "bool", "float", "double", "int32", "int64", "int", "uint8", "uint32", "FString", "FName",
+  ]);
+  const hasScalar = (t: any): boolean =>
+    ((t.properties as any[]) || []).some((p) => p && typeof p === "object" && scalarKinds.has(p.type));
+  if (types.some((t) => t.name === "StateTreeDelayTask" && hasScalar(t))) {
+    scalarTask = "StateTreeDelayTask";
+  } else {
+    scalarTask = types.find(hasScalar)?.name ?? null;
+  }
+  scalarTaskComputed = true;
+  return scalarTask;
 }
 
 editorSuite("statetree", (ctx) => {
@@ -346,9 +377,12 @@ editorSuite("statetree", (ctx) => {
   });
 
   test("test_set_node_property", async () => {
-    const nodeType = await firstTaskType(ctx.mcp);
+    // A scalar-bearing task type (e.g. StateTreeDelayTask.Duration) — the
+    // generic first-type pick is often StateTreeBlueprintTaskWrapper, whose
+    // instance data has no scalar, which used to silently skip this test.
+    const nodeType = await scalarTaskType(ctx.mcp);
     if (!nodeType) {
-      console.log("SKIP editor exposes no StateTree task node types");
+      console.log("SKIP editor exposes no StateTree task type with a scalar property");
       return;
     }
     const sid = await addState(ctx.mcp, sampleSt, "S_SetNodeProp");
@@ -360,11 +394,8 @@ editorSuite("statetree", (ctx) => {
     });
     const instance = (props.instance_data as any) || {};
     const chosen = settableProperty((instance.properties as any[]) || []);
-    if (!chosen) {
-      console.log(`SKIP node type ${nodeType} has no trivially-settable scalar property`);
-      return;
-    }
-    const [name, value] = chosen;
+    expect(chosen).toBeTruthy();
+    const [name, value, matches] = chosen!;
     const result: any = await ctx.mcp.expect("statetree_node_set_property", {
       asset_path: sampleSt,
       node_id: nid,
@@ -373,6 +404,18 @@ editorSuite("statetree", (ctx) => {
     });
     expect(result.success).toBe(true);
     expect(result.property_name).toEqual(name);
+    // Independent readback via statetree_node_get_properties (the pattern the
+    // node-lifecycle test above already uses): the instance-data property must
+    // now serialize the distinctive written value, not its default.
+    const reread: any = await ctx.mcp.expect("statetree_node_get_properties", {
+      asset_path: sampleSt,
+      node_id: nid,
+    });
+    const entry = (((reread.instance_data as any) || {}).properties as any[])?.find(
+      (p: any) => p.name === name,
+    );
+    expect(entry).toBeTruthy();
+    expect(matches(entry.value)).toBe(true);
   });
 
   // ── property bindings ──────────────────────────────────────────────────────
@@ -417,16 +460,29 @@ editorSuite("statetree", (ctx) => {
 
   // ── compile / verify ───────────────────────────────────────────────────────
   test("test_compile_verify_and_save", async () => {
+    // statetree_compile is observed through statetree_verify (an independent,
+    // non-mutating diagnostic): after mutation the tree verifies STALE, after
+    // compile it verifies OK with hash_matches true and the stored hash equal
+    // to the compile's stamped editor_data_hash. Note (verified live):
+    // ready_to_run does NOT discriminate — it stays true even when stale,
+    // because the previously-linked compiled data remains loaded; hash_matches
+    // / status is the compile's real observable.
     const path = `${NS}/ST_Compile`;
     await ensureAbsent(ctx.mcp, path);
     await ctx.mcp.expect("statetree_create", { asset_path: path, schema_class: await pickSchema(ctx.mcp) });
     const sid = await addState(ctx.mcp, path, "S_Compiled");
 
+    // Before: the state-add diverged the author-time hash from the compiled stamp.
+    const before: any = await ctx.mcp.expect("statetree_verify", { asset_path: path });
+    expect(before.hash_matches).not.toBe(true);
+    expect(["stale", "never_compiled"]).toContain(before.status);
+
     const compiled: any = await ctx.mcp.expect("statetree_compile", {
       asset_path: path,
       auto_save: false,
     });
-    expect(compiled.compilation_status).toBeDefined();
+    expect(compiled.success).toBe(true);
+    expect(compiled.compilation_status).toEqual("success");
     expect(compiled.editor_data_hash).toBeDefined();
     await assertReady(ctx.mcp);
 
@@ -434,10 +490,12 @@ editorSuite("statetree", (ctx) => {
     const read: any = await ctx.mcp.expect("statetree_read", { asset_path: path });
     expect(JSON.stringify(read.states)).toContain(sid);
 
-    // Non-mutating diagnostic — always answers with a status + the hash flags.
+    // After: the independent diagnostic reports the compile landed.
     const verified: any = await ctx.mcp.expect("statetree_verify", { asset_path: path });
-    expect(verified.status).toBeDefined();
-    expect(verified.ready_to_run).toBeDefined();
+    expect(verified.status).toEqual("ok");
+    expect(verified.hash_matches).toBe(true);
+    expect(verified.ready_to_run).toBe(true);
+    expect(verified.stored_hash).toEqual(compiled.editor_data_hash);
 
     const saved: any = await ctx.mcp.expect("statetree_save", { asset_path: path });
     expect(saved.success).toBe(true);
