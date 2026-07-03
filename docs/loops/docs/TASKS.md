@@ -23,19 +23,6 @@ each group.
 
 ## docs/DEBUGGING.md
 
-### DOC-052 — Missing troubleshooting topics (verified failure modes with no doc entry)
-Add a row/section each for:
-1. **Duplicate editor on 55557** — second editor's bind fails silently
-   (`MCPBridge.cpp:416-420`, only a log-file error); symptom: commands land on the wrong
-   editor. Fix: close the duplicate; grep editor log for "Failed to bind listener socket".
-2. **Build lock / exit 75** — build scripts refuse with exit 75 while a build holds the
-   lock (`src/server/scripts/verify-build-lock.ts:138,146`); wait and poll `/build/status`.
-3. **Stale/orphaned server on 8765** — `run-server.sh:27-38` refuses to start; remedy
-   `scripts/stop-server.sh` then re-run (doc currently frames 8765-held as "unrelated app").
-4. **`video_analyze` missing API key** — pure server-side provider call; failure mode and
-   the `scripts/google-key.sh`/`scripts/openai-key.sh` helpers + `UNREAL_MCP_VIDEO_*` knobs
-   (`config.ts:121-125`) are undocumented.
-
 ---
 
 ## src/server/README.md

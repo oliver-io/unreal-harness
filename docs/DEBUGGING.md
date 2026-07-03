@@ -27,8 +27,9 @@ install it and re-run. There is no manual dependency step beyond `bun install`:
 + `bun.lock` on first invocation. Do **not** hand-edit `node_modules` — that
 bypasses the lockfile.
 
-**`something is already listening on 127.0.0.1:8765`** — a previous server (or an
-unrelated app) holds the port. `scripts/stop-server.sh` / `scripts/stop-server.ps1`
+**`something is already listening on 127.0.0.1:8765`** — the run script refuses to
+double-bind by design. The usual culprit is a stale/orphaned server from a previous
+session (rarely an unrelated app). `scripts/stop-server.sh` / `scripts/stop-server.ps1`
 kills the listener; then re-run `scripts/run-server.{sh,ps1}`.
 
 **First start is slow** — dependency resolution happens on the first `bun install`.
@@ -90,19 +91,36 @@ Two probes cut through ambiguity, and both work while the editor is booting:
 A good smoke sequence after first setup: `mcp_status` → `ping` → `asset_list`
 (read) → any mutator with `dry_run=true`.
 
-## 4. Project-coupled tools return a structured error
+**Commands land on the wrong editor / asset saves hit file locks** — a **second
+editor instance** is running. Only one process can bind :55557; the duplicate's
+bind fails *silently* (just an error line in its own log — grep it for
+`Failed to bind listener socket`), so it runs bridge-less while the first editor
+keeps the bridge, and it can hold `.uasset` file locks that break saves. Fix:
+close the instance that does **not** own port 55557. Details:
+[`BUGS.md`](BUGS.md) → "Duplicate editor on :55557 fails its bind silently".
 
-Two tools need to know where the host project and engine live; everything
-editor-connected works without these.
+## 4. Environment-coupled tools return a structured error
+
+A few tools depend on host-side environment; everything else editor-connected
+works without these.
 
 | Variable | Consumed by | Error when unset |
 |---|---|---|
 | `UNREAL_PROJECT_ROOT` | `editor_read_logs` (locates `Saved/Logs/MCP_Unified.log`), `editor_build_game_target` | `invalid_argument` naming the variable |
 | `UNREAL_ENGINE_ROOT` | `editor_build_game_target` (locates `Engine/Build/BatchFiles/Build.bat`) | `invalid_argument` naming the variable |
+| `GEMINI_API_KEY` (fallback: `GOOGLE_STUDIO_API_KEY`) | `video_analyze` / `pie_analyze` — a pure server-side Gemini call; the editor never sees the key | `"No Gemini API key configured. Set GEMINI_API_KEY (or GOOGLE_STUDIO_API_KEY) in the repo-root .env and restart the server."` |
 
 Export them before `run-server`, or in a wrapper script. `editor_build_game_target`
 discovers the `.uproject` by glob inside the project root and derives the UBT
 target name from its filename (override with the `target` parameter).
+
+For the video key, `scripts/google-key.sh` (`check` / `set`, key read from stdin)
+stores `GOOGLE_STUDIO_API_KEY` in the gitignored repo-root `.env`, which Bun
+auto-loads — restart the server afterwards. (`scripts/openai-key.sh` is the same
+pattern for `OPENAI_API_KEY`, but that key feeds host-side art-generation skills
+only — the server never uses it.) Video-analysis knobs — provider, model,
+analysis fps, upload timeout — are the `UNREAL_MCP_VIDEO_*` env vars in
+`src/server/src/config.ts`.
 
 ## 5. The editor logs say more than the response
 
@@ -111,3 +129,14 @@ for side-effect-heavy paths, confirm via the matching read tool or the unified
 log rather than the response alone. `editor_read_logs` (requires `UNREAL_PROJECT_ROOT`)
 filters the single sequenced stream `[LOG:…] [PIE:…] [LIVECODING:…] [MCP:Command]`
 server-side; `grep`/`category`/`since_seq` keep the output small.
+
+## 6. Build scripts refuse with exit 75
+
+C++ builds are serialized through the server's build lock (plain-HTTP `/build`
+endpoints on the same :8765 listener). While another agent's build holds the
+lock, the build scripts (e.g. `scripts/build-editor.ps1`) refuse **before**
+invoking `Build.bat` — a *"can't build right now"* message and **exit code 75**.
+This is not a failure: wait and poll `GET http://127.0.0.1:8765/build/status`
+until `in_progress` is `false`, then re-run. **Never kill the other build.** A
+crashed holder frees the lock automatically (PID liveness); a hung-but-alive one
+is bounded by the lock TTL. Contract: [`USAGE.md`](USAGE.md) §2.17 / §3.6.
