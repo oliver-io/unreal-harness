@@ -64,7 +64,7 @@ def sm_actor(editor_session):
     return name
 
 
-@covers("spawn_actor", "find_actors_by_name", "actor_get_in_level")
+@covers("find_actors_by_name", "actor_get_in_level")
 def test_spawn_actor_then_find_and_list(bridge):
     """A real spawn must be addressable by name and present in the level list.
 

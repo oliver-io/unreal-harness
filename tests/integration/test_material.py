@@ -324,7 +324,6 @@ def test_apply_material_to_actor(mcp, sample_material):
     "mesh_set_static_mesh_properties",
     "bp_compile",
     "material_apply_to_blueprint",
-    "get_blueprint_material_info",
 )
 def test_apply_material_to_blueprint(mcp, sample_material, bridge):
     bp = f"{NS}/BP_MatHost"

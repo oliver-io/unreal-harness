@@ -1,9 +1,15 @@
 """Authoritative manifest of every UnrealMCP bridge operation.
 
-Generated from the distinct send_command("...") dispatches in src/MCP/ plus the
-gate-bypass 'ping'. The coverage-guard test (integration/test_zz_coverage.py)
-asserts every name here is exercised by at least one integration test via the
-@covers(...) decorator. Regenerate with tests/tools/regen_operations.py.
+GENERATED — do not edit by hand; regenerate with tests/tools/regen_operations.py.
+
+Derivation: (wire names the Bun server can send — registry tool names,
+bridgeTool `command:` overrides, and sendCommand("...") literals under
+src/server/src/) INTERSECTED with the C++ dispatch keys
+(CommandType == TEXT("...") under src/Plugin/UnrealMCP/), plus the
+gate-bypass 'ping'. Server-local tools and dead legacy C++ names are
+excluded by construction. The coverage-guard test
+(integration/test_zz_coverage.py) asserts every name here is exercised by
+at least one integration test via the @covers(...) decorator.
 """
 
 ALL_OPERATIONS = frozenset({
@@ -66,6 +72,9 @@ ALL_OPERATIONS = frozenset({
     "asset_delete",
     "asset_duplicate",
     "asset_fixup_redirectors",
+    "asset_import_audio",
+    "asset_import_font",
+    "asset_import_mesh",
     "asset_list",
     "asset_move",
     "asset_open",
@@ -103,6 +112,9 @@ ALL_OPERATIONS = frozenset({
     "bp_remove_function_output",
     "bp_rename_function",
     "bp_reparent",
+    "bp_set_class_replication",
+    "bp_set_component_property",
+    "bp_set_component_transform",
     "bp_set_default_value",
     "bp_set_event_replication",
     "bp_set_inner_node_property",
@@ -111,11 +123,13 @@ ALL_OPERATIONS = frozenset({
     "class_inspect",
     "class_query",
     "datatable_create",
+    "editor_build_reflection_captures",
     "editor_console_exec",
     "editor_content_browser_refresh",
     "editor_live_coding_compile",
     "editor_perf_snapshot",
     "editor_screenshot",
+    "editor_viewport_get_camera",
     "editor_window_screenshot",
     "enum_create",
     "enum_inspect",
@@ -128,11 +142,13 @@ ALL_OPERATIONS = frozenset({
     "eqs_test_add",
     "eqs_test_remove",
     "find_actors_by_name",
+    "foliage_inspect",
     "gas_ability_create",
+    "gas_ability_set_cooldown",
+    "gas_ability_set_cost",
     "gas_attributeset_create",
     "gas_effect_apply",
     "gas_effect_create",
-    "get_blueprint_material_info",
     "ik_retarget_align_bones",
     "ik_retarget_auto_map_chains",
     "ik_retarget_create",
@@ -145,12 +161,19 @@ ALL_OPERATIONS = frozenset({
     "ik_retarget_set_rigs",
     "ik_retarget_set_root_motion_settings",
     "ik_rig_list_chains",
-    "input_create",
     "input_add_mapping",
+    "input_create",
     "kinematics_probe",
     "kinematics_read_transform",
     "kinematics_solve",
+    "landscape_inspect",
+    "landscape_list_layers",
+    "landscape_read_heightmap",
     "level_inspect",
+    "level_load",
+    "level_new",
+    "level_save",
+    "level_save_as",
     "level_set_gamemode_override",
     "material_add_expression",
     "material_apply_to_actor",
@@ -168,10 +191,12 @@ ALL_OPERATIONS = frozenset({
     "material_read_instance",
     "material_reparent_instance",
     "material_set_expression_property",
+    "material_set_property",
     "mcp_status",
     "mesh_add_socket",
     "mesh_build_bend_chain",
     "mesh_get_actor_material_info",
+    "mesh_get_bounds",
     "mesh_get_collision",
     "mesh_list_sockets",
     "mesh_modify_socket",
@@ -186,10 +211,14 @@ ALL_OPERATIONS = frozenset({
     "niagara_emitter_add_renderer",
     "niagara_emitter_read",
     "niagara_emitter_set_enabled",
+    "niagara_emitter_set_local_space",
     "niagara_list_systems",
+    "niagara_mesh_renderer_set_mesh",
     "niagara_module_add",
     "niagara_module_get_inputs",
     "niagara_module_set_input",
+    "niagara_renderer_set_alignment",
+    "niagara_renderer_set_enabled",
     "niagara_renderer_set_material",
     "niagara_renderer_set_material_binding",
     "niagara_scratch_pad_module_add",
@@ -199,11 +228,22 @@ ALL_OPERATIONS = frozenset({
     "niagara_user_parameter_add",
     "niagara_user_parameter_remove",
     "niagara_user_parameter_set",
+    "pcg_component_add",
+    "pcg_component_generate",
+    "pcg_graph_create",
+    "pcg_graph_read",
+    "pcg_list_graphs",
+    "pcg_list_node_types",
+    "pcg_node_add",
+    "pcg_node_connect",
+    "pcg_node_set_property",
     "physics_material_create",
     "physics_set_body_collision",
     "physics_set_constraint_motion",
     "physics_set_properties",
+    "pie_capture_from_pose",
     "pie_get_state",
+    "pie_inject_input_action",
     "pie_query",
     "pie_record_arm",
     "pie_record_disarm",
@@ -218,7 +258,6 @@ ALL_OPERATIONS = frozenset({
     "project_context",
     "reflection_class_properties",
     "scene_brief",
-    "spawn_actor",
     "spawn_blueprint_actor",
     "st_add_node",
     "st_add_property_binding",
@@ -257,4 +296,4 @@ ALL_OPERATIONS = frozenset({
     "widget_tree_read",
 })
 
-assert len(ALL_OPERATIONS) == 234
+assert len(ALL_OPERATIONS) == 281

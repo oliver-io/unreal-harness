@@ -161,7 +161,7 @@ def test_static_mesh_socket_roundtrip(bridge):
 
 # ── static mesh: material slot ──────────────────────────────────────────────
 
-@covers("asset_duplicate", "asset_save", "mesh_set_static_mesh_material", "spawn_actor",
+@covers("asset_duplicate", "asset_save", "mesh_set_static_mesh_material",
         "mesh_get_actor_material_info", "actor_delete")
 def test_set_static_mesh_material_then_readback(bridge):
     """Retarget slot 0 of a duplicated cube to WorldGridMaterial, then read it
@@ -298,7 +298,7 @@ def test_skeletal_mesh_build_bend_chain_dry_run(bridge):
 
 # ── dynamic-mesh -> static-mesh bake (precondition guard, headless-safe) ─────
 
-@covers("spawn_actor", "asset_bake_dynamic_to_static_mesh", "actor_delete")
+@covers("asset_bake_dynamic_to_static_mesh", "actor_delete")
 def test_bake_dynamic_mesh_requires_dynamic_mesh_component(bridge):
     """A real bake needs a UDynamicMeshComponent source (Modeling Mode / Geometry
     Script), which the empty headless editor can't author. We exercise the op's

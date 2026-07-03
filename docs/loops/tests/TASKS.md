@@ -9,15 +9,6 @@ anything — do not take these descriptions at face value.
 
 ## A. Harness integrity (do these first — they gate everything below)
 
-- [ ] **Fix the operation-manifest generator.** `tests/tools/regen_operations.py` scans `src/MCP/`,
-  which was deleted in the Python→Bun port — the manifest can no longer be regenerated, and
-  `tests/harness/operations.py` has drifted: its `assert len(ALL_OPERATIONS) == 234` now FAILS, so
-  any import of `harness.operations` (i.e. the whole pytest suite) crashes at collection. Rewrite
-  the generator to derive wire names from the Bun server — for every `bridgeTool` spec the wire
-  name is `spec.command ?? spec.name` (`src/server/src/domains/_shared.ts:39`), plus
-  `sendCommand("...")` literals inside `defineTool` handlers — intersected with the C++ dispatch
-  keys (`MCPBridge.cpp` + domain command files). Regenerate, and confirm `test_zz_coverage.py`
-  reports the true gap list.
 - [ ] **Decide the ledger story for server-local tools.** ~33 canonical tools never hit the C++
   bridge (`catalog_*`, `code_*`, `result_read`, `build_status`, `pie_analyze`, `video_analyze`,
   `actor_spawn_physics`, `editor_read_logs`, `editor_build_game_target`, server-side composites),
