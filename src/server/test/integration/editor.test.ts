@@ -99,6 +99,63 @@ describe.skipIf(!live)("live editor round-trips", () => {
     20_000,
   );
 
+  // Bun mirror of tests/integration/test_reads.py::test_viewport_get_camera_reads_bugitgo_pose.
+  // Bridge-op coverage is the pytest @covers ledger's job — no covers() here.
+  test("editor_viewport_get_camera reads back a BugItGo-arranged pose", async () => {
+    type Pose = {
+      location: { x: number; y: number; z: number };
+      rotation: { pitch: number; yaw: number; roll: number };
+      fov: number;
+      aspect: number;
+      ortho: boolean;
+      viewport_size: { x: number; y: number };
+    };
+
+    // Snapshot first — a pure read, used only to RESTORE the operator's framing
+    // in the finally (the live editor may be shared). The assertion observes the
+    // ARRANGED pose below, not this one.
+    const snapEnv = await c.call("editor_viewport_get_camera", {});
+    if (snapEnv.status !== "success") {
+      // Headless -nullrhi may have no readable level viewport — tolerate, like
+      // the pytest twin's skip.
+      console.log("skipped: no level-editor viewport to read (headless -nullrhi?)");
+      return;
+    }
+    const snap = snapEnv.result as Pose;
+    for (const key of ["location", "rotation", "fov", "aspect", "ortho", "viewport_size"]) {
+      expect(snap).toHaveProperty(key);
+    }
+    if (snap.ortho) {
+      console.log("skipped: only an orthographic viewport available — need perspective");
+      return;
+    }
+
+    try {
+      // Arrange: BugItGo X Y Z Pitch Yaw Roll (world units / degrees) sets the
+      // level-editor viewport camera deterministically (verified live).
+      await c.expect("editor_console_exec", { command: "BugItGo 1234 2345 3456 -30 45 0" });
+      const got = (await c.expect("editor_viewport_get_camera", {})) as unknown as Pose;
+      if (Math.abs(got.location.x - 1234) >= 1 && process.env.UE_MCP_GUI !== "1") {
+        console.log("skipped: BugItGo did not drive the viewport under headless -nullrhi");
+        return;
+      }
+      expect(Math.abs(got.location.x - 1234)).toBeLessThan(1);
+      expect(Math.abs(got.location.y - 2345)).toBeLessThan(1);
+      expect(Math.abs(got.location.z - 3456)).toBeLessThan(1);
+      expect(Math.abs(got.rotation.pitch + 30)).toBeLessThan(0.5);
+      expect(Math.abs(got.rotation.yaw - 45)).toBeLessThan(0.5);
+      expect(Math.abs(got.rotation.roll)).toBeLessThan(0.5);
+      expect(got.ortho).toBe(false);
+    } finally {
+      // Put the camera back exactly as found.
+      await c.call("editor_console_exec", {
+        command:
+          `BugItGo ${snap.location.x} ${snap.location.y} ${snap.location.z} ` +
+          `${snap.rotation.pitch} ${snap.rotation.yaw} ${snap.rotation.roll}`,
+      });
+    }
+  });
+
   test("code_run drives the editor and keeps data in-sandbox", async () => {
     const code = `
       const env = await unreal.actor_get_in_level({});

@@ -30,8 +30,6 @@ anything — do not take these descriptions at face value.
   counts / heightmap values, not just shape.
 - [ ] `foliage_inspect` — needs fixture foliage (an InstancedFoliageActor with one type). If
   arranging needs a missing primitive, add it or defer with reason.
-- [ ] `editor_viewport_get_camera` — arrange a known camera pose (console exec / a set-camera
-  primitive; add one if missing), read back and assert the pose.
 - [ ] `editor_build_reflection_captures` — investigate a log-marker observation via
   `editor_read_logs`; if nothing observable beyond the echo, #DEFERRED with that reason.
 - [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk

@@ -160,6 +160,49 @@ def test_execute_console_command(mcp):
     assert isinstance(result, dict), result
 
 
+@covers("editor_viewport_get_camera")
+def test_viewport_get_camera_reads_bugitgo_pose(mcp, request):
+    # Arrange a known level-editor camera pose with BugItGo (args: X Y Z Pitch Yaw
+    # Roll, world units / degrees — verified live: it sets the viewport pose
+    # exactly), then observe it through editor_viewport_get_camera. The up-front
+    # snapshot is a pure read used only to RESTORE the operator's framing in the
+    # finally (the live editor may be shared); the assertion observes the ARRANGED
+    # pose. Tolerant under headless -nullrhi, where the viewport-client picture is
+    # unverified: no readable viewport → skip; viewport present but not driven by
+    # BugItGo → skip (headless only — under --ue-mode=gui that's a real failure).
+    snap_env = mcp.command("editor_viewport_get_camera", {})
+    if snap_env.get("status") != "success":
+        pytest.skip("no level-editor viewport to read (headless -nullrhi?): "
+                    f"{snap_env.get('error')}")
+    snap = snap_env.get("result") or {}
+    # Contract shape: pose + optics + viewport metadata.
+    for key in ("location", "rotation", "fov", "aspect", "ortho", "viewport_size"):
+        assert key in snap, snap
+    if snap["ortho"]:
+        pytest.skip("only an orthographic viewport is available — BugItGo pose "
+                    "assertions need a perspective viewport")
+
+    loc, rot = snap["location"], snap["rotation"]
+    try:
+        mcp.expect("editor_console_exec", {"command": "BugItGo 1234 2345 3456 -30 45 0"})
+        got = mcp.expect("editor_viewport_get_camera", {})
+        gl, gr = got["location"], got["rotation"]
+        if abs(gl["x"] - 1234.0) >= 1.0 and request.config.getoption("--ue-mode") != "gui":
+            pytest.skip("BugItGo did not drive the viewport under headless -nullrhi")
+        assert abs(gl["x"] - 1234.0) < 1.0, got
+        assert abs(gl["y"] - 2345.0) < 1.0, got
+        assert abs(gl["z"] - 3456.0) < 1.0, got
+        assert abs(gr["pitch"] + 30.0) < 0.5, got
+        assert abs(gr["yaw"] - 45.0) < 0.5, got
+        assert abs(gr["roll"]) < 0.5, got
+        assert got["ortho"] is False, got
+    finally:
+        # Put the camera back exactly as found.
+        mcp.command("editor_console_exec", {"command": (
+            f"BugItGo {loc['x']} {loc['y']} {loc['z']} "
+            f"{rot['pitch']} {rot['yaw']} {rot['roll']}")})
+
+
 @covers("input_create")
 def test_input_create(mcp):
     # Creates a UInputAction under the test namespace; auto-saves. Result echoes
