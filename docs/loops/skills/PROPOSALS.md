@@ -1,40 +1,41 @@
-# MCP Bugs
+# Skill proposals
 
-MCP and harness bugs are tracked in [bugs](../bugs.md).  This document should be kept as a living record of all the current bugs, and when something is fixed, if it doesn't need explicit confirmation, should be removed from the bugs list.  We want to keep this list as a pristine known issues list, and not confuse anyone with solved problems.
+Improvements to skill language/process discovered by the skill-test loop
+(`skill-test-loop.md`). We do not edit skill prompts directly from the loop — each entry
+here is a documented, evidence-backed proposal for a later deliberate edit. Each entry
+names the skill, the associated test (if any), the evidence, and the proposed change.
 
-If it does not already have one, we should make sure that the bug report document has a #DEFERRED list in case we don't know how to handle it.
+(Note: this file previously held a misplaced copy of the bug fix-loop doc; replaced
+2026-07-02 when the skill-test loop first ran.)
 
-# Fix Loop Orchestrator
+## Proposals
 
-We should pull an item from the bug list, and task a subagent with the following entire procedure, with our exterior loop just orchestrating and keeping track of agent progress.  Each subagent shoukd:
+(populated by the loop — one section per finding)
 
-## Fix Loop Task
+### /position — ThirdPerson mesh offset is BP-template-authored, not an ACharacter C++ default (TASK-1)
 
-Take a single bug off of the list.  Understand its report.  If we cannot understand the bug report, we should move it to a #DEFERRED list in the bug document, and clearly state that it was not understood or does not seem accurate at the time.  We should not take any bug reports at face value, instead, always:
-
-1) understand the bug, and form a hypothesis about what could cause it
-2) investigate the MCP and the associated Unreal Engine plugin code
-3) correlate our MCP and C++ plugin code with **actual source engine code** for the Unreal Engine
- a) if we cannot find the source engine code, we should **ABORT** this process and stop the loop, and explain to the user.
-4) once we have an RCA, double check our work and make sure the bug report makes sense
-5) fix the issue, and if necessary, any associated documentation
-
-## One Item At a Time
-
-We address one bug at a time.  We take it as an isolated report, research, RCA it, and fix it if possible.  If we cannot fix it or produce an RCA, we move it to the #DEFERRED list/
-
-## Failure Cases or Stuck Modes
-
-If we are failing to act or stuck in any way, we should simply **ABORT** and terminate this loop process, explaining the difficulty to the user.
-
-## Per Item Finished
-
-Document your changes with a git commit specific to the altered files and the intent of the changes.  Then, move on to the next.
-
-# Loop
-
-We should continue looping until there are no more bugs in our bug list, or we have encountered some kind of a hard-stop issue.
-
-# Completion
-
-When complete, double check our work, delete any looping chronjob, and summarize all the changes.
+- **Skill**: `.claude/skills/position/SKILL.md`, §"The default ThirdPerson mesh offset (a UE
+  template convention)".
+- **Test**: `tests/skills/test_position_conventions.py` (the coordinate-convention battery;
+  3/3 green against a live editor 2026-07-02).
+- **Evidence** (UE 5.7 source, read this task): the `ACharacter` constructor sets
+  `CapsuleComponent->InitCapsuleSize(34.0f, 88.0f)`
+  (`Engine/Source/Runtime/Engine/Private/Character.cpp:77`), but the Mesh subobject block
+  (`Character.cpp:118-133`) only creates the component, attaches it to the capsule, and sets
+  collision/tick flags — it assigns **no** `RelativeLocation`/`RelativeRotation`. The
+  `(0,0,-90)` / `Yaw -90` offset the skill describes exists only where a Blueprint template
+  (e.g. ThirdPerson `BP_ThirdPersonCharacter`) authors it; `CacheInitialMeshOffset`
+  (`Character.cpp:149,191-194`) merely caches whatever the template authored. Confirmed live:
+  a bare spawned `/Script/Engine.Character` reads back capsule 34/88, with no mesh offset in
+  play (test 2 of the battery).
+- **Proposed change**: the skill already labels the offset "a UE template convention", which
+  is correct — sharpen it one notch so an agent never expects the offset on a bare
+  `ACharacter`: e.g. "This offset is authored in the ThirdPerson **Blueprint template**, NOT
+  in `ACharacter`'s C++ constructor (`Character.cpp:118-133` sets no relative offset) — a
+  bare spawned Character has mesh offset (0,0,0)/yaw 0."
+- **Bonus fixture note for future test authors** (not a skill defect): the engine test mesh
+  `/Engine/EngineMeshes/SkeletalCube` has its root bone authored pitched ~+90° (bone-local +X
+  points at component +Z), so a root-bone `forward_world` at actor rotation zero is ~(0,0,1),
+  not (1,0,0). TASK-1's spec assumed identity authoring; the battery cancels the authored
+  pitch with actor pitch −90 before testing yaw handedness. Any future test that treats a
+  SkeletalCube bone's forward as the actor forward must do the same.
