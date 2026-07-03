@@ -32,6 +32,19 @@ function isFile(p: string): boolean {
   return existsSync(p) && statSync(p).isFile();
 }
 
+type ExprEntry = {
+  name: string;
+  inputs: { name: string; connected_expression?: string; connected_output_index?: number }[];
+  properties: Record<string, number>;
+};
+
+/** Find one expression entry in a material_read graph by node name. */
+function exprByName(graph: Record<string, unknown>, name: string): ExprEntry {
+  const match = ((graph.expressions as ExprEntry[]) ?? []).find((e) => e.name === name);
+  if (!match) throw new Error(`expression ${name} missing from graph: ${JSON.stringify(graph)}`);
+  return match;
+}
+
 /** add_material_expression returns the new node's name under both the canonical
  *  `expression_name` and the reader-shape alias `name`. */
 function exprName(result: Record<string, unknown>): string {
@@ -67,10 +80,40 @@ editorSuite("material", (ctx) => {
   });
 
   test("test_compile_material", async () => {
-    const result = await ctx.mcp.expect("material_compile", { material_path: sampleMaterial });
-    // A bare material compiles clean — success not False and no errors reported.
-    expect(result.success === false).toBe(false);
-    expect(isFalsyOrEmpty(result.errors)).toBe(true);
+    // material_compile recompiles AND persists (GAP-062: it saves the package).
+    // Deep observation: a freshly created, never-saved material has no .uasset
+    // on disk; after compile the package exists, and the independent reader
+    // reports a valid graph. The echoed errors[] alone would be the mutator's
+    // own report. Disk path via the LIVE editor's project root (attach-safe).
+    const path = `${NS}/M_CompileProbe`;
+    await ensureAbsent(ctx.mcp, path);
+    try {
+      await ctx.mcp.expect("material_create", { material_path: path });
+      const pctx = await ctx.mcp.expect("project_context", {});
+      const root = (pctx.settings_paths as string[])[0]!;
+      const disk = join(root, "Content", path.slice("/Game/".length) + ".uasset");
+      // A stale .uasset may survive prior sessions against the live project
+      // (ensureAbsent only clears the registry entry) — key on the write
+      // timestamp, not bare existence.
+      const mtimeBefore = isFile(disk) ? statSync(disk).mtimeMs : null;
+
+      const result = await ctx.mcp.expect("material_compile", { material_path: path });
+      // A bare material compiles clean — success not False and no errors reported.
+      expect(result.success === false).toBe(false);
+      expect(isFalsyOrEmpty(result.errors)).toBe(true);
+
+      // Independent observation 1: compile's save path wrote the package.
+      expect(isFile(disk)).toBe(true);
+      if (mtimeBefore !== null) {
+        expect(statSync(disk).mtimeMs).toBeGreaterThan(mtimeBefore);
+      }
+      // Independent observation 2: the reader sees a valid compiled graph.
+      const graph = await ctx.mcp.expect("material_read", { material_path: path });
+      expect(graph.success).toBe(true);
+      expect(Array.isArray(graph.expressions)).toBe(true);
+    } finally {
+      await ensureAbsent(ctx.mcp, path);
+    }
   });
 
   test("test_read_material_graph", async () => {
@@ -149,18 +192,34 @@ editorSuite("material", (ctx) => {
       source_output_index: 0,
     });
 
-    // Mutate a property on the constant (zero-fill semantics: g-only -> (0, 0.5, 0)).
+    // Mutate the constant's colour. NOTE (verified live): the C++ setter GATES
+    // on the `r` key (TryBuildLinearColorFromJson) — a g-only payload is a
+    // silent success-shaped NO-OP. The old echo-only assertion hid exactly
+    // that; always send r (g/b then zero-fill if omitted).
     await ctx.mcp.expect("material_set_expression_property", {
       material_path: path,
       expression_name: c3,
-      g: 0.5,
+      r: 0.25, g: 0.5, b: 0.75,
     });
 
-    // Read back: both expressions present.
+    // Read back through the independent graph reader — structured, not a blob
+    // match. Both expressions present; the Multiply's "A" input sources the
+    // constant; the material's BaseColor input sources the Multiply; and the
+    // constant carries the mutated value.
     const graph = await ctx.mcp.expect("material_read", { material_path: path });
-    const blob = JSON.stringify(graph);
-    expect(blob).toContain(c3);
-    expect(blob).toContain(mul);
+    const c3Node = exprByName(graph, c3);
+    const mulNode = exprByName(graph, mul);
+
+    const aInput = mulNode.inputs.find((i) => i.name === "A");
+    expect(aInput?.connected_expression).toBe(c3);
+    expect(aInput?.connected_output_index).toBe(0);
+
+    const matInputs = graph.material_inputs as Record<string, { connected_expression?: string }>;
+    expect(matInputs.BaseColor?.connected_expression).toBe(mul);
+
+    expect(c3Node.properties.r).toBeCloseTo(0.25, 6);
+    expect(c3Node.properties.g).toBeCloseTo(0.5, 6);
+    expect(c3Node.properties.b).toBeCloseTo(0.75, 6);
 
     // Delete the Multiply node; it must disappear from the graph.
     await ctx.mcp.expect("material_delete_expression", {
@@ -230,8 +289,16 @@ editorSuite("material", (ctx) => {
       r: 0.0, g: 1.0, b: 0.0, a: 1.0,
     });
 
+    // Read the VALUE back off the instance's own override array — the parameter
+    // NAME alone also exists on the parent, so it proves nothing about the set.
     const read = await ctx.mcp.expect("material_read_instance", { instance_path: inst });
-    expect(JSON.stringify(read.vector_parameters ?? [])).toContain("Tint");
+    const vec = (read.vector_parameters as { name: string; r: number; g: number; b: number; a: number }[]) ?? [];
+    const tintVal = vec.find((p) => p.name === "Tint");
+    expect(tintVal).toBeDefined();
+    expect(tintVal!.r).toBeCloseTo(0.0, 6);
+    expect(tintVal!.g).toBeCloseTo(1.0, 6);
+    expect(tintVal!.b).toBeCloseTo(0.0, 6);
+    expect(tintVal!.a).toBeCloseTo(1.0, 6);
   });
 
   test("test_reparent_material_instance", async () => {
@@ -309,22 +376,37 @@ editorSuite("material", (ctx) => {
   });
 
   test("test_apply_material_to_actor", async () => {
-    const spawned = await ctx.mcp.expect("actor_spawn", {
-      class_path: "/Script/Engine.StaticMeshActor",
-      name: "MCPTest_MatActor",
-      location: { x: 0.0, y: 0.0, z: 0.0 },
+    // Apply the sample material to a mesh-bearing actor, then read slot 0 back
+    // via the independent material-info reader. The actor is spawned at the
+    // BRIDGE level with the engine cube (spawn_actor's static_mesh kwarg —
+    // house pattern from mesh.test.ts): a mesh-less StaticMeshActor reports
+    // zero slots, so the old "info non-empty" assertion never saw the path.
+    // Unique per-run name: a fixed name collides with the FName of a
+    // previously deleted actor still pending GC (spawn_actor then fails with
+    // name-in-use — the known FName-reuse-until-GC wart).
+    const actorName = `MCPTest_MatActor_${process.pid}_${Date.now()}`;
+    await ctx.bridge.expect("spawn_actor", {
+      name: actorName,
+      type: "StaticMeshActor",
+      static_mesh: "/Engine/BasicShapes/Cube.Cube",
     });
-    const actorName = (spawned.actor as Record<string, unknown>).name as string;
+    try {
+      const result = await ctx.mcp.expect("material_apply_to_actor", {
+        actor_name: actorName,
+        material_path: sampleMaterial,
+        material_slot: 0,
+      });
+      expect(result.success === false).toBe(false);
 
-    const result = await ctx.mcp.expect("material_apply_to_actor", {
-      actor_name: actorName,
-      material_path: sampleMaterial,
-      material_slot: 0,
-    });
-    expect(result.success === false).toBe(false);
-
-    const info = await ctx.mcp.expect("mesh_get_actor_material_info", { actor_name: actorName });
-    expect(info && typeof info === "object" && Object.keys(info).length > 0).toBeTruthy();
+      const info = await ctx.mcp.expect("mesh_get_actor_material_info", { actor_name: actorName });
+      expect(Number(info.total_slots)).toBeGreaterThanOrEqual(1);
+      const slots = info.material_slots as Array<Record<string, unknown>>;
+      expect(slots[0]!.slot).toBe(0);
+      // GetPathName() is the full object path (/Game/.../M_Sample.M_Sample).
+      expect(String(slots[0]!.material_path ?? "").split(".")[0]).toBe(sampleMaterial);
+    } finally {
+      await ctx.bridge.command("actor_delete", { name: actorName }).catch(() => undefined);
+    }
   });
 
   test("test_apply_material_to_blueprint", async () => {
@@ -355,12 +437,17 @@ editorSuite("material", (ctx) => {
     expect(result.success === false).toBe(false);
 
     // get_blueprint_material_info is a bridge-internal command (no standalone MCP
-    // tool), so the read-back goes through the bridge.
+    // tool), so the read-back goes through the bridge. Assert the applied path
+    // landed on slot 0 of the component template — not just "info non-empty".
     const info = await ctx.bridge.expect("get_blueprint_material_info", {
       blueprint_name: bp,
       component_name: "Mesh",
     });
-    expect(info && typeof info === "object" && Object.keys(info).length > 0).toBeTruthy();
+    expect(info.has_static_mesh).toBe(true);
+    expect(Number(info.total_slots)).toBeGreaterThanOrEqual(1);
+    const slots = info.material_slots as Array<Record<string, unknown>>;
+    expect(slots[0]!.slot).toBe(0);
+    expect(String(slots[0]!.material_path ?? "").split(".")[0]).toBe(sampleMaterial);
   });
 
   test("test_set_mesh_material_color", async () => {

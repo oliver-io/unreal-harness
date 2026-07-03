@@ -168,6 +168,25 @@ editorSuite("mesh", (ctx) => {
     });
     expect(result.component).toEqual("Mesh");
     await ctx.bridge.expect("bp_compile", { blueprint_name: bp });
+
+    // Independent read-back: the component template's StaticMesh override via
+    // bp_read include_component_properties — not just the handler's own echo.
+    const content = await ctx.bridge.expect("bp_read", {
+      blueprint_path: bp,
+      include_event_graph: false,
+      include_functions: false,
+      include_variables: false,
+      include_component_properties: true,
+    });
+    const comps = content.components as Array<{
+      name: string;
+      property_overrides?: Array<{ name: string; value?: unknown }>;
+    }>;
+    const comp = comps.find((c) => c.name === "Mesh");
+    expect(comp).toBeDefined();
+    const staticMesh = (comp!.property_overrides ?? []).find((o) => o.name === "StaticMesh");
+    expect(staticMesh).toBeDefined();
+    expect(String(staticMesh!.value ?? "")).toContain("Cube");
     await assertReady(ctx.bridge);
   });
 

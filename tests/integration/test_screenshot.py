@@ -7,6 +7,7 @@ window_not_found / engine_busy, so it is skipped unless a GUI editor is running.
 """
 
 import os
+import time
 
 import pytest
 
@@ -32,9 +33,27 @@ def test_editor_window_screenshot_writes_png(mcp):
 
 @pytest.mark.render
 @covers("editor_screenshot")
-def test_take_screenshot_returns_path(mcp):
-    # take_screenshot routes through the editor screenshot request; the file is
-    # written asynchronously, so assert on the returned target path, not the file.
-    result = mcp.expect("editor_screenshot", {"mode": "editor"})
-    blob = str(result).lower()
-    assert ".png" in blob or "path" in blob, result
+def test_take_screenshot_writes_png(mcp):
+    """editor_screenshot must produce a real PNG on disk, not just echo a target
+    path. mode=editor under GUI captures synchronously; the async editor-viewport
+    fallback is confirmed by the bridge before it returns (GAP-007) — either way
+    the file must exist. Poll briefly for filesystem visibility, then clean up
+    the capture (self-cleaning: the file is namespaced to this test)."""
+    result = mcp.expect("editor_screenshot", {
+        "mode": "editor",
+        "filename": f"MCPTest_Screenshot_{int(time.time())}",
+    })
+    path = result["file_path"]
+    assert path.lower().endswith(".png"), result
+    assert result.get("status") in ("captured", "requested"), result
+    try:
+        deadline = time.monotonic() + 15.0
+        while not os.path.isfile(path) and time.monotonic() < deadline:
+            time.sleep(0.25)
+        assert os.path.isfile(path), f"screenshot not written to {path}: {result}"
+        assert os.path.getsize(path) > 0, f"empty screenshot at {path}"
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass

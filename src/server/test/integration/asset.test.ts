@@ -195,25 +195,57 @@ editorSuite("asset", (ctx) => {
   });
 
   test("test_fixup_redirectors", async () => {
-    // A save-then-rename leaves a redirector at the old path; fixup scans the
-    // namespace for them. Run as a non-destructive dry_run and assert the scan
-    // reported a result (the empty-namespace case is also a valid success).
-    const src = await makeSavedBp(ctx.mcp, `${NS}/BP_RedirSrc`);
-    const dest = `${NS}/BP_RedirDst`;
-    await ensureAbsent(ctx.mcp, dest);
-    await ctx.mcp.expect("asset_rename", { source_path: src, new_name: "BP_RedirDst" });
-    // Persist both the renamed asset and the redirector left at the old path.
-    await ctx.mcp.expect("asset_save", { asset_paths: [dest, src] });
+    // Manufacture a REAL redirector, then assert the fixup scan reports THAT
+    // redirector. A plain save+rename leaves NO redirector in UE 5.7 (verified
+    // live — the old "found is defined" assertion passed on found == 0).
+    // Deterministic manufacture: put the asset in a temporary LOCAL collection
+    // first — FAssetRenameManager::DetectReferencingCollections forces
+    // bCreateRedirector for collection-referenced assets. Collection arrange /
+    // teardown uses the sanctioned py escape hatch (no typed primitive).
+    const parent = `${NS}/M_RedirParent`;
+    const renamed = `${NS}/M_RedirParentRenamed`;
+    const col = "MCPTestRedirCol";
+    for (const p of [parent, renamed]) await ensureAbsent(ctx.mcp, p);
+    await ctx.mcp.expect("material_create", { material_path: parent });
+    await ctx.mcp.expect("asset_save", { asset_paths: [parent] });
+    try {
+      const probe = await ctx.mcp.expect("editor_console_exec", {
+        command:
+          "py import unreal; " +
+          `a = unreal.load_asset('${parent}'); ` +
+          "ats = unreal.get_engine_subsystem(unreal.AssetTagsSubsystem); " +
+          `ats.create_collection(unreal.Name('${col}'), unreal.CollectionShareType.LOCAL); ` +
+          `print('MCPCOL ADDED=' + str(ats.add_asset_ptr_to_collection(unreal.Name('${col}'), a)))`,
+      });
+      expect(String(probe.output)).toContain("MCPCOL ADDED=True");
 
-    const result = await ctx.mcp.expect("asset_fixup_redirectors", {
-      directory_path: NS,
-      dry_run: true,
-    });
-    expect(result && typeof result === "object" && Object.keys(result).length > 0).toBeTruthy();
-    // redirectors_found is surfaced on both the empty and non-empty paths.
-    const found =
-      result.redirectors_found ?? (result.data as { redirectors_found?: unknown } | undefined)?.redirectors_found;
-    expect(found ?? null).not.toBeNull();
+      await ctx.mcp.expect("asset_rename", {
+        source_path: parent,
+        new_name: "M_RedirParentRenamed",
+      });
+
+      const result = await ctx.mcp.expect("asset_fixup_redirectors", {
+        directory_path: NS,
+        dry_run: true,
+      });
+      expect(result.dry_run).toBe(true);
+      const found =
+        result.redirectors_found ?? (result.data as { redirectors_found?: unknown } | undefined)?.redirectors_found;
+      expect(Number(found)).toBeGreaterThanOrEqual(1);
+      // The manufactured redirector at the OLD parent path is in the diff.
+      const deleted = (result.diff as { deleted: { path: string }[] }).deleted;
+      const deletedPkgs = deleted.map((d) => d.path.split(".")[0]);
+      expect(deletedPkgs).toContain(parent);
+    } finally {
+      await ctx.mcp.command("editor_console_exec", {
+        command:
+          "py import unreal; " +
+          "ats = unreal.get_engine_subsystem(unreal.AssetTagsSubsystem); " +
+          `ats.destroy_collection(unreal.Name('${col}'))`,
+      });
+      // ensureAbsent(parent) also deletes the manufactured redirector.
+      for (const p of [parent, renamed]) await ensureAbsent(ctx.mcp, p);
+    }
   });
 
   // ── importers: mesh / audio / font (generated sources) ────────────────────

@@ -19,11 +19,14 @@ namespace; the session-end disk wipe (Content/__MCPTest__) cleans them up.
 live_coding_compile is handled defensively — see its test.
 """
 
+import os
+import time
+
 import pytest
 
 from harness import config
 from harness.coverage import covers
-from harness.ops import ensure_absent, assert_ready, first_asset_of
+from harness.ops import ensure_absent, assert_ready, first_asset_of, payload
 
 NS = "/Game/__MCPTest__/reads"
 SAMPLE_BP = f"{NS}/BP_R"
@@ -155,9 +158,30 @@ def test_list_ik_rig_chains(mcp):
 
 @covers("editor_console_exec")
 def test_execute_console_command(mcp):
-    # Headless-safe console command. Routed to the editor world (no PIE here).
-    result = mcp.expect("editor_console_exec", {"command": "stat none"})
-    assert isinstance(result, dict), result
+    """Marker roundtrip (mirrors the bun editor.test.ts pattern): exec a
+    harmless command carrying a unique per-run marker, then observe the marker
+    through a DIFFERENT primitive — editor_read_logs, the server-local tail of
+    MCP_Unified.log (reachable here because the mcp fixture speaks the real MCP
+    protocol to the server, not the raw bridge). The log writer may lag the
+    bridge reply, so poll to a bounded deadline instead of a blind sleep."""
+    marker = f"MCPTEST_LOGMARK_{int(time.time())}_{os.getpid()}"
+
+    # `ke *` broadcasts a nonexistent kismet event — a no-op, but the command
+    # LINE is echoed into the unified log tagged [EDITOR:Cmd].
+    result = mcp.expect("editor_console_exec", {"command": f"ke * {marker}"})
+    assert marker in result.get("command", ""), result
+    assert isinstance(result.get("output"), str), result
+
+    logs = None
+    deadline = time.monotonic() + 10.0
+    while True:
+        logs = mcp.expect("editor_read_logs", {"grep": marker})
+        if logs.get("returned", 0) > 0 or time.monotonic() > deadline:
+            break
+        time.sleep(0.25)
+    assert logs.get("returned", 0) >= 1, logs
+    assert any(marker in line for line in logs.get("lines", [])), logs
+    assert logs.get("file", "").endswith("MCP_Unified.log"), logs
 
 
 @covers("editor_viewport_get_camera")
@@ -217,6 +241,16 @@ def test_input_create(mcp):
     })
     assert result.get("asset_path"), result
     assert "InputAction" in str(result.get("class", "")), result
+
+    # Independent read-back (house pattern): the asset registry must now see
+    # the InputAction at the namespace — the echo alone proves nothing.
+    listing = payload(mcp.expect("asset_list", {
+        "directory_path": NS,
+        "recursive": False,
+        "class_filter": "InputAction",
+    }))
+    classes = {a["name"]: a["class"] for a in listing.get("assets", [])}
+    assert classes.get("IA_MCPTest") == "InputAction", classes
 
 
 @covers("input_add_mapping")

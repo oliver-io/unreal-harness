@@ -177,21 +177,54 @@ def test_content_browser_refresh(mcp):
 
 @covers("asset_fixup_redirectors")
 def test_fixup_redirectors(mcp):
-    """A save-then-rename leaves a redirector at the old path; fixup scans the
-    namespace for them. Run as a non-destructive dry_run and assert the scan
-    reported a result (the empty-namespace case is also a valid success)."""
-    src = _make_saved_bp(mcp, f"{NS}/BP_RedirSrc")
-    dest = f"{NS}/BP_RedirDst"
-    ensure_absent(mcp, dest)
-    mcp.expect("asset_rename", {"source_path": src, "new_name": "BP_RedirDst"})
-    # Persist both the renamed asset and the redirector left at the old path.
-    mcp.expect("asset_save", {"asset_paths": [dest, src]})
+    """Manufacture a REAL redirector, then assert the fixup scan reports THAT
+    redirector. A plain save+rename leaves NO redirector in UE 5.7 (verified
+    live: with every referencer loaded the rename manager fixes references in
+    memory and trashes the old package — the old "found is not None" assertion
+    passed on found == 0 and proved nothing). Deterministic manufacture: put
+    the asset in a temporary LOCAL collection first —
+    FAssetRenameManager::DetectReferencingCollections forces bCreateRedirector
+    for collection-referenced assets (verified live). The collection
+    arrange/teardown uses the sanctioned py escape hatch (no typed collection
+    primitive exists); the rename itself goes through the typed op."""
+    parent = f"{NS}/M_RedirParent"
+    renamed = f"{NS}/M_RedirParentRenamed"
+    col = "MCPTestRedirCol"
+    for p in (parent, renamed):
+        ensure_absent(mcp, p)
+    mcp.expect("material_create", {"material_path": parent})
+    mcp.expect("asset_save", {"asset_paths": [parent]})
+    try:
+        probe = mcp.expect("editor_console_exec", {"command": (
+            "py import unreal; "
+            f"a = unreal.load_asset('{parent}'); "
+            "ats = unreal.get_engine_subsystem(unreal.AssetTagsSubsystem); "
+            f"ats.create_collection(unreal.Name('{col}'), unreal.CollectionShareType.LOCAL); "
+            f"print('MCPCOL ADDED=' + str(ats.add_asset_ptr_to_collection(unreal.Name('{col}'), a)))"
+        )})
+        assert "MCPCOL ADDED=True" in probe["output"], probe
 
-    result = mcp.expect("asset_fixup_redirectors", {"directory_path": NS, "dry_run": True})
-    assert isinstance(result, dict) and result, result
-    # redirectors_found is surfaced on both the empty and non-empty paths.
-    found = result.get("redirectors_found", result.get("data", {}).get("redirectors_found"))
-    assert found is not None, result
+        mcp.expect("asset_rename", {
+            "source_path": parent,
+            "new_name": "M_RedirParentRenamed",
+        })
+
+        result = mcp.expect("asset_fixup_redirectors", {"directory_path": NS, "dry_run": True})
+        assert result.get("dry_run") is True, result
+        found = result.get("redirectors_found", result.get("data", {}).get("redirectors_found"))
+        assert found is not None and found >= 1, result
+        # The manufactured redirector at the OLD parent path is in the diff.
+        deleted_pkgs = {d.get("path", "").split(".")[0] for d in result["diff"]["deleted"]}
+        assert parent in deleted_pkgs, (parent, deleted_pkgs)
+    finally:
+        mcp.command("editor_console_exec", {"command": (
+            "py import unreal; "
+            "ats = unreal.get_engine_subsystem(unreal.AssetTagsSubsystem); "
+            f"ats.destroy_collection(unreal.Name('{col}'))"
+        )})
+        # ensure_absent(parent) also deletes the manufactured redirector.
+        for p in (parent, renamed):
+            ensure_absent(mcp, p)
 
 
 @covers("asset_textures_import")

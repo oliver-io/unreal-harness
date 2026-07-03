@@ -68,17 +68,32 @@ the same guard; `widget_set_property`'s suggested `widget_tree_read` oracle was 
 (delegate_name/component_name).)
 
 ### Material / niagara / mesh / asset / editor
-- [ ] `material_connect` (`test_material.py:108`) — connection never read back; assert via
-  `material_read` that Multiply.A sources `c3` and BaseColor sources `mul`.
-- [ ] `material_set_expression_property` (`test_material.py:124`) — echo; assert the constant
-  value via `material_read`.
-- [ ] `material_instance_set_parameter` (`test_material.py:209`) — asserts the param NAME (also
-  present on the parent — proves nothing); assert the VALUE via `material_read_instance`.
-- [ ] `material_apply_to_actor` (`test_material.py:301`) + `material_apply_to_blueprint` (:321) —
-  "info non-empty" only; assert slot-0 material_path via `mesh_get_actor_material_info` /
-  `get_blueprint_material_info`.
-- [ ] `material_compile` (`test_material.py:63`) — echo errors field; at minimum assert
-  `material_read` reflects a valid compiled graph.
+(the 10 non-niagara bullets landed 2026-07-03; pytest + bun mirrors in lockstep, green live
+against the GUI trong editor in attach mode. Oracle notes for future auditors:
+`material_read` DOES expose connections — `expressions[].inputs[].connected_expression` +
+top-level `material_inputs.BaseColor.{connected_expression, connected_output_index}` — and
+per-type `properties` (Constant3Vector r/g/b); BUT `material_set_expression_property`'s
+colour path GATES on the `r` key (TryBuildLinearColorFromJson), so the old test's g-only
+payload was a silent success-shaped NO-OP the echo assertion hid — always send `r`.
+`material_compile` saves the package (GAP-062), so its independent observable is the
+on-disk .uasset write (mtime-keyed — stale files survive ensure_absent against a live
+project). `material_apply_to_actor` needs a MESH-BEARING actor (a mesh-less
+StaticMeshActor reports zero slots — the old "info non-empty" could never see the path);
+spawn actors with UNIQUE per-run names (fixed names hit FName-reuse-until-GC as
+name_collision at SpawnActor). `get_blueprint_material_info` still answers on the wire
+(dispatched at MCPBridge.cpp:763 despite the dead-wire report). `asset_fixup_redirectors`:
+a plain save+rename leaves NO redirector in UE 5.7 (all-loaded referencers are fixed in
+memory; the old found-is-not-None assertion passed on found==0), and a read-only referencer
+ABORTS the whole rename (CheckOutPackages) — the deterministic manufacture is a temporary
+LOCAL collection via the py hatch (`AssetTagsSubsystem`, engine subsystem;
+`CollectionShareType.LOCAL`): DetectReferencingCollections forces bCreateRedirector.
+`editor_screenshot` needs an explicit `filename` and the bridge confirms the file
+(GAP-007) — assert the PNG on disk, then delete it. `editor_read_logs` IS callable from
+the pytest tier (the mcp fixture speaks real MCP to the server) but must NOT be named in
+pytest `@covers` (server-local — unknown to the bridge manifest, would fail the zz gate);
+the `ke * MARKER` log-roundtrip observes `editor_console_exec`. Known flake noted in
+passing: bun `reads.test.ts` `editor_live_coding_compile` can exceed its 5s default
+timeout against a GUI editor with Live Coding enabled — pre-existing, untouched.)
 - [ ] **Niagara ECHO cluster (one task, same pattern):** `niagara_emitter_add_renderer` (:143),
   `niagara_renderer_set_material` (:157), `niagara_renderer_set_material_binding` (:175),
   `niagara_module_set_input` (:229), `niagara_scratch_pad_module_add` (:239),
@@ -87,14 +102,6 @@ the same guard; `widget_set_property`'s suggested `widget_tree_read` oracle was 
   `niagara_system_read`); read the written value / absence back.
 - [ ] `niagara_script_create` (`test_niagara.py:289`) — echoed path only; assert the `.uasset` on
   disk like `niagara_system_create` does.
-- [ ] `mesh_set_static_mesh_properties` (`test_mesh.py:212`) — echo (the comment admits it); read
-  the component back via `bp_list_components` asserting the assigned StaticMesh.
-- [ ] `asset_fixup_redirectors` (`test_asset.py:176`) — asserts `found is not None`; the test
-  already manufactures a known redirector — assert THAT redirector is in the found set.
-- [ ] `editor_screenshot` (`test_screenshot.py:33`) — string-match on ".png"; poll for the file on
-  disk like `editor_window_screenshot` does.
-- [ ] `input_create` (`test_reads.py:163`) — echo; confirm via `asset_list` with
-  `class_filter: InputAction` (house pattern from `physics_material_create`).
 
 ### Animation / IK / state machines / StateTree
 - [ ] `anim_list_sequences` — tagged in FIVE `@covers` decorators (`test_animation.py:363-422`) but

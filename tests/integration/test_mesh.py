@@ -217,11 +217,14 @@ def test_set_static_mesh_material_then_readback(bridge):
 # ── static mesh: properties (component-targeting) ────────────────────────────
 
 @covers("bp_create_blueprint", "bp_add_component", "mesh_set_static_mesh_properties",
-        "bp_compile")
+        "bp_compile", "bp_read")
 def test_set_static_mesh_properties_binds_mesh_on_component(bridge):
     """set_static_mesh_properties targets a Blueprint's StaticMeshComponent (not
-    an asset): build a BP with an empty SMC, bind the engine cube, and confirm
-    the handler re-exports the component it acted on."""
+    an asset): build a BP with an empty SMC, bind the engine cube, and read the
+    component template back via bp_read include_component_properties (proven
+    helper pattern from test_blueprint/test_physics) — the assigned StaticMesh
+    must appear as a property override on the component, not just in the
+    handler's own echo."""
     bp = f"{NS}/BP_MeshProps"
     ensure_absent(bridge, bp)
     bridge.expect("bp_create_blueprint", {"name": bp, "parent_class": "Actor"})
@@ -237,6 +240,19 @@ def test_set_static_mesh_properties_binds_mesh_on_component(bridge):
     })
     assert result.get("component") == "Mesh", result
     bridge.expect("bp_compile", {"blueprint_name": bp})
+
+    # Independent read-back: the component template's StaticMesh override.
+    content = bridge.expect("bp_read", {
+        "blueprint_path": bp,
+        "include_event_graph": False,
+        "include_functions": False,
+        "include_variables": False,
+        "include_component_properties": True,
+    })
+    comp = next(c for c in content["components"] if c["name"] == "Mesh")
+    overrides = {o["name"]: o for o in comp.get("property_overrides", [])}
+    assert "StaticMesh" in overrides, overrides
+    assert "Cube" in str(overrides["StaticMesh"].get("value", "")), overrides["StaticMesh"]
     assert_ready(bridge)
 
 

@@ -16,6 +16,10 @@ Driven through the real MCP server (the `mcp` fixture calls tools by name with
 their TOOL kwargs; the tool layer maps those kwargs onto the bridge wire params).
 """
 
+import os
+import time
+from pathlib import Path
+
 import pytest
 
 from harness import config
@@ -24,6 +28,23 @@ from harness.ops import ensure_absent, assert_ready
 
 NS = "/Game/__MCPTest__/material"
 SAMPLE = f"{NS}/M_Sample"
+
+
+def _live_uasset_disk_path(client, game_path: str) -> Path:
+    """Attach-safe /Game/... -> Content/....uasset mapping using the live
+    editor's own project root (B6 precedent — see test_asset.py)."""
+    ctx = client.expect("project_context", {})
+    root = Path(ctx["settings_paths"][0])
+    pkg = game_path.split(".")[0]
+    assert pkg.startswith("/Game/"), game_path
+    return root / "Content" / (pkg[len("/Game/"):] + ".uasset")
+
+
+def _expr_by_name(graph: dict, name: str) -> dict:
+    """Find one expression entry in a material_read graph by node name."""
+    matches = [e for e in graph.get("expressions", []) if e.get("name") == name]
+    assert matches, f"expression {name} missing from graph: {graph}"
+    return matches[0]
 
 
 def _expr_name(result: dict) -> str:
@@ -61,11 +82,37 @@ def test_create_material_writes_uasset_on_disk(mcp):
 
 
 @covers("material_compile")
-def test_compile_material(mcp, sample_material):
-    result = mcp.expect("material_compile", {"material_path": sample_material})
-    # A bare material compiles clean — success not False and no errors reported.
-    assert result.get("success") is not False, result
-    assert not result.get("errors"), result
+def test_compile_material(mcp):
+    """material_compile recompiles AND persists (GAP-062: it saves the package).
+    Deep observation: a freshly created, never-saved material has no .uasset on
+    disk; after compile the package exists, and the independent reader reports a
+    valid graph. The echoed errors[] alone would be the mutator's own report."""
+    path = f"{NS}/M_CompileProbe"
+    ensure_absent(mcp, path)
+    try:
+        mcp.expect("material_create", {"material_path": path})
+        disk = _live_uasset_disk_path(mcp, path)
+        # A stale .uasset may survive prior sessions against the live project
+        # (ensure_absent only clears the registry entry when the asset isn't
+        # loaded) — key on the write timestamp, not bare existence.
+        mtime_before = disk.stat().st_mtime if disk.is_file() else None
+
+        result = mcp.expect("material_compile", {"material_path": path})
+        # A bare material compiles clean — success not False and no errors reported.
+        assert result.get("success") is not False, result
+        assert not result.get("errors"), result
+
+        # Independent observation 1: compile's save path wrote the package.
+        assert disk.is_file(), f"expected {disk} after material_compile (GAP-062 save)"
+        if mtime_before is not None:
+            assert disk.stat().st_mtime > mtime_before, \
+                f"material_compile did not rewrite {disk}"
+        # Independent observation 2: the reader sees a valid compiled graph.
+        graph = mcp.expect("material_read", {"material_path": path})
+        assert graph.get("success") is True, graph
+        assert isinstance(graph.get("expressions"), list), graph
+    finally:
+        ensure_absent(mcp, path)
 
 
 @covers("material_read")
@@ -154,18 +201,36 @@ def test_material_graph_build_and_teardown(mcp):
         "source_output_index": 0,
     })
 
-    # Mutate a property on the constant (zero-fill semantics: g-only -> (0, 0.5, 0)).
+    # Mutate the constant's colour. NOTE (verified live): the C++ setter GATES
+    # on the `r` key (TryBuildLinearColorFromJson) — a g-only payload is a
+    # silent success-shaped NO-OP. The old echo-only assertion hid exactly
+    # that; always send r (g/b then zero-fill if omitted).
     mcp.expect("material_set_expression_property", {
         "material_path": path,
         "expression_name": c3,
-        "g": 0.5,
+        "r": 0.25, "g": 0.5, "b": 0.75,
     })
 
-    # Read back: both expressions present.
+    # Read back through the independent graph reader — structured, not a blob
+    # match. Both expressions present; the Multiply's "A" input sources the
+    # constant; the material's BaseColor input sources the Multiply; and the
+    # constant carries the mutated value.
     graph = mcp.expect("material_read", {"material_path": path})
-    blob = str(graph)
-    assert c3 in blob, f"{c3} missing from graph: {graph}"
-    assert mul in blob, f"{mul} missing from graph: {graph}"
+    c3_node = _expr_by_name(graph, c3)
+    mul_node = _expr_by_name(graph, mul)
+
+    a_input = next(i for i in mul_node["inputs"] if i.get("name") == "A")
+    assert a_input.get("connected_expression") == c3, mul_node
+    assert a_input.get("connected_output_index") == 0, mul_node
+
+    base_color = graph.get("material_inputs", {}).get("BaseColor")
+    assert base_color, graph.get("material_inputs")
+    assert base_color.get("connected_expression") == mul, base_color
+
+    props = c3_node.get("properties", {})
+    assert abs(props.get("r", -1.0) - 0.25) < 1e-6, props
+    assert abs(props.get("g", -1.0) - 0.5) < 1e-6, props
+    assert abs(props.get("b", -1.0) - 0.75) < 1e-6, props
 
     # Delete the Multiply node; it must disappear from the graph.
     mcp.expect("material_delete_expression", {
@@ -247,8 +312,16 @@ def test_material_instance_parameter_round_trip(mcp):
         "r": 0.0, "g": 1.0, "b": 0.0, "a": 1.0,
     })
 
+    # Read the VALUE back off the instance's own override array — the parameter
+    # NAME alone also exists on the parent, so it proves nothing about the set.
     read = mcp.expect("material_read_instance", {"instance_path": inst})
-    assert "Tint" in str(read.get("vector_parameters", [])), read
+    tints = [p for p in read.get("vector_parameters", []) if p.get("name") == "Tint"]
+    assert tints, read
+    tint_val = tints[0]
+    assert abs(tint_val["r"] - 0.0) < 1e-6, tint_val
+    assert abs(tint_val["g"] - 1.0) < 1e-6, tint_val
+    assert abs(tint_val["b"] - 0.0) < 1e-6, tint_val
+    assert abs(tint_val["a"] - 1.0) < 1e-6, tint_val
 
 
 @covers(
@@ -332,24 +405,38 @@ def test_get_available_materials(mcp, sample_material):
     assert isinstance(result, dict) and result, result
 
 
-@covers("actor_spawn", "material_apply_to_actor", "mesh_get_actor_material_info")
-def test_apply_material_to_actor(mcp, sample_material):
-    spawned = mcp.expect("actor_spawn", {
-        "class_path": "/Script/Engine.StaticMeshActor",
-        "name": "MCPTest_MatActor",
-        "location": {"x": 0.0, "y": 0.0, "z": 0.0},
+@covers("material_apply_to_actor", "mesh_get_actor_material_info")
+def test_apply_material_to_actor(mcp, sample_material, bridge):
+    """Apply the sample material to a mesh-bearing actor, then read slot 0 back
+    via the independent material-info reader. The actor is spawned at the BRIDGE
+    level with the engine cube (spawn_actor's static_mesh kwarg — house pattern
+    from test_mesh.py): a mesh-less StaticMeshActor reports zero slots, so the
+    old "info is a non-empty dict" assertion could never see the applied path."""
+    # Unique per-run name: a fixed name collides with the FName of a previously
+    # deleted actor still pending GC (spawn_actor then fails with name-in-use —
+    # the known FName-reuse-until-GC wart), so don't reuse names at all.
+    actor_name = f"MCPTest_MatActor_{os.getpid()}_{int(time.time())}"
+    bridge.expect("spawn_actor", {
+        "name": actor_name,
+        "type": "StaticMeshActor",
+        "static_mesh": "/Engine/BasicShapes/Cube.Cube",
     })
-    actor_name = spawned["actor"]["name"]
+    try:
+        result = mcp.expect("material_apply_to_actor", {
+            "actor_name": actor_name,
+            "material_path": sample_material,
+            "material_slot": 0,
+        })
+        assert result.get("success") is not False, result
 
-    result = mcp.expect("material_apply_to_actor", {
-        "actor_name": actor_name,
-        "material_path": sample_material,
-        "material_slot": 0,
-    })
-    assert result.get("success") is not False, result
-
-    info = mcp.expect("mesh_get_actor_material_info", {"actor_name": actor_name})
-    assert isinstance(info, dict) and info, info
+        info = mcp.expect("mesh_get_actor_material_info", {"actor_name": actor_name})
+        assert info.get("total_slots", 0) >= 1, info
+        slot0 = info["material_slots"][0]
+        assert slot0.get("slot") == 0, info
+        # GetPathName() is the full object path (/Game/.../M_Sample.M_Sample).
+        assert slot0.get("material_path", "").split(".")[0] == sample_material, info
+    finally:
+        bridge.command("actor_delete", {"name": actor_name})
 
 
 @covers(
@@ -387,12 +474,17 @@ def test_apply_material_to_blueprint(mcp, sample_material, bridge):
     assert result.get("success") is not False, result
 
     # get_blueprint_material_info is a bridge-internal command (no standalone MCP
-    # tool), so the read-back goes through the bridge.
+    # tool), so the read-back goes through the bridge. Assert the applied path
+    # landed on slot 0 of the component template — not just "info non-empty".
     info = bridge.expect("get_blueprint_material_info", {
         "blueprint_name": bp,
         "component_name": "Mesh",
     })
-    assert isinstance(info, dict) and info, info
+    assert info.get("has_static_mesh") is True, info
+    assert info.get("total_slots", 0) >= 1, info
+    slot0 = info["material_slots"][0]
+    assert slot0.get("slot") == 0, info
+    assert slot0.get("material_path", "").split(".")[0] == sample_material, info
 
 
 @covers(

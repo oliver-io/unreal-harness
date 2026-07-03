@@ -6,7 +6,7 @@
 
 import { test, expect, beforeAll } from "bun:test";
 import { editorSuite, NS as ROOT } from "../harness/suite.ts";
-import { ensureAbsent, assertReady, firstAssetOf } from "../harness/ops.ts";
+import { ensureAbsent, assertReady, firstAssetOf, payload } from "../harness/ops.ts";
 
 const NS = `${ROOT}/reads`;
 const SAMPLE_BP = `${NS}/BP_R`;
@@ -83,9 +83,27 @@ editorSuite("reads", (ctx) => {
 
   // ── editor utility ────────────────────────────────────────────────────────
   test("editor_console_exec", async () => {
-    const r = await ctx.mcp.expect("editor_console_exec", { command: "stat none" });
-    expect(typeof r === "object").toBeTruthy();
-  });
+    // Marker roundtrip (parity twin of the pytest test; same pattern as
+    // editor.test.ts's editor_read_logs test): exec a harmless command carrying
+    // a unique per-run marker, then observe it through a DIFFERENT primitive —
+    // editor_read_logs, the server-local tail of MCP_Unified.log. The log
+    // writer may lag the bridge reply, so poll to a bounded deadline.
+    const marker = `MCPTEST_READSMARK_${Date.now()}_${process.pid}`;
+    const r = await ctx.mcp.expect("editor_console_exec", { command: `ke * ${marker}` });
+    expect(String(r.command ?? "")).toContain(marker);
+    expect(typeof r.output).toBe("string");
+
+    let logs: { lines: string[]; returned: number; file: string } | undefined;
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      logs = (await ctx.mcp.expect("editor_read_logs", { grep: marker })) as typeof logs;
+      if (logs!.returned > 0 || Date.now() > deadline) break;
+      await new Promise((res) => setTimeout(res, 250));
+    }
+    expect(logs!.returned).toBeGreaterThanOrEqual(1);
+    expect(logs!.lines.some((l) => l.includes(marker))).toBe(true);
+    expect(logs!.file.endsWith("MCP_Unified.log")).toBe(true);
+  }, 20_000);
 
   test("input_create", async () => {
     const path = `${NS}/IA_MCPTest`;
@@ -98,6 +116,17 @@ editorSuite("reads", (ctx) => {
     });
     expect(r.asset_path).toBeTruthy();
     expect(String(r.class ?? "")).toContain("InputAction");
+
+    // Independent read-back (house pattern): the asset registry must now see
+    // the InputAction at the namespace — the echo alone proves nothing.
+    const listing = payload(await ctx.mcp.expect("asset_list", {
+      directory_path: NS,
+      recursive: false,
+      class_filter: "InputAction",
+    }));
+    const assets = (listing.assets as { name: string; class: string }[]) ?? [];
+    const created = assets.find((a) => a.name === "IA_MCPTest");
+    expect(created?.class).toBe("InputAction");
   });
 
   test("editor_live_coding_compile", async () => {
