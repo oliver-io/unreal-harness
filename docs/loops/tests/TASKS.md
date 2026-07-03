@@ -24,12 +24,6 @@ anything — do not take these descriptions at face value.
   Observe via `level_inspect` (level name / actor count) + on-disk `.umap`. CAUTION: mutates the
   shared editor's open level — MUST restore the baseline map in `finally` and respect the
   multi-agent shared-editor rules.
-- [ ] `asset_import_mesh` — generate a minimal OBJ/FBX in the test, import, observe via
-  `asset_list` + `mesh_get_bounds` (known extents prove real geometry, not just a package).
-- [ ] `asset_import_audio` — generate a WAV with known duration, observe via `asset_list` + a
-  SoundWave read (duration field).
-- [ ] `asset_import_font` — needs a TTF source (find one in repo/engine or generate; else defer),
-  observe via `asset_list` + font asset read.
 - [ ] **Landscape (3 ops, one task):** `landscape_inspect`, `landscape_list_layers`,
   `landscape_read_heightmap`. Arrange: a fixture level containing a Landscape (via
   `editor_console_exec` py or a minimal committed fixture map). Deep = assert known component

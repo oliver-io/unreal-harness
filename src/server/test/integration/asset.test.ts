@@ -216,6 +216,229 @@ editorSuite("asset", (ctx) => {
     expect(found ?? null).not.toBeNull();
   });
 
+  // ── importers: mesh / audio / font (generated sources) ────────────────────
+  //
+  // Parity twins of the pytest importer tests: generate the source file (OBJ /
+  // WAV) or use the engine's own Slate TTF, import, and observe through
+  // INDEPENDENT reads — asset_list class, a geometry/duration readback, and
+  // the saved package on disk. The disk root comes from the LIVE editor
+  // (project_context), so the assertion holds in attach mode even when the
+  // attached project differs from UE_MCP_TEST_PROJECT.
+
+  /** Attach-safe /Game/... -> Content/....uasset mapping via the live editor's
+   *  own project root (project_context.settings_paths[0] = FPaths::ProjectDir()). */
+  async function liveUassetDiskPath(gamePath: string): Promise<string> {
+    const pctx = await ctx.mcp.expect("project_context", {});
+    const root = (pctx.settings_paths as string[])[0]!;
+    const pkg = gamePath.split(".")[0]!;
+    if (!pkg.startsWith("/Game/")) throw new Error(`not a /Game/ path: ${gamePath}`);
+    return join(root, "Content", pkg.slice("/Game/".length) + ".uasset");
+  }
+
+  /** {name: class} for the assets directly under a folder, read from the
+   *  asset registry (independent of any importer's echo). */
+  async function assetClassesIn(folder: string): Promise<Record<string, string>> {
+    const listing = payload(
+      await ctx.mcp.expect("asset_list", { directory_path: folder, recursive: false }),
+    );
+    const out: Record<string, string> = {};
+    for (const a of listing.assets as { name: string; class: string }[]) out[a.name] = a.class;
+    return out;
+  }
+
+  /** A minimal OBJ: an axis-aligned cube spanning ±half on every axis
+   *  (8 vertices, 12 triangles) — known extents prove real imported geometry. */
+  function objCubeText(half = 50): string {
+    const v: string[] = [];
+    for (const z of [-half, half])
+      for (const y of [-half, half]) for (const x of [-half, half]) v.push(`v ${x} ${y} ${z}`);
+    // 1..4 = bottom (-z) ring, 5..8 = top (+z) ring, each (-x,-y)(x,-y)(-x,y)(x,y).
+    const f = [
+      [1, 3, 4], [1, 4, 2], // bottom
+      [5, 6, 8], [5, 8, 7], // top
+      [1, 2, 6], [1, 6, 5], // -y
+      [3, 7, 8], [3, 8, 4], // +y
+      [1, 5, 7], [1, 7, 3], // -x
+      [2, 4, 8], [2, 8, 6], // +x
+    ].map((t) => `f ${t.join(" ")}`);
+    return ["# MCP test cube", ...v, ...f].join("\n") + "\n";
+  }
+
+  /** A valid 16-bit PCM mono WAV with an EXACT sample count (rate*seconds),
+   *  so the imported USoundWave must report exactly `seconds` of duration. */
+  function wavBytes(seconds = 0.5, rate = 44100, freq = 440): Buffer {
+    const n = Math.round(rate * seconds);
+    const buf = Buffer.alloc(44 + n * 2);
+    buf.write("RIFF", 0);
+    buf.writeUInt32LE(36 + n * 2, 4);
+    buf.write("WAVE", 8);
+    buf.write("fmt ", 12);
+    buf.writeUInt32LE(16, 16); // fmt chunk size
+    buf.writeUInt16LE(1, 20); // PCM
+    buf.writeUInt16LE(1, 22); // mono
+    buf.writeUInt32LE(rate, 24);
+    buf.writeUInt32LE(rate * 2, 28); // byte rate
+    buf.writeUInt16LE(2, 32); // block align
+    buf.writeUInt16LE(16, 34); // bits per sample
+    buf.write("data", 36);
+    buf.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++)
+      buf.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * freq * i) / rate)), 44 + i * 2);
+    return buf;
+  }
+
+  test(
+    "test_import_mesh_obj_cube_reports_known_bounds",
+    async () => {
+      // Generate an OBJ cube spanning ±50, import it (UFbxFactory handles
+      // .obj), then observe: asset_list sees a StaticMesh, mesh_get_bounds
+      // reports the known extents, and the saved .uasset exists on disk.
+      const destFolder = `${NS}/imported`;
+      const assetName = "SM_MCPTestCube";
+      const assetPath = `${destFolder}/${assetName}`;
+      await ensureAbsent(ctx.mcp, assetPath);
+      const tmp = join(tmpdir(), "mcp_test_import_cube.obj");
+      writeFileSync(tmp, objCubeText(50));
+      try {
+        const result = await ctx.mcp.expect("asset_import_mesh", {
+          source_path: tmp,
+          destination_folder: destFolder,
+          name: assetName,
+          import_materials: false,
+          import_textures: false,
+        });
+        expect(result.count).toEqual(1);
+        expect(isFalsyOrEmpty(result.failed)).toBe(true);
+        expect((result.imported as { class: string }[])[0]!.class).toEqual("StaticMesh");
+
+        // Observer 1: the asset registry sees a StaticMesh at the destination.
+        expect((await assetClassesIn(destFolder))[assetName]).toEqual("StaticMesh");
+
+        // Observer 2: geometry — a ±50 cube reports extent 50 / size 100 per
+        // axis, centered at the origin.
+        const bounds = await ctx.mcp.expect("mesh_get_bounds", { static_mesh_path: assetPath });
+        const lb = bounds.local_bounds as {
+          box_extent: Record<string, number>;
+          origin: Record<string, number>;
+        };
+        const size = bounds.size as Record<string, number>;
+        for (const axis of ["x", "y", "z"]) {
+          expect(Math.abs(lb.box_extent[axis]! - 50)).toBeLessThan(0.1);
+          expect(Math.abs(lb.origin[axis]!)).toBeLessThan(0.1);
+          expect(Math.abs(size[axis]! - 100)).toBeLessThan(0.1);
+        }
+
+        // Observer 3: the importer saves — the package must be on disk.
+        expect(isFile(await liveUassetDiskPath(assetPath))).toBe(true);
+      } finally {
+        await ensureAbsent(ctx.mcp, assetPath);
+        try {
+          unlinkSync(tmp);
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    180000,
+  );
+
+  test(
+    "test_import_audio_wav_duration_readback",
+    async () => {
+      // Generate exactly 0.5 s of 16-bit PCM, import with looping=true, and
+      // read duration + looping back off the live USoundWave. No typed read
+      // primitive surfaces USoundWave::Duration, so the independent observer
+      // is the sanctioned `py` console escape hatch (editor_console_exec), on
+      // top of the registry class check and the on-disk package.
+      const destFolder = `${NS}/imported`;
+      const assetName = "S_MCPTestTone";
+      const assetPath = `${destFolder}/${assetName}`;
+      await ensureAbsent(ctx.mcp, assetPath);
+      const tmp = join(tmpdir(), "mcp_test_import_tone.wav");
+      writeFileSync(tmp, wavBytes(0.5, 44100));
+      try {
+        const result = await ctx.mcp.expect("asset_import_audio", {
+          destination_folder: destFolder,
+          sounds: [{ path: tmp, name: assetName, looping: true }],
+        });
+        expect(result.count).toEqual(1);
+        expect(isFalsyOrEmpty(result.failed)).toBe(true);
+        expect((result.imported as { looping: boolean }[])[0]!.looping).toBe(true);
+
+        // Observer 1: the asset registry sees a SoundWave at the destination.
+        expect((await assetClassesIn(destFolder))[assetName]).toEqual("SoundWave");
+
+        // Observer 2: duration + looping read off the loaded asset itself.
+        const probe = await ctx.mcp.expect("editor_console_exec", {
+          command:
+            `py import unreal; w = unreal.load_asset('${assetPath}'); ` +
+            `print('MCPWAV DUR=%.4f LOOP=%s' % (w.get_editor_property('duration'), ` +
+            `w.get_editor_property('looping')))`,
+        });
+        const m = /MCPWAV DUR=([\d.]+) LOOP=(\w+)/.exec(String(probe.output));
+        expect(m).not.toBeNull();
+        expect(Math.abs(Number(m![1]) - 0.5)).toBeLessThan(0.005);
+        expect(m![2]).toEqual("True");
+
+        // Observer 3: the importer saves — the package must be on disk.
+        expect(isFile(await liveUassetDiskPath(assetPath))).toBe(true);
+      } finally {
+        await ensureAbsent(ctx.mcp, assetPath);
+        try {
+          unlinkSync(tmp);
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    180000,
+  );
+
+  // Source TTF: the engine's own Slate font (ships with every UE install) —
+  // chosen over Windows fonts for portability. Skipped when the env doesn't
+  // locate an engine (mirrors the pytest skip).
+  const engineFont = process.env.UNREAL_ENGINE_ROOT
+    ? join(process.env.UNREAL_ENGINE_ROOT, "Engine", "Content", "Slate", "Fonts", "Roboto-Regular.ttf")
+    : null;
+
+  test.skipIf(!engineFont || !existsSync(engineFont))(
+    "test_import_font_ttf_creates_font_and_face",
+    async () => {
+      // Import a TTF as a runtime UFont + backing UFontFace; observe via the
+      // asset registry (Font + FontFace classes) and both packages on disk.
+      const destFolder = `${NS}/imported`;
+      const assetName = "F_MCPTestFont";
+      const fontPath = `${destFolder}/${assetName}`;
+      const facePath = `${destFolder}/${assetName}_Face`;
+      await ensureAbsent(ctx.mcp, fontPath);
+      await ensureAbsent(ctx.mcp, facePath);
+      try {
+        const result = await ctx.mcp.expect("asset_import_font", {
+          destination_folder: destFolder,
+          fonts: [{ path: engineFont, name: assetName }],
+        });
+        expect(result.count).toEqual(1);
+        expect(isFalsyOrEmpty(result.failed)).toBe(true);
+        const entry = (result.imported as { typeface: string; face_path: string }[])[0]!;
+        expect(entry.typeface).toEqual("Regular");
+        expect(entry.face_path.split(".")[0]).toEqual(facePath);
+
+        // Observer 1: the registry sees the runtime UFont AND its UFontFace.
+        const classes = await assetClassesIn(destFolder);
+        expect(classes[assetName]).toEqual("Font");
+        expect(classes[`${assetName}_Face`]).toEqual("FontFace");
+
+        // Observer 2: both saved packages on disk.
+        expect(isFile(await liveUassetDiskPath(fontPath))).toBe(true);
+        expect(isFile(await liveUassetDiskPath(facePath))).toBe(true);
+      } finally {
+        await ensureAbsent(ctx.mcp, fontPath);
+        await ensureAbsent(ctx.mcp, facePath);
+      }
+    },
+    180000,
+  );
+
   test("test_import_textures", async () => {
     // Write a tiny PNG to disk and import it as a UTexture2D. The handler saves
     // the asset, so the uasset must land at the mapped Content path.

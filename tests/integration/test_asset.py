@@ -17,6 +17,8 @@ Note on envelope shape: the AssetManager handlers wrap their payload under a
 content_browser_refresh / import_textures return their fields at the top level.
 """
 
+import math
+import re
 import struct
 import tempfile
 import zlib
@@ -26,7 +28,7 @@ import pytest
 
 from harness import config
 from harness.coverage import covers
-from harness.ops import ensure_absent, assert_ready
+from harness.ops import ensure_absent, assert_ready, payload
 
 NS = "/Game/__MCPTest__/asset"
 
@@ -217,3 +219,211 @@ def test_import_textures(mcp):
     imported_path = result["imported"][0]["asset_path"]
     assert asset_name in imported_path, result
     assert config.uasset_disk_path(imported_path).is_file(), "imported texture uasset missing"
+
+
+# ── importers: mesh / audio / font (generated sources) ──────────────────────
+#
+# These three write their own source file (OBJ / WAV) or use a known engine
+# font (TTF), import it, and observe through INDEPENDENT reads: the asset
+# registry (asset_list class), a geometry/duration readback, and the saved
+# package on disk. The disk root is derived from the LIVE editor
+# (project_context) rather than harness env, so the assertion holds under
+# --ue-attach even when the attached editor's project differs from
+# UE_MCP_TEST_PROJECT.
+
+
+def _live_uasset_disk_path(bridge, game_path: str) -> Path:
+    """Attach-safe /Game/... -> Content/....uasset mapping using the live
+    editor's own project root (project_context.settings_paths[0] is
+    FPaths::ProjectDir(), absolute)."""
+    ctx = bridge.expect("project_context", {})
+    root = Path(ctx["settings_paths"][0])
+    pkg = game_path.split(".")[0]
+    assert pkg.startswith("/Game/"), game_path
+    return root / "Content" / (pkg[len("/Game/"):] + ".uasset")
+
+
+def _asset_classes_in(bridge, folder: str) -> dict:
+    """{name: class} for the assets directly under a /Game/... folder, read
+    from the asset registry (independent of any importer's echo)."""
+    listing = payload(bridge.expect("asset_list", {
+        "directory_path": folder,
+        "recursive": False,
+    }))
+    return {a["name"]: a["class"] for a in listing["assets"]}
+
+
+def _obj_cube_text(half: float = 50.0) -> str:
+    """A minimal OBJ: an axis-aligned cube spanning ±half on every axis
+    (8 vertices, 12 triangles) — known extents prove real imported geometry."""
+    v = [(x, y, z) for z in (-half, half) for y in (-half, half) for x in (-half, half)]
+    # Vertex order above: 1..4 = bottom (-z) ring, 5..8 = top (+z) ring,
+    # each ring ordered (-x,-y) (x,-y) (-x,y) (x,y).
+    faces = [
+        (1, 3, 4), (1, 4, 2),  # bottom
+        (5, 6, 8), (5, 8, 7),  # top
+        (1, 2, 6), (1, 6, 5),  # -y
+        (3, 7, 8), (3, 8, 4),  # +y
+        (1, 5, 7), (1, 7, 3),  # -x
+        (2, 4, 8), (2, 8, 6),  # +x
+    ]
+    lines = ["# MCP test cube"]
+    lines += [f"v {x} {y} {z}" for (x, y, z) in v]
+    lines += [f"f {a} {b} {c}" for (a, b, c) in faces]
+    return "\n".join(lines) + "\n"
+
+
+def _wav_bytes(seconds: float = 0.5, rate: int = 44100, freq: float = 440.0) -> bytes:
+    """A valid 16-bit PCM mono WAV with an EXACT sample count (rate*seconds),
+    so the imported USoundWave must report exactly `seconds` of duration."""
+    n = round(rate * seconds)
+    samples = b"".join(
+        struct.pack("<h", round(8000 * math.sin(2 * math.pi * freq * i / rate)))
+        for i in range(n)
+    )
+    hdr = (
+        b"RIFF" + struct.pack("<I", 36 + len(samples)) + b"WAVE"
+        + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
+        + b"data" + struct.pack("<I", len(samples))
+    )
+    return hdr + samples
+
+
+@covers("asset_import_mesh")
+def test_import_mesh_obj_cube_reports_known_bounds(mcp):
+    """Generate an OBJ cube spanning ±50, import it (UFbxFactory handles .obj),
+    then observe through three independent reads: asset_list sees a StaticMesh,
+    mesh_get_bounds reports the known extents (real geometry, not just a
+    package), and the saved .uasset exists on disk."""
+    dest_folder = f"{NS}/imported"
+    asset_name = "SM_MCPTestCube"
+    asset_path = f"{dest_folder}/{asset_name}"
+    ensure_absent(mcp, asset_path)
+    tmp = Path(tempfile.gettempdir()) / "mcp_test_import_cube.obj"
+    tmp.write_text(_obj_cube_text(50.0))
+    try:
+        result = mcp.expect("asset_import_mesh", {
+            "source_path": str(tmp),
+            "destination_folder": dest_folder,
+            "name": asset_name,
+            "import_materials": False,
+            "import_textures": False,
+        }, timeout=180.0)
+        assert result["count"] == 1, result
+        assert not result.get("failed"), result["failed"]
+        assert result["imported"][0]["class"] == "StaticMesh", result
+
+        # Observer 1: the asset registry sees a StaticMesh at the destination.
+        assert _asset_classes_in(mcp, dest_folder).get(asset_name) == "StaticMesh"
+
+        # Observer 2: geometry — a ±50 cube must report extent 50 / size 100
+        # per axis, centered at the origin.
+        bounds = mcp.expect("mesh_get_bounds", {"static_mesh_path": asset_path})
+        lb = bounds["local_bounds"]
+        for axis in ("x", "y", "z"):
+            assert abs(lb["box_extent"][axis] - 50) < 0.1, lb
+            assert abs(lb["origin"][axis]) < 0.1, lb
+            assert abs(bounds["size"][axis] - 100) < 0.1, bounds
+
+        # Observer 3: the importer saves — the package must be on disk.
+        assert _live_uasset_disk_path(mcp, asset_path).is_file(), "imported mesh uasset missing"
+    finally:
+        ensure_absent(mcp, asset_path)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
+@covers("asset_import_audio")
+def test_import_audio_wav_duration_readback(mcp):
+    """Generate a WAV with exactly 0.5 s of 16-bit PCM, import it with
+    looping=true, and read the duration + looping flag back off the live
+    USoundWave. No typed read primitive surfaces USoundWave::Duration, so the
+    independent observer is the sanctioned `py` console escape hatch
+    (editor_console_exec), on top of the asset-registry class check and the
+    on-disk package."""
+    dest_folder = f"{NS}/imported"
+    asset_name = "S_MCPTestTone"
+    asset_path = f"{dest_folder}/{asset_name}"
+    ensure_absent(mcp, asset_path)
+    tmp = Path(tempfile.gettempdir()) / "mcp_test_import_tone.wav"
+    tmp.write_bytes(_wav_bytes(seconds=0.5, rate=44100))
+    try:
+        result = mcp.expect("asset_import_audio", {
+            "destination_folder": dest_folder,
+            "sounds": [{"path": str(tmp), "name": asset_name, "looping": True}],
+        }, timeout=180.0)
+        assert result["count"] == 1, result
+        assert not result.get("failed"), result["failed"]
+        assert result["imported"][0]["looping"] is True, result
+
+        # Observer 1: the asset registry sees a SoundWave at the destination.
+        assert _asset_classes_in(mcp, dest_folder).get(asset_name) == "SoundWave"
+
+        # Observer 2: duration + looping read off the loaded asset itself.
+        probe = mcp.expect("editor_console_exec", {
+            "command": (
+                f"py import unreal; w = unreal.load_asset('{asset_path}'); "
+                "print('MCPWAV DUR={:.4f} LOOP={}'.format("
+                "w.get_editor_property('duration'), "
+                "w.get_editor_property('looping')))"
+            ),
+        })
+        m = re.search(r"MCPWAV DUR=([\d.]+) LOOP=(\w+)", probe["output"])
+        assert m, probe
+        assert abs(float(m.group(1)) - 0.5) < 0.005, probe["output"]
+        assert m.group(2) == "True", probe["output"]
+
+        # Observer 3: the importer saves — the package must be on disk.
+        assert _live_uasset_disk_path(mcp, asset_path).is_file(), "imported wav uasset missing"
+    finally:
+        ensure_absent(mcp, asset_path)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
+@covers("asset_import_font")
+def test_import_font_ttf_creates_font_and_face(mcp):
+    """Import a TTF as a runtime UFont + backing UFontFace. Source: the
+    engine's own Slate font (Roboto-Regular.ttf ships with every UE install),
+    chosen over Windows fonts for portability. Observed via the asset
+    registry (Font + FontFace classes at the destination) and both saved
+    packages on disk."""
+    try:
+        src = config.engine_root() / "Engine" / "Content" / "Slate" / "Fonts" / "Roboto-Regular.ttf"
+    except RuntimeError:
+        pytest.skip("UNREAL_ENGINE_ROOT not set — no portable TTF source available")
+    if not src.is_file():
+        pytest.skip(f"engine Slate font not found: {src}")
+
+    dest_folder = f"{NS}/imported"
+    asset_name = "F_MCPTestFont"
+    font_path = f"{dest_folder}/{asset_name}"
+    face_path = f"{dest_folder}/{asset_name}_Face"
+    ensure_absent(mcp, font_path)
+    ensure_absent(mcp, face_path)
+    try:
+        result = mcp.expect("asset_import_font", {
+            "destination_folder": dest_folder,
+            "fonts": [{"path": str(src), "name": asset_name}],
+        }, timeout=180.0)
+        assert result["count"] == 1, result
+        assert not result.get("failed"), result["failed"]
+        entry = result["imported"][0]
+        assert entry["typeface"] == "Regular", result
+        assert entry["face_path"].split(".")[0] == face_path, result
+
+        # Observer 1: the registry sees the runtime UFont AND its UFontFace.
+        classes = _asset_classes_in(mcp, dest_folder)
+        assert classes.get(asset_name) == "Font", classes
+        assert classes.get(f"{asset_name}_Face") == "FontFace", classes
+
+        # Observer 2: both saved packages on disk.
+        assert _live_uasset_disk_path(mcp, font_path).is_file(), "font uasset missing"
+        assert _live_uasset_disk_path(mcp, face_path).is_file(), "font face uasset missing"
+    finally:
+        ensure_absent(mcp, font_path)
+        ensure_absent(mcp, face_path)
