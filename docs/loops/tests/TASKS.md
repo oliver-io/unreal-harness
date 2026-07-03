@@ -42,9 +42,6 @@ anything — do not take these descriptions at face value.
   (bReplicates on the generated class).
 - [ ] `gas_ability_set_cooldown` + `gas_ability_set_cost` — observe via an independent read of the
   generated GA (Cooldown/Cost GE class wired). If no read primitive can see it, add one or defer.
-- [ ] **Niagara setters (one task):** `niagara_emitter_set_local_space`,
-  `niagara_renderer_set_enabled`, `niagara_renderer_set_alignment`,
-  `niagara_mesh_renderer_set_mesh` — each observed via `niagara_emitter_read`.
 - [ ] `editor_viewport_get_camera` — arrange a known camera pose (console exec / a set-camera
   primitive; add one if missing), read back and assert the pose.
 - [ ] `editor_build_reflection_captures` — investigate a log-marker observation via
@@ -196,6 +193,29 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
+
+- **Niagara setter quartet** — `niagara_emitter_set_local_space`, `niagara_renderer_set_enabled`,
+  `niagara_renderer_set_alignment`, `niagara_mesh_renderer_set_mesh` (2026-07-02) — needs reader
+  extension + rebuild; blocked by shared editor. Investigated in full: none of the four written
+  fields (`FVersionedNiagaraEmitterData::bLocalSpace`, renderer `GetIsEnabled`, sprite
+  `Alignment`/`FacingMode`, mesh-renderer `Meshes[0].Mesh/Scale` —
+  `MCPNiagaraCommands_Create.cpp:654-1001`) is surfaced by ANY read primitive:
+  `niagara_emitter_read` (`MCPNiagaraCommands.cpp:391-445`) returns only
+  name/id/enabled/sim_target/scripts, `niagara_system_read` only name/id/enabled per emitter, and
+  the sole renderer listing on the wire is `niagara_renderer_set_enabled`'s own echo (asserting a
+  mutator's echo is forbidden by doctrine). The fix is a `.cpp`-body-only extension of
+  `HandleReadNiagaraEmitter` (add `local_space` + `renderers[]` with per-type
+  alignment/facing/meshes readback — drafted, compiles clean on UE 5.7 per the Live Coding build
+  log), BUT it cannot be activated in a shared-editor session: Live Coding compiled the patch and
+  then discarded it — `LogLiveCodingServer: Warning: The module
+  '...projects/trong/Binaries/Win64/UnrealEditor-UnrealMCP.dll' has not been loaded by any
+  process. Changes will be ignored.` This is the plugin-only DLL gotcha (docs/USAGE.md §3.6): the
+  editor loads the plugin DLL from `src/Plugin/UnrealMCP/Binaries/Win64`, Live Coding patches the
+  host project's copy, so NO plugin C++ change (even body-only) can hot-load — activation needs
+  the full stop → build → copy-DLL → relaunch cycle. Pick this up right after the next legitimate
+  full editor rebuild: extend the reader, then the four tests are straightforward
+  (arrange NS + emitter + sprite/mesh renderer under /Game/__MCPTest__/, act the setter,
+  observe via the extended `niagara_emitter_read`).
 
 - `editor_build_game_target` positive path (2026-07-02) — the validation-gate slice is covered in
   `src/server/test/editor_build_game_target.test.ts` (real registry handler, real dirs/files, no
