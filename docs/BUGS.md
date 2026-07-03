@@ -200,6 +200,55 @@ either tool; the test observes via `actor_spawn` + dry-run reflective read inste
 (not applied): fall back to `FindFirstObject<UClass>` without `ExactClass` (or resolve
 via the Blueprint asset's `GeneratedClass`) for `_C` names.
 
+### Bare `ALandscape` spawn+delete arms a DELAYED editor crash in `ULandscapeSubsystem::Tick` (UE 5.7 engine bug)
+
+**Harness-endangering foot-gun: this pattern killed the shared editor 2026-07-02.**
+The crash fires minutes after the offending calls, on an unrelated tick, so it will
+be misattributed to whatever ran last (it was first blamed on a foliage probe — see
+the forensics in `docs/loops/tests/TASKS.md` `foliage_inspect` annotation).
+
+- **Trigger recipe:** `actor_spawn` of `/Script/Landscape.Landscape` (a bare
+  landscape, no components) into any editor world, then `actor_delete` of it —
+  the exact arrange/teardown of the original `tests/integration/test_landscape.py`
+  positive-path tests (commit `c3e0fd0`). Any delete path is equally affected
+  (editor Delete key, py `destroy_actor` — they all funnel through
+  `UnregisterAllComponents`); the plugin's `actor_delete` is not at fault.
+- **Symptom / stack:** `EXCEPTION_ACCESS_VIOLATION` on a null `ALandscape*` in
+  `ULandscapeSubsystem::Tick`
+  (`Engine/Source/Runtime/Landscape/Private/LandscapeSubsystem.cpp:794`,
+  UE 5.7 — `Landscape->GetLandscapeInfo()` where `ActorPtr.Get()` returned null),
+  ~minutes after the delete, once GC purges the deleted actor. Crash dump:
+  `projects/trong/Saved/Crashes/UECC-Windows-0B04A79946614F24005EE68920896864_0001`.
+- **Root cause (register/unregister asymmetry, verified in engine source):**
+  `ALandscapeProxy::PostRegisterAllComponents` registers the proxy with
+  `ULandscapeSubsystem` **unconditionally** (`Landscape.cpp:3084-3090` — outside
+  the `LandscapeGuid.IsValid()` block), but `ALandscapeProxy::
+  UnregisterAllComponents` early-outs of the **entire** unregister — including the
+  subsystem — when `LandscapeGuid` is invalid (`Landscape.cpp:3111-3139`, guard at
+  `:3117`). A bare-spawned landscape never gets a valid guid ("newly spawned
+  Landscapes don't have a valid guid until PostEditImport", `Landscape.cpp:3072`),
+  so deletion leaves a stale entry in `ULandscapeSubsystem::LandscapeActors`
+  (`LandscapeSubsystem.h:302`, a `UPROPERTY` `TArray<TObjectPtr<ALandscape>>` — GC
+  nulls the reference on purge instead of keeping it alive). The next editor tick
+  dereferences the nulled entry with no null check (`LandscapeSubsystem.cpp:791-794`).
+  Note the world/level shows **zero residue** after the delete —
+  `landscape_inspect`/`actor_query` return to baseline — so a level-scoped probe
+  cannot detect the armed bomb; the residue lives in the subsystem.
+- **No in-test defuse exists today:** `unreal.LandscapeSubsystem` is not exposed to
+  Python (verified live, see TASKS.md landscape DEFERRED entry), and forcing GC just
+  detonates sooner. Writing a valid `LandscapeGuid` before delete (so the unregister
+  guard passes) is plausible from source but unverified — `LandscapeGuid` is a bare
+  `UPROPERTY(meta=(LandscapeInherited))` (`LandscapeProxy.h:447-448`, not editable),
+  and `PostEditChangeProperty` re-register side effects on a landscape proxy are
+  untested; do not attempt it against a shared editor.
+- **Mitigation chosen (2026-07-03):** the spawn-based landscape tests are gated to a
+  disposable fixture editor, where a delayed crash costs nothing shared — pytest
+  skips them under `--ue-attach`; the bun twin requires `UE_MCP_FIXTURE_EDITOR=1`
+  (same style as the level-lifecycle modules). The never-spawning
+  `actor_not_found` negative tests still run everywhere. **Rule for all agents: do
+  not spawn-and-delete `/Script/Landscape.Landscape` (or any `ALandscapeProxy`
+  subclass) in a shared editor session, ever — including "harmless" probes.**
+
 ---
 
 ## Dead wire names report (2026-07-02)

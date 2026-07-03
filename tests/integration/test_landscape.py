@@ -21,10 +21,20 @@ assigned-paint-layer positive paths (known raw heights, height_stats, layer
 assignments) need a component-bearing landscape, which no arrange primitive
 can build today.
 
-Attach-safe: the arrange is one actor spawned into (and always deleted from)
-the open level; nothing is saved. A 2026-07-02 live probe confirmed
-spawn -> observe -> delete leaves zero residue (landscape_inspect count and
-actor_query both return to baseline).
+HAZARD — why the spawn-based tests are launch-mode only (fixture editor).
+Deleting a bare spawned ``ALandscape`` arms a DELAYED editor crash (UE 5.7
+engine bug, crashed the shared editor 2026-07-02 — see docs/BUGS.md "Bare
+ALandscape spawn+delete"): ``ALandscapeProxy::PostRegisterAllComponents``
+registers the proxy with ``ULandscapeSubsystem`` unconditionally, but
+``UnregisterAllComponents`` skips the whole unregister when ``LandscapeGuid``
+is invalid — and a bare-spawned landscape never gets a valid guid. The stale
+``LandscapeActors`` entry is nulled by the next GC and dereferenced without a
+null check in ``ULandscapeSubsystem::Tick`` (LandscapeSubsystem.cpp:794),
+killing the editor minutes after the test finished. The level itself shows
+zero residue (which is what the original probe measured) — the residue is in
+the subsystem. So the spawn-based tests skip under ``--ue-attach`` and run
+only against a disposable fixture editor, where a delayed crash costs nothing
+shared. The unknown-name negative tests never spawn and always run.
 """
 
 import pytest
@@ -40,12 +50,22 @@ SPAWN_LOC = {"x": 100000.0, "y": 100000.0, "z": -10000.0}
 
 
 @pytest.fixture
-def landscape_actor(mcp):
-    """One bare ALandscape, always deleted afterward (attach-safe teardown).
+def landscape_actor(mcp, request):
+    """One bare ALandscape, always deleted afterward. LAUNCH MODE ONLY.
+
+    The teardown delete is the trigger of the delayed
+    ULandscapeSubsystem::Tick crash described in the module docstring, so
+    this arrange is forbidden against a shared attached editor.
 
     Yields ``(fname, label)``: after a same-name delete the FName stays
     reserved until GC, so a respawn can come back suffixed (``_0``) while the
     editor LABEL stays clean — handlers match either but echo the label."""
+    if request.config.getoption("--ue-attach"):
+        pytest.skip(
+            "bare-Landscape spawn+delete arms a delayed ULandscapeSubsystem::Tick "
+            "null-deref crash (UE 5.7 engine bug, docs/BUGS.md) — unsafe against a "
+            "shared attached editor; runs in launch (fixture-editor) mode only"
+        )
     try:
         mcp.call("actor_delete", {"name": ACTOR})  # idempotent re-runs
     except Exception:

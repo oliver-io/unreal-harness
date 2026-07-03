@@ -59,8 +59,10 @@ anything — do not take these descriptions at face value.
     `projects/trong/Saved/Crashes/UECC-Windows-0B04A79946614F24005EE68920896864_0001`. Nothing
     was saved (on-disk state untouched; only an autosave to `Saved/Autosaves` fired). Editor
     lifecycle is hands-off for loop agents, so the iteration stopped per contract.
-    **WARNING for whoever relaunches / runs landscape tests:** bare-Landscape spawn+delete may
-    arm this engine null-deref time bomb for the whole shared session.
+    **RESOLVED 2026-07-03:** root cause confirmed from engine source (register/unregister
+    asymmetry on invalid `LandscapeGuid`) and the landscape spawn-based tests are now gated to
+    a fixture editor — full forensics + rule in `docs/BUGS.md` § "Bare `ALandscape`
+    spawn+delete". Never spawn+delete a landscape in a shared session, even as a probe.
 - [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk
   (exists, non-zero, expected dimensions). The pose IS the fixed rig — doctrine-compliant.
 - [ ] `pie_inject_input_action` — design to stay non-VERBOTEN: bind a test input action to a
@@ -218,7 +220,18 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   `landscape_inspect` find-by-name + enumeration, deleted in teardown — live probe confirmed
   zero residue), `landscape_list_layers` its success path (component-less proxy → empty layer
   set) and both ops' `actor_not_found` gates, `landscape_read_heightmap` both documented error
-  gates (`actor_not_found`, no-ULandscapeInfo `invalid_argument`). What remains unarrangeable:
+  gates (`actor_not_found`, no-ULandscapeInfo `invalid_argument`).
+  **2026-07-03 UPDATE — spawn-based positive paths now fixture-gated:** the bare-Landscape
+  spawn+delete arrange arms a delayed `ULandscapeSubsystem::Tick` null-deref that crashed the
+  shared editor (UE 5.7 engine bug; the "zero residue" probe above measured the LEVEL — the
+  stale registration lives in the subsystem). Full forensics: `docs/BUGS.md` § "Bare
+  `ALandscape` spawn+delete". The three spawn-based tests now skip under `--ue-attach` (pytest)
+  / require `UE_MCP_FIXTURE_EDITOR=1` (bun); the three never-spawning negative tests still run
+  everywhere. First green fixture-mode execution pending, like the level-lifecycle modules.
+  Un-gating the positive paths against a shared editor needs either the engine bug fixed
+  upstream (null-check in `LandscapeSubsystem.cpp:791-794` or symmetric unregister) or a
+  verified in-test defuse — none exists today (no py `unreal.LandscapeSubsystem`; GC only
+  detonates sooner). What remains unarrangeable:
   a COMPONENT-BEARING landscape. No typed primitive creates landscape components; the UE 5.7
   Python surface exposes only `unreal.LandscapeProxy.landscape_import_heightmap_from_render_target`
   (requires components to already exist) and no `unreal.LandscapeSubsystem` — verified against
