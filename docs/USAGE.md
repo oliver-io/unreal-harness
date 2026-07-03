@@ -87,7 +87,7 @@ Every tool follows `{domain}_{verb}(_{modifier})?`. Inspection verbs: `_brief`, 
 
 Domain prefixes in active use: `actor_`, `bp_`, `material_`, `niagara_`, `anim_`, `widget_`, `statetree_`, `eqs_`, `tag_`, `gas_`, `ik_rig_`, `ik_retarget_`, `asset_`, `editor_`, `pie_`, `class_`, `enum_`, `ai_`, `input_`, `struct_`, `datatable_`, `dataasset_`, `mpc_`, `scene_`, `level_`, `project_`.
 
-There is one canonical surface: the wire name == the tool name == the C++ handler key. The legacy alias map (`ResolveCanonicalCommand`) and the sibling tool registrations were deleted in the naming migration — no back-compat aliases remain. Use canonical names exclusively.
+There is one canonical agent-facing surface: every tool has exactly one name, and for the vast majority of tools the wire name == the tool name == the C++ handler key. The legacy alias map (`ResolveCanonicalCommand`) and the sibling tool registrations were deleted in the naming migration — no open-ended back-compat alias layer remains. Two bounded, test-enforced exceptions to the strict identity exist: an enumerated set of per-tool `command:` overrides where the tool name diverges from the wire/handler key (the 18 `statetree_* → st_*` state/node/transition/binding tools, §2.12, plus `bp_add_node → add_blueprint_node`), and a conservative parameter-alias map (`src/server/src/registry/aliases.ts`) that normalizes a few documented param synonyms (Blueprint identifier, material/asset path — see §2.1) onto the canonical key before dispatch. Both are pinned by `test/gate-error-parity.test.ts` and `test/aliases.test.ts`. Use canonical tool names exclusively.
 
 Lint: `bun run lint:names` (exit code 0 = clean, 1 = violations).
 
@@ -733,7 +733,7 @@ Adding a new handler:
 4. Wire in `MCPBridge.cpp` — construct in `Initialize`, dispatch in `ExecuteCommand`, reset in `Deinitialize`.
 5. Server wrapper in `src/server/src/domains/*.ts` — a Zod-typed tool registration (wired through `register.ts`) forwarding to the bridge by command type.
 
-(Wire name == tool name == handler key — there is no alias or translation step.)
+(Wire name == tool name == handler key for all but an enumerated, test-enforced set of per-tool `command:` overrides — the `statetree_* → st_*` family (§2.12) and `bp_add_node → add_blueprint_node` — kept in parity by `test/gate-error-parity.test.ts`. Give a **new** handler one identical name in all three positions; do not add overrides.)
 
 ### 3.9. Lint scripts
 
@@ -745,7 +745,7 @@ Informational lint (exit code 0 = clean, 1 = violations):
 
 ## 4. Canonical naming
 
-There is one canonical surface — wire name == tool name == C++ handler key. No back-compat aliases exist; all documentation and prompts use canonical names.
+There is one canonical agent-facing surface — each tool has exactly one name, and all documentation and prompts use canonical names. No open-ended back-compat alias layer exists. For the vast majority of tools the wire name == tool name == C++ handler key; the exceptions are bounded and test-enforced: the per-tool `command:` overrides (`statetree_* → st_*`, §2.12; `bp_add_node → add_blueprint_node`) and the parameter-alias normalizer (`src/server/src/registry/aliases.ts` — the §2.1 Blueprint-identifier synonyms plus material/asset `path`), pinned by `test/gate-error-parity.test.ts` and `test/aliases.test.ts`.
 
 **Deliberate near-duplicates** (different semantic shape, not a 1:1 alias):
 

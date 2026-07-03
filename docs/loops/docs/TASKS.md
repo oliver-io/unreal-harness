@@ -13,15 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-013 — "No alias or translation step" (§1.5 / §3.8 / §4) is false
-Same root cause as DOC-012 and ARCH DOC-030: a bounded tool-name→wire-command translation
-layer exists (`statetree_* → st_*` family, `bp_add_node → add_blueprint_node` at
-`bp.ts:532`), plus a parameter-alias normalizer (`src/server/src/registry/aliases.ts`).
-**Fix:** Everywhere USAGE states the absolute ("wire name == tool name == handler key, no
-alias or translation step"), qualify it: the identity holds *except* for an enumerated,
-test-enforced `command:` override set and a bounded parameter-alias map. Keep the spirit
-(no open-ended alias layer) without the false absolute.
-
 ### DOC-014 — §1.2 error taxonomy: count wrong, `timeout` missing, `isRecoverable()` fictional
 - USAGE:33 says "closed set, 30 codes" — both sides define **31** (`errors.ts:12-53`,
   `MCPCommonUtils.h:31-97`); the table (USAGE:35-42) omits `timeout` (added post-doc,
