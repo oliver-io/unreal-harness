@@ -22,6 +22,45 @@ anything — do not take these descriptions at face value.
   node_add/connect; `pcg_component_generate` via `actor_inspect` on the host actor or a log marker.
 - [ ] `foliage_inspect` — needs fixture foliage (an InstancedFoliageActor with one type). If
   arranging needs a missing primitive, add it or defer with reason.
+  **2026-07-02 iteration: arrange PROVEN live, test not landed — editor crashed mid-task**
+  (crash is NOT foliage's fault; see below). Bank of live-verified facts for the next iteration
+  (trong `L_TestBed`, UE 5.7, attach mode):
+  - Baseline empty-success path verified: `foliage_inspect` on a foliage-less level returns
+    `{ifa_count:0, total_types:0, total_instances:0, types:[]}` (success, not an error).
+  - Bare IFA via typed `actor_spawn` of `/Script/Foliage.InstancedFoliageActor` registers
+    (`ifa_count` +1, zero types); `actor_delete` returned the count to baseline — B10-style
+    zero-residue for the bare-actor slice.
+  - **Value-bearing positive path arranged with ZERO C++** via the py hatch (all verified live):
+    `t = unreal.FoliageType_InstancedStaticMesh()` (transient), `t.set_editor_property('mesh',
+    unreal.load_asset('/Engine/BasicShapes/Cube.Cube'))`, then the STATIC BlueprintCallable
+    `unreal.InstancedFoliageActor.add_instances(world, t, [transforms])` (creates/uses the
+    level's canonical IFA). `foliage_inspect` mode='types' then returned
+    identity == mesh == `/Engine/BasicShapes/Cube.Cube`, display_name `Cube`, instance_count 3,
+    density 100; mode='instances' returned the EXACT arranged transforms with honest paging
+    (limit 2 → returned 2, truncated true, total_instances 3). `get_instance_transforms`
+    also exists on the py IFA (independent-observe option).
+  - Teardown route (signature verified live, execution NOT yet proven): static
+    `unreal.InstancedFoliageActor.remove_all_instances(world, t)` + `actor_delete` of the
+    (auto-created) IFA, then `foliage_inspect` back to baseline. To re-find the transient type
+    at teardown, stash it in a py global — interpreter state PERSISTS across
+    `editor_console_exec py` calls in one editor session (observed live); `get_used_foliage_types`
+    is docstring-referenced but unverified (dir() listing was truncated).
+  - Remaining error paths are static contract reads (`MCPFoliageCommands.cpp`): mode='instances'
+    without `foliage_type` → `invalid_argument`; unmatched `foliage_type` → `asset_not_found`;
+    unknown `mode` → `invalid_argument`.
+  - **Crash incident (why no test landed):** during the teardown probe the shared editor died
+    with `EXCEPTION_ACCESS_VIOLATION` in `ULandscapeSubsystem::Tick()`
+    (`LandscapeSubsystem.cpp:794` — `Landscape->GetLandscapeInfo()` where
+    `ActorPtr.Get()` in `LandscapeActors` resolved null). Nothing foliage-related is on the
+    stack; the null entry is consistent with a stale subsystem registration from a spawned+
+    deleted bare `/Script/Landscape.Landscape` — i.e. the (correct, zero-residue-on-level)
+    `test_landscape.py` arrange pattern that ran minutes earlier — nulled by a later GC and
+    dereferenced without a null check on the next tick. Crash dump:
+    `projects/trong/Saved/Crashes/UECC-Windows-0B04A79946614F24005EE68920896864_0001`. Nothing
+    was saved (on-disk state untouched; only an autosave to `Saved/Autosaves` fired). Editor
+    lifecycle is hands-off for loop agents, so the iteration stopped per contract.
+    **WARNING for whoever relaunches / runs landscape tests:** bare-Landscape spawn+delete may
+    arm this engine null-deref time bomb for the whole shared session.
 - [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk
   (exists, non-zero, expected dimensions). The pose IS the fixed rig — doctrine-compliant.
 - [ ] `pie_inject_input_action` — design to stay non-VERBOTEN: bind a test input action to a
