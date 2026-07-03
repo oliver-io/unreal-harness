@@ -13,15 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-011 — Nonexistent tool names cited as contracts
-Four USAGE references name tools that do not exist in any domain module or alias map:
-- `physics_spawn_blueprint_actor` (USAGE:227) → real tool is `actor_spawn_physics` (`actor.ts:219`)
-- `compile_blueprint` (USAGE:130, 373, 401 — including "required before bind_handler!") → real tool is `bp_compile` (`bp.ts:108`)
-- `analyze_blueprint_graph` (USAGE:165, listed as alias of `bp_inspect`) → no such alias exists
-- `content_browser_refresh` (USAGE:539) → real name `editor_content_browser_refresh` (`editor.ts:34`)
-**Fix:** Rename/remove each. While in §2.4, also add the missing actor tools it omits:
-`actor_spawn_physics`, `actor_set_property` (`actor.ts:178`), `actor_get_in_level` (`actor.ts:15`).
-
 ### DOC-012 — §2.12 StateTree: "st_* retired" is wrong, and `st_set_entry_state` doesn't exist
 USAGE:437 claims "the abbreviated `st_*` aliases were retired in the naming migration" —
 but the *wire commands and C++ handler keys are still `st_*`*, mapped via `command:`
