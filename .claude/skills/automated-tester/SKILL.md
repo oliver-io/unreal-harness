@@ -72,8 +72,9 @@ The four beats, each non-negotiable:
 - **Act** — the one operation under test. For mutators, consider a `dry_run: true`
   pre-flight assertion too (§3).
 - **Observe** — read back through a **different, deeper** primitive. For asset
-  creation, the strongest observe is **the `.uasset` exists on disk** (`uassetDiskPath`),
-  not that the create returned success.
+  creation, the strongest observe is **the `.uasset` exists on disk** (`uassetDiskPath`
+  — a file-local helper, not part of `test/harness/ops.ts`; copy it from
+  `test/integration/asset.test.ts`), not that the create returned success.
 - **Assert** — compare observed state to expectation; end risky tests with
   `await assertReady(ctx.mcp)` (crash guard).
 
@@ -172,11 +173,12 @@ test, e.g. `@covers("myfeature_do", "myfeature_inspect")`.
 cd src/server && bun test
 cd src/server && bun test test/integration/myfeature.test.ts   # one file
 
-# Against a live editor (start one first, or let the pytest harness own it):
+# Against a live editor (start one first, or let the pytest harness own it).
+# scripts/ and tests/ live at the REPO ROOT — run these from there, not src/server:
 scripts/launch-editor.ps1            # headless; or add -Gui for render/PIE-viewport tests
 scripts/run-server.ps1               # the Bun MCP server
 
-# The parity gate (builds + launches a real editor, runs the coverage oracle):
+# The parity gate (repo root; builds + launches a real editor, runs the coverage oracle):
 tests/run.ps1                        # headless
 tests/run.ps1 --ue-mode=gui          # GUI (render/PIE-viewport tests)
 tests/run.ps1 --ue-attach            # attach to an already-running editor (fast iterate)

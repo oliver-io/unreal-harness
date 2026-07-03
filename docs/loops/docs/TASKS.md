@@ -35,15 +35,6 @@ each group.
 
 ## Skills
 
-### DOC-081 — /automated-tester: two misleading operational details
-- §2 line 74 cites `uassetDiskPath` as if it were a shared harness helper; it is a
-  file-local function in `src/server/test/integration/asset.test.ts:32`, not exported from
-  `test/harness/ops.ts`. Doc-side fix: say "copy the local helper from `asset.test.ts`"
-  (promoting it into the harness is code-side — see #DEFERRED).
-- §6 lines 170-183: fenced block opens with `cd src/server && bun test` then lists
-  `scripts/launch-editor.ps1` / `scripts/run-server.ps1`, which live at repo root — run
-  verbatim the paths resolve wrong. Fix: qualify as repo-root paths.
-
 (All other 19 skills audited clean: tool names, bundled files, cross-references, and
 CLAUDE.md's skill list all verified accurate.)
 
