@@ -93,10 +93,10 @@ editor-connected works without these.
 
 | Variable | Consumed by | Error when unset |
 |---|---|---|
-| `UNREAL_PROJECT_ROOT` | `read_logs` (locates `Saved/Logs/MCP_Unified.log`), `build_game_target` | `invalid_argument` naming the variable |
-| `UNREAL_ENGINE_ROOT` | `build_game_target` (locates `Engine/Build/BatchFiles/Build.bat`) | `invalid_argument` naming the variable |
+| `UNREAL_PROJECT_ROOT` | `editor_read_logs` (locates `Saved/Logs/MCP_Unified.log`), `editor_build_game_target` | `invalid_argument` naming the variable |
+| `UNREAL_ENGINE_ROOT` | `editor_build_game_target` (locates `Engine/Build/BatchFiles/Build.bat`) | `invalid_argument` naming the variable |
 
-Export them before `run-server`, or in a wrapper script. `build_game_target`
+Export them before `run-server`, or in a wrapper script. `editor_build_game_target`
 discovers the `.uproject` by glob inside the project root and derives the UBT
 target name from its filename (override with the `target` parameter).
 
@@ -104,6 +104,6 @@ target name from its filename (override with the `target` parameter).
 
 Every `status: success` envelope means the command was *dispatched and handled* —
 for side-effect-heavy paths, confirm via the matching read tool or the unified
-log rather than the response alone. `read_logs` (requires `UNREAL_PROJECT_ROOT`)
+log rather than the response alone. `editor_read_logs` (requires `UNREAL_PROJECT_ROOT`)
 filters the single sequenced stream `[LOG:…] [PIE:…] [LIVECODING:…] [MCP:Command]`
 server-side; `grep`/`category`/`since_seq` keep the output small.

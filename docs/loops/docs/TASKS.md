@@ -23,11 +23,6 @@ each group.
 
 ## docs/DEBUGGING.md
 
-### DOC-050 — Wrong tool names: `read_logs` / `build_game_target`
-Lines 96, 97, 99, 108 cite bare names; canonical tools are `editor_read_logs`
-(`editor.ts:404`) and `editor_build_game_target` (`editor.ts:219`); no alias maps the bare
-forms. **Fix:** prefix throughout §4/§5.
-
 ### DOC-051 — Bogus sanity check `bun run mcp --help`
 Lines 39-41. `main.ts` parses no argv — the command boots a real server on :8765 (then the
 next real start trips the already-listening guard). **Fix:** replace with a real probe
@@ -134,11 +129,9 @@ Do **not** edit docs from these without first verifying; if verified, promote to
 Items understood but **out of this loop's lane** (they require code changes, not doc edits).
 Route to the MCP bugfix loop (`docs/loops/mcp/TASKS.md`) or a human decision:
 
-- **Coverage manifest is dead:** `tests/tools/regen_operations.py:16` scans the removed
-  `src/MCP/` tree; `tests/harness/operations.py` is frozen at 248 pre-migration ops (missing
-  `video_analyze`, `pie_*` additions, `catalog_*`; still contains legacy `add_blueprint_node`).
-  Needs the generator repointed at the TS registry or C++ dispatch, then a regen. (Doc task
-  DOC-040 only fixes the *description*.)
+- ~~Coverage manifest is dead~~ — RESOLVED code-side 2026-07-02 by a concurrent agent:
+  `regen_operations.py` now derives the manifest from the live Bun registry ∩ C++ dispatch
+  keys; `operations.py` regenerated (281 ops). DOC-040 documented the new reality.
 - **`config.ts:58,60` "233 domain tools"** — stale count strings inside code comments/log
   labels; reconcile when fixing DOC-031's counting policy.
 - **Stale code comments referencing the deleted Python server** — `errors.ts:9`,
