@@ -20,10 +20,6 @@ anything — do not take these descriptions at face value.
   `tests/fixtures/TestProject/TestProject.uproject` does NOT enable the PCG plugin — enabling it
   (built-in engine plugin) is part of the task. Observe: topology via `pcg_graph_read` after
   node_add/connect; `pcg_component_generate` via `actor_inspect` on the host actor or a log marker.
-- [ ] **Landscape (3 ops, one task):** `landscape_inspect`, `landscape_list_layers`,
-  `landscape_read_heightmap`. Arrange: a fixture level containing a Landscape (via
-  `editor_console_exec` py or a minimal committed fixture map). Deep = assert known component
-  counts / heightmap values, not just shape.
 - [ ] `foliage_inspect` — needs fixture foliage (an InstancedFoliageActor with one type). If
   arranging needs a missing primitive, add it or defer with reason.
 - [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk
@@ -173,6 +169,28 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
+
+- **Landscape value-bearing positive paths** — `landscape_read_heightmap` height stats /
+  known-sample assertions and `landscape_list_layers` assigned-layer entries (2026-07-02). The
+  three landscape ops LANDED with real coverage (gate 20 → 17; parity twins
+  `tests/integration/test_landscape.py` + `src/server/test/integration/landscape.test.ts`, 6/6
+  green live in attach mode): `landscape_inspect` has a full positive path (a bare
+  `/Script/Landscape.Landscape` arranged via typed `actor_spawn`, observed via
+  `landscape_inspect` find-by-name + enumeration, deleted in teardown — live probe confirmed
+  zero residue), `landscape_list_layers` its success path (component-less proxy → empty layer
+  set) and both ops' `actor_not_found` gates, `landscape_read_heightmap` both documented error
+  gates (`actor_not_found`, no-ULandscapeInfo `invalid_argument`). What remains unarrangeable:
+  a COMPONENT-BEARING landscape. No typed primitive creates landscape components; the UE 5.7
+  Python surface exposes only `unreal.LandscapeProxy.landscape_import_heightmap_from_render_target`
+  (requires components to already exist) and no `unreal.LandscapeSubsystem` — verified against
+  the live 5.7 editor by introspection; the C-side creation path (`ALandscape::Import` /
+  `FLandscapeConfigHelper`) is not reflected. A committed fixture .umap with a tiny landscape
+  would also work but could not be authored this task (no fixture editor; shared trong editor
+  must not switch levels). Unblock either by (a) generating a minimal landscape fixture map on
+  the next fixture-editor (launch-mode) session and committing it under
+  `tests/fixtures/TestProject/Content`, or (b) a small C++ arrange primitive
+  (`landscape_create_for_test`-style Import wrapper) after the next legitimate full rebuild —
+  then assert known raw heights / `height_stats` / an assigned paint layer.
 
 - **Level lifecycle — tests WRITTEN, live execution deferred to the next fixture-editor
   (launch-mode) run** (2026-07-02). `level_new`/`level_load`/`level_save`/`level_save_as` now
