@@ -200,6 +200,21 @@ place of undo (`docs/ARCHITECTURE.md` §5) — there is no undo to lean on.
 - **Idempotent + namespaced.** `ensureAbsent` before create; scratch under
   `/Game/__MCPTest__/`; transient actors for throwaway state; teardown that never
   fails the run.
+- **The test project is a persistent fixture, not an ephemeral copy.** Isolation is
+  *which project* + *which namespace*, not a clone-per-run: the harness builds and
+  boots `tests/fixtures/TestProject` (override: `UE_MCP_TEST_PROJECT`) and confines
+  all writes to `/Game/__MCPTest__/`. Nothing ever copies a game.
+- **Tests only ever attach to the test project's editor.** Both harnesses guard the
+  attach path with the editor's own `project_context` identity: the Bun
+  `editorSuite` treats an editor hosting any *other* project (someone's real game)
+  as not-live and skips, and pytest `--ue-attach` refuses to run. Target a specific
+  project deliberately via `UE_MCP_TEST_PROJECT`; `UE_MCP_ATTACH_ANY=1` bypasses the
+  guard entirely (you own the consequences).
+- **A test launch owns the machine-level environment.** When the harness launches
+  its own editor, anything already holding the bridge port — a zombie test editor
+  *or another project's live editor* — is stopped first (precise port-owner
+  tree-kill, then a full socket-release wait). Don't run tests and drive a real
+  game's editor on the same bridge port at the same time.
 
 ---
 

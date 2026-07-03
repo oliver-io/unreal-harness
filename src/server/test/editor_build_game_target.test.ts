@@ -77,7 +77,11 @@ describe("editor_build_game_target validation gates (no UBT spawn)", () => {
     expect(r.error_hint).toContain("UNREAL_PROJECT_ROOT");
   });
 
-  test("Unix-only path is rejected and falls back to the env root", async () => {
+  // The next two tests encode host-Windows semantics: the handler discards a
+  // Unix-shaped project_root ONLY when the build host is Windows (a container
+  // caller passing "/workspace"). On a POSIX host "/..." is a native path and
+  // is scanned directly, so these cases don't exist there.
+  test.skipIf(process.platform !== "win32")("Unix-only path is rejected and falls back to the env root", async () => {
     // Env root is a REAL empty dir: if the fallback happens, the next gate
     // (the .uproject scan) fires and names THAT dir — proving "/workspace"
     // was discarded rather than scanned.
@@ -93,7 +97,7 @@ describe("editor_build_game_target validation gates (no UBT spawn)", () => {
     expect(r.error).toContain("found 0");
   });
 
-  test("Unix-only path with no env fallback: the no-root error, not a scan of '/workspace'", async () => {
+  test.skipIf(process.platform !== "win32")("Unix-only path with no env fallback: the no-root error, not a scan of '/workspace'", async () => {
     const r: any = await buildGameTargetTool().handler(
       { project_root: "/workspace", target: "" },
       ctx,

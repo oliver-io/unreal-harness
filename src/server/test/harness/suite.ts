@@ -7,12 +7,43 @@
  */
 
 import { describe, beforeAll, afterAll } from "bun:test";
+import { resolve } from "node:path";
 import { startTestClient, type TestClient } from "./mcpClient.ts";
 import { RawBridge } from "./bridgeClient.ts";
 import { editorReady } from "./bridge.ts";
+import { projectDir, BRIDGE_PORT } from "./env.ts";
 
-/** Probed once at import — true iff an interactive editor is on :55557. */
-export const LIVE: boolean = await editorReady();
+/** True iff the interactive editor on the bridge port is hosting the TEST
+ *  project (`UE_MCP_TEST_PROJECT`, default the fixture project). An editor
+ *  hosting any OTHER project — typically someone's real game under projects/ —
+ *  is treated as NOT live and every suite skips: attaching blindly is how test
+ *  mutations end up inside a real project's Content. Identity comes from the
+ *  editor's own `project_context` (settings_paths[0] == FPaths::ProjectDir()).
+ *  Escape hatch: UE_MCP_ATTACH_ANY=1 attaches to whatever is there. */
+async function liveTestEditor(): Promise<boolean> {
+  if (!(await editorReady())) return false;
+  if (process.env.UE_MCP_ATTACH_ANY === "1") return true;
+  try {
+    const ctx = await new RawBridge().expect("project_context", {});
+    const hosted = resolve(String((ctx.settings_paths as string[] | undefined)?.[0] ?? ""));
+    const expected = resolve(projectDir());
+    const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+    if (norm(hosted) === norm(expected)) return true;
+    console.warn(
+      `editor on :${BRIDGE_PORT} hosts '${hosted}', not the test project '${expected}' — ` +
+        "editor suites SKIPPED so tests never mutate a project they don't own. " +
+        "Point UE_MCP_TEST_PROJECT at that project to target it deliberately, " +
+        "or set UE_MCP_ATTACH_ANY=1 to bypass this guard.",
+    );
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Probed once at import — true iff an interactive editor hosting the test
+ *  project is on the bridge port. */
+export const LIVE: boolean = await liveTestEditor();
 
 /** Render/screenshot/window tests need a real RHI (a GUI editor). Off under the
  *  default headless -nullrhi editor; set UE_MCP_GUI=1 when running a GUI editor.

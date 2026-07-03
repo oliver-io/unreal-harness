@@ -237,16 +237,24 @@ class EditorSession:
 
 
 def _free_bridge_port_from_stray_editors(bridge) -> None:
-    """If something already answers on the bridge port before we launch, it's a
-    leftover headless test editor (a crash/zombie) — its cross-talk on 55557
-    corrupts the new session. Kill stray UnrealEditor-Cmd processes so our editor
-    owns the port. Targets ONLY the headless -Cmd binary, never a user's GUI
-    UnrealEditor.exe. Best-effort + Windows-only (the test platform)."""
+    """The bridge port must belong to the editor WE launch. Anything already
+    listening there — a zombie headless test editor OR another project's live
+    editor — is machine-level state the test run owns (docs/TESTING.md): its
+    cross-talk on the port corrupts the new session, and attaching to it is how
+    test mutations end up inside a real project. Stop the owning process tree
+    (precise: the port owner, not a blanket image-name sweep) so our editor
+    owns the port. Best-effort + Windows-only (the test platform)."""
     if not _port_in_use(bridge.host, bridge.port):
         return
     if not sys.platform.startswith("win"):
         return
-    subprocess.run(["taskkill", "/F", "/IM", "UnrealEditor-Cmd.exe"], capture_output=True)
+    for pid in _port_owner_pids(bridge.port):
+        print(
+            f"[harness] bridge port {bridge.port} held by pid {pid} — "
+            "stopping it so the test editor owns the port",
+            flush=True,
+        )
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
     # Wait for the stray to FULLY release the port (TIME_WAIT included) before we
     # launch — otherwise the new editor's listener bind races the dying one and
     # the boot gate may never open. Up to ~15s.
@@ -255,6 +263,22 @@ def _free_bridge_port_from_stray_editors(bridge) -> None:
             time.sleep(0.5)  # small settle margin after the socket frees
             return
         time.sleep(0.25)
+
+
+def _port_owner_pids(port: int) -> List[int]:
+    """PIDs of processes LISTENING on the port (Windows netstat parse)."""
+    out = subprocess.run(
+        ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True
+    ).stdout
+    pids = set()
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[3] == "LISTENING" and parts[1].endswith(f":{port}"):
+            try:
+                pids.add(int(parts[4]))
+            except ValueError:
+                pass
+    return sorted(pids)
 
 
 def _port_in_use(host: str, port: int) -> bool:

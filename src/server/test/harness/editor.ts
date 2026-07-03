@@ -17,6 +17,36 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class EditorLaunchError extends Error {}
 
+/** The bridge port must belong to the editor WE launch. Anything already
+ *  listening there — a zombie test editor or another project's live editor —
+ *  is machine-level state the test run owns (docs/TESTING.md): stop the owning
+ *  process tree, then wait for the socket to fully release so our editor's
+ *  listener bind doesn't race the dying one. Best-effort. */
+export async function reclaimBridgePort(): Promise<void> {
+  if ((await probeBridge()) === "down") return;
+  if (process.platform === "win32") {
+    const q = Bun.spawnSync([
+      "powershell", "-NoProfile", "-Command",
+      `(Get-NetTCPConnection -LocalPort ${env.BRIDGE_PORT} -State Listen -ErrorAction SilentlyContinue).OwningProcess`,
+    ]);
+    const pids = [...new Set(q.stdout.toString().split(/\s+/).filter((t) => /^\d+$/.test(t)))];
+    for (const pid of pids) {
+      console.warn(
+        `bridge port ${env.BRIDGE_PORT} held by pid ${pid} — stopping it so the test editor owns the port`,
+      );
+      Bun.spawnSync(["taskkill", "/F", "/T", "/PID", pid], { stdout: "ignore", stderr: "ignore" });
+    }
+  } else {
+    Bun.spawnSync(["sh", "-c", `lsof -ti tcp:${env.BRIDGE_PORT} | xargs -r kill -9`], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  }
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline && (await probeBridge()) !== "down") await sleep(500);
+  await sleep(500); // settle margin after the socket frees
+}
+
 export function ensurePluginLinked(): void {
   const dst = env.pluginDest();
   if (env.isDir(dst)) return;
@@ -36,6 +66,7 @@ export class EditorSession {
 
   async start(build: "auto" | "always" | "never" = "auto"): Promise<this> {
     ensurePluginLinked();
+    await reclaimBridgePort();
     mkdirSync(this.logDir, { recursive: true });
 
     if (build === "always" || (build === "auto" && !env.isBuilt())) {

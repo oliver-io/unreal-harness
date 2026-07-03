@@ -234,9 +234,11 @@ const editorBuildGameTarget = defineTool({
   }),
   handler: (args) => {
     let candidate = args.project_root.trim();
-    // Reject Unix-only paths (e.g. "/workspace" from a container) — the build
-    // runs on the Windows host and needs a Windows path.
+    // Reject Unix-only paths (e.g. "/workspace" from a container) when the
+    // build host is Windows — the build runs on the host and needs a host
+    // path. On a POSIX host, "/..." is a native path and passes through.
     if (
+      process.platform === "win32" &&
       candidate &&
       candidate.startsWith("/") &&
       !candidate.startsWith("/c/") &&

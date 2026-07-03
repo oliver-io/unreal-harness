@@ -24,6 +24,8 @@ Options
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from harness import config
@@ -66,6 +68,29 @@ def ue_mode(request) -> str:
     return request.config.getoption("--ue-mode")
 
 
+def _assert_attached_editor_is_test_project(bridge: BridgeClient) -> None:
+    """--ue-attach trusts an already-running editor — but ONLY one hosting the
+    test project (UE_MCP_TEST_PROJECT, default the fixture). Attaching blindly
+    is how test mutations end up inside a real project's Content. Identity comes
+    from the editor's own project_context (settings_paths[0] ==
+    FPaths::ProjectDir()). Escape hatch: UE_MCP_ATTACH_ANY=1."""
+    if os.environ.get("UE_MCP_ATTACH_ANY") == "1":
+        return
+    ctx = bridge.expect("project_context", {})
+    hosted = str((ctx.get("settings_paths") or [""])[0])
+    hosted_n = os.path.normcase(os.path.normpath(os.path.abspath(hosted)))
+    expected_n = os.path.normcase(os.path.normpath(str(config.project_dir())))
+    if hosted_n != expected_n:
+        pytest.fail(
+            f"--ue-attach: the editor on {config.BRIDGE_HOST}:{config.BRIDGE_PORT} hosts "
+            f"'{hosted}', not the test project '{config.project_dir()}'. Refusing to run "
+            "tests against a project the harness doesn't own. Point UE_MCP_TEST_PROJECT "
+            "at that project to target it deliberately, or set UE_MCP_ATTACH_ANY=1 to "
+            "bypass this guard.",
+            pytrace=False,
+        )
+
+
 @pytest.fixture(scope="session")
 def editor_session(request, ue_mode):
     """Boot (or attach to) the editor once per session."""
@@ -76,6 +101,7 @@ def editor_session(request, ue_mode):
                 "--ue-attach set but no interactive editor is listening on "
                 f"{config.BRIDGE_HOST}:{config.BRIDGE_PORT}"
             )
+        _assert_attached_editor_is_test_project(bridge)
         yield None  # nothing to own/tear down
         return
 

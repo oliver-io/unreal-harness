@@ -5,6 +5,20 @@ same change that alters behavior.
 
 ## Unreleased
 
+- **Test-harness project-identity guard.** Editor-gated tests can no longer run
+  against a project the harness doesn't own: the Bun `editorSuite` now verifies the
+  attached editor's `project_context` (settings_paths[0]) matches the test project
+  (`UE_MCP_TEST_PROJECT`, default the fixture) and skips otherwise; pytest
+  `--ue-attach` refuses with the same check. Previously the suites attached blindly
+  to whatever interactive editor was on :55557 — which is how a real game
+  (projects/trong) accumulated `__MCPTest__` debris and two in-place asset
+  mutations. `UE_MCP_ATTACH_ANY=1` bypasses. Both editor launchers also reclaim the
+  bridge port up front (precise port-owner tree-kill — covers another project's
+  live editor, not just zombie `-Cmd` processes). Doctrine: TESTING.md §7.
+- `editor_build_game_target`: the Unix-shaped-`project_root` discard (container
+  callers passing `/workspace`) now applies only when the build host is Windows —
+  on a POSIX host `/...` is a native path. Fixes the four guard-slice test failures
+  on Linux CI, where the tests' own `/tmp` scratch roots were being discarded.
 - Bun-side coverage ledger for server-local tools (`src/server/test/coverage.test.ts`
   + `test/harness/coverage.ts`): the analog of pytest's `test_zz_coverage.py` for the
   13 registry tools whose wire name has no C++ dispatch key (`catalog_*`, `code_*`,
