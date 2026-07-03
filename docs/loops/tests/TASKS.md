@@ -14,12 +14,6 @@ anything — do not take these descriptions at face value.
 
 ## B. Wire ops with NO test at all (from the set diff)
 
-- [ ] **PCG domain (9 ops, one task):** `pcg_graph_create`, `pcg_graph_read`, `pcg_list_graphs`,
-  `pcg_list_node_types`, `pcg_node_add`, `pcg_node_connect`, `pcg_node_set_property`,
-  `pcg_component_add`, `pcg_component_generate` — zero coverage for the whole domain. Arrange:
-  `tests/fixtures/TestProject/TestProject.uproject` does NOT enable the PCG plugin — enabling it
-  (built-in engine plugin) is part of the task. Observe: topology via `pcg_graph_read` after
-  node_add/connect; `pcg_component_generate` via `actor_inspect` on the host actor or a log marker.
 - [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk
   (exists, non-zero, expected dimensions). The pose IS the fixed rig — doctrine-compliant.
 - [ ] `pie_inject_input_action` — design to stay non-VERBOTEN: bind a test input action to a
