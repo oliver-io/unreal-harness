@@ -16,6 +16,7 @@ import { test, expect, beforeAll } from "bun:test";
 import { editorSuite, NS as ROOT } from "../harness/suite.ts";
 import { ensureAbsent, assertReady } from "../harness/ops.ts";
 import type { Commandable } from "../harness/ops.ts";
+import { covers } from "../harness/coverage.ts";
 
 // A StaticMeshActor needs a mesh for get_actor_material_info to report a slot;
 // the engine cube is always present and asset-free for the test project.
@@ -205,5 +206,93 @@ editorSuite("actor", (ctx) => {
     expect(result.success).toBe(true);
     expect(String(result.gamemode_class ?? "")).toContain("GameMode");
     await assertReady(ctx.mcp);
+  });
+});
+
+// Separate suite: the actor_spawn_physics composite is fully self-arranging
+// (it builds its own throwaway Blueprint), so it must not depend on the shared
+// StaticMeshActor fixture above — whose origin spawn fails in levels with
+// collision at (0,0,0).
+editorSuite("actor_spawn_physics", (ctx) => {
+  covers("actor_spawn_physics");
+  test("actor_spawn_physics_composite_spawns_simulating_actor", async () => {
+    // SERVER-LOCAL composite under test (src/server/src/domains/actor.ts):
+    // actor_spawn_physics fans out over bp_create_blueprint → bp_add_component
+    // → mesh_set_static_mesh_properties → physics_set_properties → bp_compile
+    // → spawn_blueprint_actor, and returns the final spawn ENVELOPE
+    // ({status:"success", result:ActorToJsonObject}) — so ctx.mcp.expect()
+    // unwraps it like any bridge tool. Invoked through the real MCP client
+    // (protocol → registry → the composite's handler), never the raw bridge.
+    const base = `MCPTest_SpawnPhysics_${process.pid}`;
+    // bp_create_blueprint resolves the composite's short name `<base>_BP`
+    // against /Game/Blueprints — that asset is ours to pre-clear and delete.
+    const bpPath = `/Game/Blueprints/${base}_BP`;
+
+    // Arrange: nothing of ours may pre-exist (idempotent re-runs). The pid
+    // suffix keeps concurrent agents apart; the sweep clears stale leftovers
+    // from a previous crashed run of the same pid.
+    await ensureAbsent(ctx.mcp, bpPath);
+    const stale = await ctx.mcp.expect("find_actors_by_name", { pattern: base });
+    for (const a of (stale.actors as any[]) ?? []) {
+      await deleteActorIfPresent(ctx.mcp, String(a.name));
+    }
+
+    let spawnedName: string | undefined;
+    try {
+      // Act — through the ACTUAL actor_spawn_physics ToolDef handler.
+      const spawned = await ctx.mcp.expect("actor_spawn_physics", {
+        name: base,
+        location: [0.0, 0.0, 3000.0],
+        mass: 5.0,
+        simulate_physics: true,
+      });
+      // spawn_blueprint_actor answers with ActorToJsonObject: the instance
+      // FName derives from the generated class (<base>_BP_C_N).
+      spawnedName = String(spawned.name);
+      expect(spawnedName).toContain(base);
+      expect(String(spawned.class)).toContain(`${base}_BP_C`);
+
+      // Observe 1 (different primitive): the actor exists in the level.
+      const found = await ctx.mcp.expect("find_actors_by_name", { pattern: base });
+      const names = ((found.actors as any[]) ?? []).map((a) => a.name);
+      expect(names).toContain(spawnedName);
+
+      // Observe 2 (different primitive): actor_inspect sees the composite's
+      // "Mesh" StaticMeshComponent carrying the default engine cube.
+      const inspected = await ctx.mcp.expect("actor_inspect", { name: spawnedName });
+      expect(String(inspected.class)).toContain(`${base}_BP_C`);
+      const comps = (inspected.components as any[]) ?? [];
+      const mesh = comps.find((c) => c.name === "Mesh");
+      expect(mesh).toBeDefined();
+      expect(String(mesh.class)).toContain("StaticMeshComponent");
+
+      // Observe 3: simulate-physics landed on the spawned INSTANCE. There is
+      // no dedicated physics read for a generic actor, so read the leaf via
+      // actor_set_property dry_run — it resolves + exports `before` without
+      // mutating (properties_changed diff, doc-13 convention).
+      const probe = await ctx.mcp.expect("actor_set_property", {
+        name: spawnedName,
+        property: "Mesh.BodyInstance.bSimulatePhysics",
+        value: true,
+        dry_run: true,
+      });
+      expect(probe.dry_run).toBe(true);
+      const entry = (probe.diff as any).properties_changed[0];
+      expect(entry.before).toBe("True");
+
+      // The mass override from physics_set_properties, same read path.
+      const massProbe = await ctx.mcp.expect("actor_set_property", {
+        name: spawnedName,
+        property: "Mesh.BodyInstance.MassInKgOverride",
+        value: 5.0,
+        dry_run: true,
+      });
+      const massEntry = (massProbe.diff as any).properties_changed[0];
+      expect(Math.abs(parseFloat(String(massEntry.before)) - 5.0) < 0.001).toBe(true);
+    } finally {
+      // Self-cleaning even on failure: drop the actor and the throwaway BP.
+      if (spawnedName) await deleteActorIfPresent(ctx.mcp, spawnedName);
+      await ensureAbsent(ctx.mcp, bpPath);
+    }
   });
 });
