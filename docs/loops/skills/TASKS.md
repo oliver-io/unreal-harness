@@ -11,19 +11,16 @@ self-cleaning.
 
 ## TODO
 
-### TASK-4 — /ue-expert: proposals only, NO test (effort S)
-Recommendation from analysis is NONE for tests (verifiable core already covered by
-`test_kinematics.py` and owned by /position; the rest needs C++ fixtures / net PIE /
-render verdicts / GC timing — all out of harness reach or inherently flaky).
-Proposals to record:
-- STALE guidance: skill recommends direct field writes to `NetUpdateFrequency` /
-  `MinNetUpdateFrequency`; both are `UE_DEPRECATED(5.5, ...)` with mandated setters
-  (`Actor.h:874-881`) — skill should say `SetNetUpdateFrequency()` /
-  `SetMinNetUpdateFrequency()`.
-- Cross-reference: the coordinate/rotation claims in ue-expert are machine-checked by
-  the /position battery (TASK-1) — the skill can point there instead of restating.
+(empty — loop complete 2026-07-02)
 
 ## DONE
+
+- **TASK-4 — /ue-expert proposals only, NO test** (2026-07-02): analysis recommendation
+  NONE for tests confirmed (verifiable core owned by /position + `test_kinematics.py`;
+  the rest needs C++ fixtures / net PIE / render verdicts / GC timing). Both proposals
+  recorded in PROPOSALS.md: stale direct-field guidance at SKILL.md:126 (deprecation
+  re-verified at `Actor.h:874-881`, setters at `:4622-4640`; NetPriority/dormancy remain
+  direct), and the /position cross-reference for the coordinate/rotation bullets.
 
 - **TASK-3 — /npc_logic StateTree taxonomy guard** (2026-07-02):
   `tests/skills/test_npc_logic_statetree_taxonomy.py`, 3/3 green vs a live editor

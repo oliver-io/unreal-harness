@@ -131,3 +131,40 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 - **Proposed change**: soften the reference to "the **Mover** plugin (Experimental in 5.7)" —
   drop the "(2.0)". The sentence's substance (experimental, long-runway, CMC is the shipping
   path) is correct and stays.
+
+### /ue-expert — STALE: direct field writes to NetUpdateFrequency/MinNetUpdateFrequency are deprecated since 5.5 (TASK-4)
+
+- **Skill**: `.claude/skills/ue-expert/SKILL.md:126` — "**Set replication tuning at
+  constructor time (zero per-frame cost):** bucket actors by category and set
+  `NetUpdateFrequency`/`MinNetUpdateFrequency`/`NetPriority`/dormancy once."
+- **Test**: n/a (C++ authoring guidance; deprecation is a compile-time fact, no runtime
+  oracle in this harness).
+- **Evidence** (UE 5.7 source, re-verified this task):
+  `Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h:874` —
+  `UE_DEPRECATED(5.5, "Public access to NetUpdateFrequency has been deprecated. Use
+  SetNetUpdateFrequency() and GetNetUpdateFrequency() instead.")`; same for
+  `MinNetUpdateFrequency` at `:879-881`. Setters/getters declared at `:4622-4640`.
+  An agent following the skill's wording verbatim writes `NetUpdateFrequency = 2.f;` and
+  gets a deprecation warning (or an error under warnings-as-errors). `NetPriority` and
+  dormancy remain directly settable — only the two frequency fields moved to setters.
+- **Proposed change**: reword SKILL.md:126 to "…set the tuning once:
+  `SetNetUpdateFrequency()`/`SetMinNetUpdateFrequency()` (direct field access is
+  `UE_DEPRECATED(5.5)`), plus `NetPriority`/dormancy." The advice itself (constructor-time
+  bucketing, zero per-frame cost) is correct and stays. The rate-concept mentions of
+  `NetUpdateFrequency` at SKILL.md:125/149 are fine as-is — they name the throttle, not an
+  access pattern.
+
+### /ue-expert — coordinate/rotation claims are now machine-checked by the /position battery (TASK-4, cross-reference)
+
+- **Skill**: `.claude/skills/ue-expert/SKILL.md` — the coordinate/transform convention
+  bullets (forward axis, yaw handedness, transform composition order) that overlap
+  `/position`'s jurisdiction.
+- **Test**: `tests/skills/test_position_conventions.py` (TASK-1, 3/3 green) pins forward=+X,
+  +yaw→+Y handedness, `InitCapsuleSize(34, 88)`, and the LHS-first composition identity
+  against a live editor; `tests/integration/test_kinematics.py` covers component-space
+  probe/solve math.
+- **Proposed change**: where ue-expert restates coordinate/rotation conventions, add a
+  pointer that these specific facts are machine-verified by the /position test battery —
+  so future audits know which bullets are harness-guarded fact vs advisory prose, and the
+  two skills don't drift apart. No content change to the claims themselves (all
+  spot-checked correct).
