@@ -154,6 +154,62 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   `NetUpdateFrequency` at SKILL.md:125/149 are fine as-is — they name the throttle, not an
   access pattern.
 
+### /networking — RPC net-type claim is source-confirmed CORRECT, but the authoring primitive it funnels into is UNREACHABLE (TASK-5)
+
+- **Skill**: `.claude/skills/networking/reference/REPLICATION.md:71,108`,
+  `reference/AUTHORITY.md:29-33` — a Blueprint RPC is a custom event whose net type is one
+  of Run-on-Server / Run-on-Client / Multicast, exactly one at a time, and the type governs
+  routing.
+- **Test**: `tests/skills/test_networking_rpc_events.py` (currently **xfails** — see the
+  bug below; 1 xfailed vs a live editor 2026-07-02, with the baseline half green: a fresh
+  `bp_add_custom_event` node reads back via the `bp_inspect` decoder with NO `replication`
+  field, i.e. GetNetFlags()==0).
+- **Evidence — the claim itself is engine-true** (UE 5.7 source, read this task):
+  - `CoreUObject/Public/UObject/Script.h:142` `FUNC_Net = 0x40`, `:143`
+    `FUNC_NetReliable = 0x80`, `:150` `FUNC_NetMulticast = 0x4000`, `:157`
+    `FUNC_NetServer = 0x200000`, `:160` `FUNC_NetClient = 0x1000000`; `:183`
+    `FUNC_NetFuncFlags = FUNC_Net|FUNC_NetReliable|FUNC_NetServer|FUNC_NetClient|FUNC_NetMulticast`.
+  - `Editor/BlueprintGraph/Private/K2Node_CustomEvent.cpp:324-345` —
+    `GetNetFlags() = FunctionFlags & FUNC_NetFuncFlags` (parent flags win only for
+    overrides; a fresh custom event carries exactly what the author set).
+  - Harness mutator mirrors the editor faithfully: `MCPBlueprintCommands.cpp:1583-1590`
+    dropdown→bit map, `:1645-1654` clear-then-OR (clears all five net bits, ORs
+    `FUNC_Net` + the ONE chosen specifier) — so the skill's "exactly one type" claim is
+    structurally enforced. Decoder at `:2986-3009` re-derives the type from GetNetFlags(),
+    field absent when 0 — a genuinely independent oracle.
+- **BUG discovered (for the orchestrator's BUGS.md pass — not fixed here)**: the wire
+  command `bp_set_event_replication` is **not routed**. The handler exists and is wired
+  inside `FMCPBlueprintCommands::HandleCommand` (`MCPBlueprintCommands.cpp:117` →
+  `HandleSetEventReplication` `:1551`), the server registers the tool
+  (`domains/bp.ts:429`), and it sits in the PIE blocklist (`MCPCommonUtils.cpp:214`) —
+  but `FMCPBridge::ExecuteCommand`'s Blueprint dispatch chain (`MCPBridge.cpp:748-788`)
+  omits it (`bp_set_class_replication` is there at `:753`; `bp_set_event_replication`
+  appears nowhere in MCPBridge.cpp), so the bridge falls through to
+  `Unknown command` (`:1187`). Handler = unreachable dead code; the tool has never worked
+  end-to-end. The test xfails on exactly this signature and will run its full six-step
+  battery green the moment the dispatch line lands (no test change needed).
+- **Spec deviation (task-spec correction, not a skill defect)**: TASKS.md TASK-5 named
+  `bp_read include_node_details:true` as the observer, but the replication decoder lives
+  in `HandleAnalyzeBlueprintGraph` — the **`bp_inspect`** wire command
+  (`MCPBlueprintCommands.cpp:171-174`); `bp_read` (`HandleReadBlueprintContent`,
+  `:2549-2561`) emits only name/class/title per event-graph node. The test observes via
+  `bp_inspect`.
+- **Proposed change**: none to the skill's content — the RPC-type teaching is correct and
+  (once the routing bug is fixed) machine-checked. Consider a server-side parity guard
+  (every registered bridgeTool command answered by the C++ router) so a dead-dispatch tool
+  can't ship silently again.
+
+### /networking — iteration-2 unauthorable ledger (TASK-5, ledger note)
+
+- RepNotify/`ReplicatedUsing` and dormancy guidance: NO authoring primitive exists
+  (`bp_set_variable_properties` writes only CPF_Net + ReplicationCondition,
+  `BPVariables.cpp:610-631`; `bp_set_class_replication` has no dormancy param) —
+  advisory-only, not a skill defect. The `reliable` RPC flag: mutator-echo only, no
+  independent read (`bp_inspect`'s decoder omits it, `MCPBlueprintCommands.cpp:2996-3008`)
+  — deliberately NOT asserted by `test_networking_rpc_events.py`. Both match the standing
+  DEFERRED entries in TASKS.md ("networking (iteration 2 adds)"); recorded here so future
+  passes do not re-litigate.
+
 ### /ue-expert — coordinate/rotation claims are now machine-checked by the /position battery (TASK-4, cross-reference)
 
 - **Skill**: `.claude/skills/ue-expert/SKILL.md` — the coordinate/transform convention

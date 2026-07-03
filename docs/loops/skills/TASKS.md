@@ -9,11 +9,53 @@ go to `docs/BUGS.md`, never fixed inline. Every test must be strongly verifiable
 via one typed primitive, observe via a DIFFERENT read primitive, headless-safe, bounded,
 self-cleaning.
 
-## TODO
+## TODO — iteration 2 (compiled 2026-07-02 from second-pass analyses: networking,
+npc_logic authoring flows, capture-pose, automated-tester)
 
-(empty — loop complete 2026-07-02)
+- **TASK-6 — /npc_logic StateTree Layer-3 placement guard.** Claim (SKILL.md:89-92):
+  AI-component schema is the decision layer's schema; conditions gate *transitions*;
+  parallel tasks compose a mode — two tasks under ONE flat state, not a sub-tree.
+  Arrange: `statetree_create` (schema `StateTreeAIComponentSchema`) → two states
+  Engage/Searching → two task nodes on Engage (`slot:"task"`, type discovered via
+  `statetree_list_node_types base_class:"task"`) → `statetree_transition_add`
+  (Engage→Searching, OnTick) → condition node on that transition
+  (`slot:"condition"`, `StateTreeNodeMgr.cpp:236-274` inserts into `Trans.Conditions`).
+  Observe (different primitive): `statetree_read include_node_properties:true` —
+  assert schema_class round-trips (`MCPStateTreeCommands.cpp:261`); Engage has BOTH
+  task GUIDs in `tasks[]` with `child_count==0`/`depth==0` (flat); the transition's
+  `conditions[]` holds the condition GUID, and it is NOT in `tasks[]` or
+  `enter_conditions[]`. Engine oracles: `StateTreeState.h:419,422,161`
+  (EnterConditions/Tasks/FStateTreeTransition::Conditions),
+  `StateTreeAIComponentSchema.h:15,19`. Do NOT compile (covered by
+  `test_statetree.py::test_compile_verify_and_save`). One asset under
+  `/Game/__MCPTest__/skills_npc_logic`, asset_delete-force teardown, `_retry_busy`
+  helper, headless-safe.
+
+- **TASK-7 — proposals only, NO test (capture-pose + automated-tester).** Record in
+  PROPOSALS.md: (P1) automated-tester SKILL.md:74-76 presents `uassetDiskPath` as an
+  `ops.ts` harness export but it is a per-file local helper
+  (`animation.test.ts:30`, `asset.test.ts:32`) — an agent following the skill imports
+  it and fails; (P2) capture-pose's only rig-validation path is a /visual-critique
+  vision verdict because `HandleCaptureFromPose` never echoes the applied
+  location/rotation/fov (`MCPAutomationCommands.cpp:1121-1129`) — propose the skill
+  lead with the mechanical assertions (status==captured, file bytes>0) and mark the
+  framing score advisory; companion observability-gap entry for the orchestrator's
+  BUGS.md pass (echo the applied pose in the result). Also ledger the networking
+  unauthorable items (below).
 
 ## DONE
+
+- **TASK-5 — /networking RPC net-type round-trip on a custom event** (2026-07-02):
+  `tests/skills/test_networking_rpc_events.py` written; runs **xfailed** vs a live editor
+  because the test found a routing bug — `bp_set_event_replication` is missing from
+  `FMCPBridge::ExecuteCommand`'s dispatch chain (`MCPBridge.cpp:748-788`; handler wired
+  only at `MCPBlueprintCommands.cpp:117` → unreachable, bridge answers "Unknown command"
+  `:1187`), for the orchestrator's BUGS.md pass. The baseline half is green (fresh custom
+  event reads back with NO `replication` field); the full six-step battery self-unblocks
+  when the dispatch line lands. Engine oracles re-verified (`Script.h:142-160,183`;
+  `K2Node_CustomEvent.cpp:324-345`). Spec correction: the decoder observer is
+  **bp_inspect** (HandleAnalyzeBlueprintGraph, `:2986-3009`), not bp_read. Proposals +
+  iteration-2 unauthorable ledger recorded in PROPOSALS.md.
 
 - **TASK-4 — /ue-expert proposals only, NO test** (2026-07-02): analysis recommendation
   NONE for tests confirmed (verifiable core owned by /position + `test_kinematics.py`;
@@ -51,6 +93,30 @@ self-cleaning.
   yaw 0" assumption was wrong for this mesh).
 
 ## DEFERRED / NOT TESTABLE (by design — do not revisit without new harness capability)
+
+- **networking (iteration 2 adds)**: RepNotify/`ReplicatedUsing` and dormancy guidance —
+  NO authoring primitive exists (`bp_set_variable_properties` writes only CPF_Net +
+  ReplicationCondition, `BPVariables.cpp:610-631`; `bp_set_class_replication` has no
+  dormancy param) — advisory-only, unauthorable, not a skill defect. The `reliable`
+  RPC flag — mutator-echo only, no independent read (`bp_read` decoder omits it,
+  `MCPBlueprintCommands.cpp:2996-3008`; compiled-UFunction path BPGC-blocked).
+  Variable replication flags via `bp_get_variable_details` — rejected as a weak
+  mirror oracle (reads the same struct fields the setter wrote,
+  `MCPBlueprintCommands.cpp:3381-3382`).
+- **capture-pose**: core "render reproduces the framing" claim is a pixel verdict
+  (VERBOTEN); capture-file metadata already covered by
+  `tests/integration/test_screenshot.py`; the applied pose is not echoed back by the
+  handler (`MCPAutomationCommands.cpp:1121-1129`) so pose application has no non-pixel
+  oracle (observability gap noted in PROPOSALS/BUGS); `editor_viewport_get_camera` has
+  no typed set-camera arrange counterpart and is GUI-gated.
+- **automated-tester**: no engine-behavior surface (claims are repo conventions +
+  already-documented GAP-030/031); a static skill-anchor drift guard was considered
+  and REJECTED as over-engineering (green-today, tautological, lockstep-maintenance) —
+  all cited anchors verified resolving 2026-07-02.
+- **npc_logic (iteration 2 adds)**: SKILL.md:89 schema-context claim ("context actor is
+  the AIController") is engine-true (`StateTreeAIComponentSchema.h:15,28`) but has NO
+  read primitive surfacing schema context/external data — unobservable until
+  `statetree_read` (or similar) emits context-data descriptors.
 
 - **networking**: all runtime multiplayer topology claims — no multi-connection PIE.
 - **ue-expert**: CDO/constructor traps (no per-test C++ compile), replication/OnRep/CMC
