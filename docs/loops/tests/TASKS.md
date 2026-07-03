@@ -30,8 +30,6 @@ anything — do not take these descriptions at face value.
   counts / heightmap values, not just shape.
 - [ ] `foliage_inspect` — needs fixture foliage (an InstancedFoliageActor with one type). If
   arranging needs a missing primitive, add it or defer with reason.
-- [ ] `editor_build_reflection_captures` — investigate a log-marker observation via
-  `editor_read_logs`; if nothing observable beyond the echo, #DEFERRED with that reason.
 - [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk
   (exists, non-zero, expected dimensions). The pose IS the fixed rig — doctrine-compliant.
 - [ ] `pie_inject_input_action` — design to stay non-VERBOTEN: bind a test input action to a
@@ -179,6 +177,34 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
+
+- `editor_build_reflection_captures` (2026-07-02) — no observable beyond the echo that a test
+  could both assert AND clean up; deferred as "mutates shared editor level state irrecoverably
+  under attach mode; no engine log marker exists". Investigated in full against the live editor
+  (trong `L_TestBed`, `save:false`, bounded ~1.2s — runtime is NOT the blocker). Handler
+  (`MCPLevelCommands.cpp::HandleBuildReflectionCaptures`) calls
+  `GEditor->BuildReflectionCaptures(World)` on the CURRENT level, then (default `save:true`!)
+  `FEditorFileUtils::SaveDirtyPackages(bSaveMapPackages=true, bSaveContentPackages=true)`; returns
+  only its own `{built, map_name, package_path, saved}` echo. Observation candidates, each
+  verified live and dead: (1) **engine log marker** — the bake emitted ZERO engine log lines
+  between the `[MCP:Command] Received:` receipt (seq 32213) and the next unrelated line; the
+  receipt line is the mutator's own echo, forbidden as an observation. (2) **registry state** —
+  with zero captures in the level the bake creates no `<Map>_BuiltData` package at all
+  (`ObjectIterator(unreal.Package)` found none post-bake), so a DEEP test must first spawn a
+  SphereReflectionCapture; the bake then creates+dirties the `_BuiltData` package, readable via
+  `EditorLoadingAndSavingUtils.get_dirty_map_packages()` — but NOTHING can un-dirty it afterward
+  (`unreal.Package` exposes no `is_dirty`/`set_dirty_flag`; `unreal.MapBuildDataRegistry` is not
+  exposed to Python; adding a C++ observe/restore primitive was hard-blocked this task by the
+  plugin-DLL Live Coding gotcha — see the Niagara entry above), leaving an irrecoverable dirty
+  build-data package in the shared editor that any later save-all by another agent persists.
+  (3) **on-disk `_BuiltData.uasset` via `save:true`** — flatly unsafe attached:
+  `SaveDirtyPackages` saves ALL dirty map+content packages; the live editor had the map plus 16
+  dirty content packages of other agents' WIP at probe time. (4) **component state** — no
+  "built" flag readable via `actor_inspect`; `MapBuildDataId` doesn't change on build. Revisit
+  after the next legitimate full rebuild: a `.cpp`-side observe/restore pair (e.g. a build-data
+  query + a scoped dirty-flag restore, or running the bake against a test-owned fixture level)
+  makes the DEEP design (spawn namespaced capture → bake `save:false` → observe registry →
+  restore) straightforward.
 
 - **Niagara setter quartet** — `niagara_emitter_set_local_space`, `niagara_renderer_set_enabled`,
   `niagara_renderer_set_alignment`, `niagara_mesh_renderer_set_mesh` (2026-07-02) — needs reader
