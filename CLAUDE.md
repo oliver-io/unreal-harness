@@ -146,7 +146,9 @@ tests/run.ps1              # pytest parity oracle over a live headless editor (-
 
 - Env: `UNREAL_ENGINE_ROOT` (required), `UNREAL_PROJECT_ROOT` (logs/build tools),
   `UE_MCP_TEST_PROJECT` (fixture override). `/onboard` sets the first two.
-- `tests/test_zz_coverage.py` fails if any bridge operation lacks a test.
+- `tests/integration/test_zz_coverage.py` is the coverage scoreboard — expected red
+  (listing the uncovered ops) until every bridge operation in the generated manifest has
+  a test (`docs/TESTING.md` §8).
 - **Anything driving a live editor must be bounded + self-cleaning** — never hang, never
   leak a PIE session (socket timeouts, wall-clock watchdogs, `finally` pie_stop).
 

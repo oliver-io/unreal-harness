@@ -179,13 +179,22 @@ place of undo (`docs/ARCHITECTURE.md` §5) — there is no undo to lean on.
 
 ---
 
-## 8. Coverage is a parity oracle
+## 8. Coverage is a scoreboard, not a gate
 
-Every bridge operation **must** have a test. On the pytest side this is enforced:
-mark each test with `@covers("op_a", "op_b")` and `tests/integration/test_zz_coverage.py`
-statically scans for `@covers(...)` literals and **fails the suite** if any operation
-in the registry is uncovered (it also catches typo'd op names). Coverage is not
-aspirational — a new command without a `@covers` test breaks the oracle.
+Every bridge operation should have a test, and the pytest side keeps score. Mark
+each test with `@covers("op_a", "op_b")`; `tests/integration/test_zz_coverage.py`
+statically scans the integration sources for `@covers(...)` literals and compares
+the union against `tests/harness/operations.py` — a **generated manifest** of every
+bridge operation (server-sendable wire names ∩ C++ dispatch keys, plus `ping`;
+regenerate with `tests/tools/regen_operations.py` after adding a command). The
+check fails while any manifest op lacks a test — and it is **expected to be red
+until coverage is complete**: the failure message *is* the scoreboard, a completion
+percentage plus the exact list of uncovered ops (~246/281 as of 2026-07). It also
+catches typo'd op names (a `@covers` name absent from the manifest fails
+immediately). Server-local tools (`catalog_*`, `video_analyze`, composites, …)
+never touch the bridge and are excluded from the manifest by construction; live
+legacy wire overrides (e.g. `bp_add_node` sends `add_blueprint_node`) appear under
+their wire names.
 
 > **Known asymmetry:** the Bun suite (`src/server/test/`) **mirrors** the pytest
 > tests but does **not** yet enforce a coverage gate. When you add a command, add the

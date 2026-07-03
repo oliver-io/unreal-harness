@@ -19,22 +19,6 @@ each group.
 
 ## docs/TESTING.md
 
-### DOC-040 — §8 coverage-oracle description is the opposite of the implementation
-TESTING §8 (lines 183-188): coverage "fails the suite if any operation **in the registry**
-is uncovered … Coverage is not aspirational." Reality: (a) the guard is explicitly designed
-to be "EXPECTED to be red until coverage is complete" and prints a completion percentage
-(`tests/harness/coverage.py:6`, `tests/integration/test_zz_coverage.py:27-31`) — a
-scoreboard, not a gate; (b) it checks against a hand-frozen 248-entry manifest
-(`tests/harness/operations.py`), not the live registry, and the regenerator
-(`tests/tools/regen_operations.py:16`) scans the dead `src/MCP/` path, so the manifest can't
-be regenerated and silently omits newer tools (`video_analyze`, `pie_analyze`,
-`pie_capture_from_pose`, `pie_inject_input_action`, `catalog_*`) while retaining the legacy
-wire name `add_blueprint_node`.
-**Fix (doc side):** Rewrite §8 truthfully: a generated-manifest scoreboard, currently
-frozen/stale, expected red. The generator repoint + manifest regen is code-side — see
-#DEFERRED. (CLAUDE.md's "fails if any bridge operation lacks a test" line inherits the same
-correction.)
-
 ### DOC-041 — Video evidence path missing from the doctrine
 TESTING Tier-2b (lines 100-106) names only `editor_screenshot`/`editor_window_screenshot`
 as render evidence. The infra has a full second channel: `pie_record_*` → `.mp4` →
