@@ -105,6 +105,19 @@ size; verify *content* with the `/see` skill or a vision pass, not pixel diffs.
 Foot-gun: the capture silently no-ops if the viewport isn't rendering — keep the
 window foregrounded + realtime on (`docs/BUGS.md` GAP-007).
 
+**Video evidence — the second render channel.** For behaviour that only reads over
+time (motion, VFX, UI transitions), record the live PIE viewport:
+`pie_record_start` → drive the scenario → `pie_record_stop` lands a real `.mp4`
+(machine-assert on `frames_encoded`/`bytes` and the on-disk file first), then judge
+the clip with `video_analyze`. Same discipline as log markers: **state the
+expectation up front** — write the `expected_behavior` and criteria *before*
+recording, so the vision oracle grades a pre-committed contract instead of
+rationalizing whatever it happens to see. Tool contracts, the arm/disarm
+auto-record mode, the one-shot `pie_analyze` composite, and `video_analyze`'s
+server-side API-key requirement live in `docs/USAGE.md` §2.18 — don't duplicate
+them here. Exercised end-to-end by `tests/integration/test_pie.py` (record
+lifecycle → valid MP4 container). GUI-only, like screenshots.
+
 ---
 
 ## 4. Structured log markers — the primary runtime oracle

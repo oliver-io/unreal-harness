@@ -19,13 +19,6 @@ each group.
 
 ## docs/TESTING.md
 
-### DOC-041 — Video evidence path missing from the doctrine
-TESTING Tier-2b (lines 100-106) names only `editor_screenshot`/`editor_window_screenshot`
-as render evidence. The infra has a full second channel: `pie_record_*` → `.mp4` →
-`video_analyze` (exercised end-to-end by `tests/integration/test_pie.py:160-232`).
-**Fix:** Add a Tier-2b subsection documenting video capture + vision-oracle analysis as
-render evidence, with the same "state the expectation up front" discipline.
-
 ### DOC-042 — Capture-rig requirement referenced by the skill, absent from the doctrine
 `.claude/skills/capture-pose/SKILL.md` says it builds "the fixed capture rig that …
 docs/TESTING.md require[s]" — TESTING.md never mentions capture rigs or
