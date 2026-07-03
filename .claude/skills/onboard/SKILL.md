@@ -106,7 +106,7 @@ step 10). `/onboard` can be re-run any time to add a tier — nothing here is on
 
 Goal: a validated absolute path to the engine root (the directory containing
 `Engine/`), persisted as `UNREAL_ENGINE_ROOT`. That variable is what the MCP
-server (`build_game_target`) and the test harness (`tests/harness/config.py`)
+server (`editor_build_game_target`) and the test harness (`tests/harness/config.py`)
 read to find the engine.
 
 ### 1. Discover candidates
@@ -203,7 +203,7 @@ label, is authoritative.** When wiring an *existing* project (Part 2), check its
 
 Goal: the user's UE project loads the plugin **from this repo** (no copy), and
 `UNREAL_PROJECT_ROOT` points at that project so the project-coupled server tools
-(`read_logs`, `build_game_target`) work.
+(`editor_read_logs`, `editor_build_game_target`) work.
 
 ### 6. Identify the target project
 
@@ -316,7 +316,7 @@ optional and only matters for AI image generation** — the `/icon` skill (gener
 → wire UI icons) and AI-generated keycaps for `/key-indicator-helper`. The editor, the MCP
 server, and everything else need *nothing* here. Skipping this is fine; the user is
 re-prompted automatically the first time they actually try to generate art (a `PreToolUse`
-hook gates the generation command — `.claude/hooks/openai-cred-gate.sh`), so you won't nag
+hook gates the generation command — `.claude/hooks/openai-cred-gate.py`), so you won't nag
 them every session.
 
 ### 11. Offer it (once)

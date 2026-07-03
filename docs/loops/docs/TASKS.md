@@ -35,13 +35,6 @@ each group.
 
 ## Skills
 
-### DOC-080 — /onboard: wrong hook filename + un-prefixed tool names
-- SKILL.md Part 3 §11 (~line 320) cites `.claude/hooks/openai-cred-gate.sh` — the file is
-  `.claude/hooks/openai-cred-gate.py` (`/icon` SKILL.md:60 has it right).
-- Part 1 (~110) and Part 2 (~205) cite `build_game_target` / `read_logs` — canonical names
-  are `editor_build_game_target` / `editor_read_logs` (`/bootstrap` SKILL.md:295 has it right).
-**Fix:** both renames.
-
 ### DOC-081 — /automated-tester: two misleading operational details
 - §2 line 74 cites `uassetDiskPath` as if it were a shared harness helper; it is a
   file-local function in `src/server/test/integration/asset.test.ts:32`, not exported from
