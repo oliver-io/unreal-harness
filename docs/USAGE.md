@@ -85,7 +85,7 @@ Most mutators accept `dry_run: true` and return `result.diff` instead of applyin
 
 Every tool follows `{domain}_{verb}(_{modifier})?`. Inspection verbs: `_brief`, `_query`, `_inspect`, `_list`, `_get`, `_read`. Mutation verbs: `_set`, `_add`, `_remove`, `_create`, `_delete`, `_compose`.
 
-Domain prefixes in active use: `actor_`, `bp_`, `material_`, `niagara_`, `anim_`, `widget_`, `statetree_`, `eqs_`, `tag_`, `gas_`, `ik_rig_`, `ik_retarget_`, `asset_`, `editor_`, `pie_`, `class_`, `enum_`, `ai_`, `input_`, `struct_`, `datatable_`, `dataasset_`, `mpc_`, `scene_`, `level_`, `project_`.
+Domain prefixes in active use: `actor_`, `bp_`, `material_`, `niagara_`, `anim_`, `widget_`, `statetree_`, `eqs_`, `tag_`, `gas_`, `ik_rig_`, `ik_retarget_`, `asset_`, `editor_`, `pie_`, `class_`, `enum_`, `ai_`, `input_`, `struct_`, `datatable_`, `dataasset_`, `mpc_`, `scene_`, `level_`, `project_`, `pcg_`, `kinematics_`, `landscape_`, `foliage_`.
 
 There is one canonical agent-facing surface: every tool has exactly one name, and for the vast majority of tools the wire name == the tool name == the C++ handler key. The legacy alias map (`ResolveCanonicalCommand`) and the sibling tool registrations were deleted in the naming migration — no open-ended back-compat alias layer remains. Two bounded, test-enforced exceptions to the strict identity exist: an enumerated set of per-tool `command:` overrides where the tool name diverges from the wire/handler key (the 18 `statetree_* → st_*` state/node/transition/binding tools, §2.12, plus `bp_add_node → add_blueprint_node`), and a conservative parameter-alias map (`src/server/src/registry/aliases.ts`) that normalizes a few documented param synonyms (Blueprint identifier, material/asset path — see §2.1) onto the canonical key before dispatch. Both are pinned by `test/gate-error-parity.test.ts` and `test/aliases.test.ts`. Use canonical tool names exclusively.
 
@@ -626,6 +626,75 @@ Operate on a **running** PIE agent.
 | `ai_get_state(actor_name)` | AIController + Blackboard + StateTree current values |
 | `ai_get_awareness(actor_name)` | What the agent currently sees / hears (perception query results) |
 | `ai_get_perception(actor_name)` | Raw perception component dump |
+
+### 2.20. PCG — Procedural Content Generation (`pcg_*`)
+
+Authoring of `UPCGGraph` assets plus driving generation on level actors via `UPCGComponent`. The C++ handler (`FMCPPCGCommands`) drives the **runtime** `UPCGGraph` API directly; the editor's graph-panel mirror rebuilds itself from `NotifyGraphChanged`, so graphs authored here open normally in the PCG editor.
+
+**Canonical authoring sequence:**
+
+```
+pcg_list_node_types (discover settings classes — the palette)
+  → pcg_graph_create (comes with Input + Output nodes)
+  → pcg_node_add × N → pcg_node_connect × N → pcg_node_set_property × N
+  → pcg_component_add(actor, graph) → pcg_component_generate(actor)
+  → (generation is async — re-query / screenshot a moment later)
+```
+
+| Tool | Behavior |
+|---|---|
+| `pcg_list_graphs(path_filter="/Game")` | List PCG Graph (and Graph Instance) assets: `graphs[]` of `{name, path, class}`. Read-only. |
+| `pcg_list_node_types(name_filter?, category_filter?)` | Enumerate library-exposed `UPCGSettings` classes — the palette for `pcg_node_add`. Returns `class_name`, `class_path`, `title`, `type`, pin lists. Read-only. |
+| `pcg_graph_read(graph_path)` | Graph structure: `input_node`, `output_node`, `nodes[]` (id, settings_class, title, position, pins), `edges[]`. Node `id` values are the handles for connect / set_property. Read-only. |
+| `pcg_graph_create(graph_path)` | New empty graph with Input/Output nodes in place. Auto-saves. |
+| `pcg_node_add(graph_path, settings_class, node_title?, pos_x?, pos_y?)` | Add a node by settings class name (from `pcg_list_node_types`) or full class path. `node_title` is also usable as a node handle later. |
+| `pcg_node_connect(graph_path, from_node, to_node, from_pin?, to_pin?)` | Wire an output pin to an input pin. `from_node`/`to_node` take node ids, titles, or the tokens `"InputNode"` / `"OutputNode"`; omitted pins default to each node's **first** output/input pin. |
+| `pcg_node_set_property(graph_path, node, property_name, property_value)` | Set an EditAnywhere property on a node's settings object (e.g. the mesh on a StaticMeshSpawner, the count on CreatePoints). |
+| `pcg_component_add(actor_name, graph_path?)` | Add a `UPCGComponent` to a level actor and optionally assign a graph. Spawn a fresh host with `actor_spawn` first if needed. |
+| `pcg_component_generate(actor_name, force=true)` | Trigger generation on the actor's PCG component. **Asynchronous** — scheduled on the PCG subsystem; the result reports `generation_requested` / `is_generating`, not completion. |
+
+**Foot-guns:**
+
+- **The PCG mutators are in *neither* enforcement blocklist** — not `IsBlockedDuringPie` (C++) / `PIE_BLOCKED` (`gates.ts`), and not `IsBlockedFromDryRun` / `DRY_RUN_UNSUPPORTED`. Two consequences: (1) authoring/drive calls **run unguarded while PIE is active** instead of being refused; (2) the handler implements no dry-run and the §1.4 safety net doesn't intercept it, so `dry_run: true` is **silently ignored and the mutation applies for real** — no `result.diff`, no `dry_run_unsupported` refusal. The server module (`domains/pcg.ts`) deliberately carries no `blockedDuringPie`/`dryRunUnsupported` annotations to stay truthful to actual enforcement; adding the gates is a both-sides code change (§3) tracked separately. Until then: don't author PCG during someone's PIE session, and never pass `dry_run` expecting a preview.
+- `pcg_component_generate` returning success means generation was *scheduled*. Verify results with a follow-up read (`actor_query`, `scene_brief`, a screenshot) after a moment, not from the call itself.
+
+### 2.21. Kinematics — skeletal transform probes & IK solves (`kinematics_*`)
+
+Spatial ground truth for bones, sockets, and attached meshes — the `/position` skill's verification backend. All three tools reuse the game's `BoneIK` math, so a rotation verified here matches what the shipped IK reproduces. **None mutate assets** — no PIE gate, no dry-run gate, all annotated read-only.
+
+**World resolution:** each call resolves a target world **preferring a running PIE world** (where the possessed player and live animated poses are), falling back to the editor world for posing placed actors; the result's `world_type` (`"pie"` | `"editor"`) reports which was used. In the editor world a skeletal mesh's pose is typically the ref/preview pose — `pose_valid` flags whether the component-space transform array is populated, and `world_type` lets you judge what you measured.
+
+| Tool | Behavior |
+|---|---|
+| `kinematics_read_transform(actor, queries[], mesh?)` | Read world + component-relative transforms for a batch of `{socket}` / `{bone}` queries, each optionally scoped by `component` (omit/`"body"` = the actor's main skeletal mesh; a component name; or an attached actor's name to reach e.g. a weapon mesh's sockets). Static-root actors fall back to the StaticMeshComponent/scene root (`component_type: 'static'`/`'scene'`, with `world_bounds`) instead of rejecting. An explicit component that matches nothing returns `exists: false` — a same-named body bone can't masquerade as that component's socket. |
+| `kinematics_probe(actor, rotations[], probe_points[], mode="dryrun", intent_direction?, forward_axis_local?, mesh?)` | Forward-kinematic probe: apply candidate bone rotation(s) and report each probe point's **end-effector world-space delta** (ΔP + ΔQ), optionally cosine-scored against an intended world direction. The end-effector delta is the only truth. |
+| `kinematics_solve(actor, chain{upper,lower,hand}, effector, desired_direction, verify=true, forward_axis_local?, mesh?)` | Inverse solve: find the two-bone-IK rotation that aims a tip along a desired **world** direction via `BoneIK::SolveTwoBoneIK`. Best-effort (two-bone IK aims a hand *position*); `verify: true` (default) re-runs the forward probe on the solved pose and reports the achieved tip direction. |
+
+**`mode` semantics (`kinematics_probe`):**
+
+- `"dryrun"` (default) — computes the post-rotation pose without touching the component. Exact, not approximate: each probe point's transform relative to its *governing bone* is invariant under rotations of that bone or its ancestors, so recomposition gives the true world result.
+- `"live"` — atomically applies the rotations to the component and restores it before returning, all within one game-thread call. **It has no numeric advantage**: no animation evaluation runs between apply and restore, so the sampled pose — and every reported number — is identical to dryrun (the result says so in a `note`). Its only intended payoff, a candidate-pose `screenshot`, is currently **deferred** (a synchronous game-thread call can't render a frame mid-call); `screenshot: true` returns a note instead of an image. Use `dryrun`.
+
+**Rotation input (`rotations[]` entries):** `{ "bone", "rotation", "space" }`, where `rotation` is either `{axis: {x,y,z}, angle_deg}` or `{pitch, yaw, roll}`, and `space` is one of three coordinate spaces:
+
+| `space` | Meaning |
+|---|---|
+| `"component"` | Component space — used as-is (`BoneIK` left-multiplies component-space deltas). |
+| `"world"` | World space — conjugated into a component-space delta by the mesh's world rotation. |
+| `"bone_local"` | The bone's own local frame — post-multiply equivalence via the bone's component-space rotation. |
+
+`forward_axis_local` (default +X) names which local axis of the probe point / effector counts as its "forward" — e.g. `{"x":0,"y":0,"z":1}` for a blade whose tip is mesh-local +Z.
+
+### 2.22. Landscape & Foliage inspection (`landscape_*`, `foliage_*`) — read-only by design
+
+**Mutation is refused by design.** Sculpting, painting, heightmap import, foliage scatter/removal are brush-driven content authoring and belong to the editor's Landscape and Foliage modes — the MCP only reads existing state. All four tools are read-only and idempotent; none are PIE- or dry-run-gated.
+
+| Tool | Behavior |
+|---|---|
+| `landscape_inspect(actor_name?)` | Enumerate landscape actors (empty = all): name, class (`Landscape` / `LandscapeStreamingProxy`), guid, location/scale, component/subsection geometry, material, `extent_quads`, `paint_layer_count`. |
+| `landscape_list_layers(actor_name?)` | A landscape's paint (target) layers: name, `layer_info_object` asset path (empty if unassigned), `assigned`. Empty actor = first landscape in the world. |
+| `landscape_read_heightmap(actor_name?, region?, export_path?, include_samples=false)` | **Bounded** heightmap summary: resolved region, `samples_read`, `height_stats` (min/max/mean raw uint16 + min/max world Z). Never dumps a full grid inline — narrow with `region` (quad-space, clamped), set `include_samples` for a small inline grid (≤256×256 only), or pass `export_path` to write the raw row-major uint16 grid as `.r16` to disk. |
+| `foliage_inspect(mode="types"\|"instances", foliage_type?, limit=100, offset=0)` | `mode="types"` (default): per-type summary — placed-instance count, mesh, density, radius, align_to_normal, random_yaw, cull_distance. `mode="instances"`: placed-instance transforms for one `foliage_type` (identity / mesh path / display name from the types listing), paged via `limit` (1..1000) / `offset`, with `total_instances` + `truncated` — never dumps every instance. |
 
 ---
 

@@ -13,20 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-018 — New domains with zero USAGE coverage: `pcg_*`, `kinematics_*`, `landscape_*`, `foliage_*`
-None of these prefixes appear anywhere in USAGE, including the §1.5 "prefixes in active
-use" list (USAGE:88):
-- `pcg_*` — 9-10 tools (`pcg.ts`): graph create/read, node add/connect/set_property,
-  component add/generate, discovery. **Foot-gun to surface:** the PCG mutators are *not* in
-  the C++ PIE/dry-run blocklists, so they silently run during PIE (module header flags this).
-- `kinematics_*` — 3 tools (`kinematics.ts`): `_read_transform`, `_probe`, `_solve`;
-  editor-world FK probe / two-bone-IK solve reusing game `BoneIK` math; the `/position`
-  skill's ground-truth verifier. Document `mode='dryrun'|'live'` and the three spaces.
-- `landscape_*` — 3 read-only tools (`landscape.ts`); `foliage_*` — `foliage_inspect`
-  (`foliage.ts:14`). Both are inspection-only *by design* (mutation refused — brush-driven
-  authoring stays in editor modes).
-**Fix:** Add a §2.x per domain (contracts + foot-guns) and extend the §1.5 prefix list.
-
 ### DOC-019 — PIE recording + video analysis pipeline entirely undocumented
 Zero USAGE coverage for: `pie_record_start/arm/disarm/stop/status` (`pie.ts:578-767`; C++
 `MCPRecorderCommands.cpp`/`MCPVideoRecorder.cpp`), `video_analyze` (`video.ts:103`,
@@ -68,6 +54,13 @@ reader.
 - **physics (§2.16):** omits `physics_set_constraint_motion` (`physics.ts:122`).
 **Fix:** One loop iteration per domain bullet is acceptable; update each section and kill
 the stale "isn't yet exposed" claims.
+
+### DOC-023 — §2.18: fourth synthesized lease code `pie_takeover_failed` undocumented
+Found during DOC-017: `pie.ts:43` defines `pie_takeover_failed` (stale PIE couldn't be
+cleared before a promoted start) alongside the three now-documented lease codes. §2.18's
+lease-code note deliberately doesn't claim exhaustiveness, but the code should be listed.
+**Fix:** Verify its exact return path in `pie.ts`/`pie/lease.ts`, then add it to the §2.18
+lease-code documentation with accurate semantics.
 
 ### DOC-022 — §3.6 omits the `/build/heartbeat` endpoint
 `POST /build/heartbeat` exists (`build/http.ts:103`); §3.6 (USAGE:696-705) lists only
