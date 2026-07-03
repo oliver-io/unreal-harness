@@ -15,7 +15,7 @@
  */
 
 import { test, expect, beforeAll } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { editorSuite, NS as ROOT } from "../harness/suite.ts";
 import { ensureAbsent } from "../harness/ops.ts";
@@ -32,15 +32,18 @@ const INIT_PARTICLE_MODULE =
 
 // Value keys (besides the system/emitter/parameter identifiers) that the value
 // setters accept per Niagara type, used to build a valid set_* payload.
+// Values are deliberately DISTINCTIVE — InitializeParticle's defaults are
+// 0/1/10 scalars and all-ones vectors/colors, so a readback equal to one of
+// these can only come from the write, never from an untouched default.
 const VALUE_KEYS_FOR_TYPE: Record<string, Record<string, unknown>> = {
-  float: { value: 1.0 },
-  int32: { value: 2 },
+  float: { value: 7.25 },
+  int32: { value: 5 },
   bool: { value: true },
-  vector2: { x: 1.0, y: 2.0 },
-  vector3: { x: 1.0, y: 2.0, z: 3.0 },
-  vector4: { x: 1.0, y: 2.0, z: 3.0, w: 4.0 },
-  linear_color: { r: 0.5, g: 0.25, b: 0.75, a: 1.0 },
-  position: { x: 1.0, y: 2.0, z: 3.0 },
+  vector2: { x: 3.5, y: 4.5 },
+  vector3: { x: 1.5, y: 2.5, z: 3.5 },
+  vector4: { x: 1.5, y: 2.5, z: 3.5, w: 4.5 },
+  linear_color: { r: 0.5, g: 0.25, b: 0.75, a: 0.5 },
+  position: { x: 1.5, y: 2.5, z: 3.5 },
 };
 
 /** Map a /Game/... content path to its on-disk package file (the file only
@@ -74,6 +77,16 @@ editorSuite("niagara", (ctx) => {
   let sampleSystem = "";
   let sampleEmitter = "";
   let sampleMaterial = "";
+
+  /** Attach-safe /Game/... -> Content/....uasset mapping via the live editor's
+   *  own project root (project_context.settings_paths[0] = FPaths::ProjectDir()). */
+  async function liveUassetDiskPath(gamePath: string): Promise<string> {
+    const pctx = await ctx.mcp.expect("project_context", {});
+    const root = (pctx.settings_paths as string[])[0]!;
+    const pkg = gamePath.split(".")[0]!;
+    if (!pkg.startsWith("/Game/")) throw new Error(`not a /Game/ path: ${gamePath}`);
+    return join(root, "Content", pkg.slice("/Game/".length) + ".uasset");
+  }
 
   beforeAll(async () => {
     // sample_system: one empty Niagara System plus a single baseline CPU emitter.
@@ -240,6 +253,23 @@ editorSuite("niagara", (ctx) => {
     };
     const result = await ctx.mcp.expect("niagara_module_set_input", payload);
     expect(result.parameter_name).toEqual(target.parameter_name);
+
+    // Independent readback: a FRESH niagara_module_get_inputs must report the
+    // written value. The setter recompiles and re-bakes the rapid-iteration
+    // store (GAP-066), so this proves the write survived the re-bake — not
+    // the setter's own echo.
+    const after = await ctx.mcp.expect("niagara_module_get_inputs", {
+      system_path: sampleSystem,
+      emitter_name: name,
+    });
+    const match = ((after.module_inputs as Record<string, unknown>[]) || []).find(
+      (mi) => mi.parameter_name === target.parameter_name,
+    );
+    expect(match).toBeDefined();
+    for (const [key, expected] of Object.entries(VALUE_KEYS_FOR_TYPE[target.type as string]!)) {
+      if (typeof expected === "boolean") expect(match![key]).toBe(expected);
+      else expect(match![key] as number).toBeCloseTo(expected as number, 4);
+    }
   });
 
   test("test_add_scratch_pad_module", async () => {
@@ -255,6 +285,29 @@ editorSuite("niagara", (ctx) => {
     });
     expect(result.success).toBe(true);
     expect(result.module_node_created).toBe(true);
+
+    // Independent observation via the sanctioned py console hatch: the scratch
+    // script must be registered under the emitter's ScratchPads container AND
+    // a function-call node referencing it must sit in the target script's
+    // graph. No typed niagara reader surfaces scratch modules (verified live
+    // 2026-07-03: niagara_emitter_read's script list / RI counts are unchanged
+    // by the add, and the custom-HLSL pins are not Module.* rapid-iteration
+    // params, so niagara_module_get_inputs shows nothing either).
+    const probe = await ctx.mcp.expect("editor_console_exec", {
+      command:
+        "py import unreal; " +
+        "scripts = [o.get_path_name() for o in unreal.ObjectIterator(unreal.NiagaraScript) " +
+        `if o.get_name() == 'MCPScratchDouble' and o.get_path_name().startswith('${sampleSystem}.')]; ` +
+        "nodes = [n.get_path_name() for n in unreal.ObjectIterator(unreal.NiagaraNodeFunctionCall) " +
+        "if n.get_editor_property('function_script') " +
+        "and n.get_editor_property('function_script').get_name() == 'MCPScratchDouble' " +
+        `and n.get_path_name().startswith('${sampleSystem}.')]; ` +
+        "print('MCPTEST_SCRATCH=%d:%d' % (len(scripts), len(nodes)))",
+    });
+    const m = /MCPTEST_SCRATCH=(\d+):(\d+)/.exec(String(probe.output ?? ""));
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(1); // scratch script registered
+    expect(Number(m![2])).toBeGreaterThanOrEqual(1); // stack node references it
   });
 
   // ── user parameters ─────────────────────────────────────────────────────────
@@ -278,12 +331,27 @@ editorSuite("niagara", (ctx) => {
       value: 12.5,
     });
     expect(setres.success).toBe(true);
+    // Value readback through the independent system reader, not the setter's
+    // echo (a fresh float user param defaults to 0.0, so 12.5 can only come
+    // from the write).
+    const afterSet = await ctx.mcp.expect("niagara_system_read", { system_path: sampleSystem });
+    const entry = ((afterSet.user_parameters as Record<string, unknown>[]) || []).find(
+      (p) => String(p.name).includes(pname),
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.value as number).toBeCloseTo(12.5, 4);
 
     const rem = await ctx.mcp.expect("niagara_user_parameter_remove", {
       system_path: sampleSystem,
       parameter_name: pname,
     });
     expect(String(rem.removed_parameter)).toContain(pname);
+    // Absence readback — the mirror of the add's presence check above.
+    const afterRemove = await ctx.mcp.expect("niagara_system_read", { system_path: sampleSystem });
+    const stillThere = ((afterRemove.user_parameters as Record<string, unknown>[]) || []).some(
+      (p) => String(p.name).includes(pname),
+    );
+    expect(stillThere).toBe(false);
   });
 
   // ── standalone script asset ─────────────────────────────────────────────────
@@ -291,6 +359,13 @@ editorSuite("niagara", (ctx) => {
   test("test_niagara_script_create", async () => {
     const path = `${NS}/NSC_Sample`;
     await ensureAbsent(ctx.mcp, path);
+    // A stale .uasset may survive prior sessions against a live project
+    // (ensureAbsent only clears the registry entry when the asset isn't
+    // loaded) — key on the write timestamp, not bare existence (B6/D3
+    // precedent, see material.test.ts).
+    const disk = await liveUassetDiskPath(path);
+    const mtimeBefore = existsSync(disk) ? statSync(disk).mtimeMs : null;
+
     const result = await ctx.mcp.expect("niagara_script_create", {
       usage: "module",
       path: NS,
@@ -298,5 +373,11 @@ editorSuite("niagara", (ctx) => {
     });
     expect(result.success).not.toBe(false);
     expect(String(result.asset_path)).toContain("NSC_Sample");
+
+    // The handler SaveAsset's the new script — the package must be on disk.
+    expect(existsSync(disk)).toBe(true);
+    if (mtimeBefore !== null) {
+      expect(statSync(disk).mtimeMs).toBeGreaterThan(mtimeBefore);
+    }
   });
 });

@@ -94,14 +94,19 @@ pytest `@covers` (server-local — unknown to the bridge manifest, would fail th
 the `ke * MARKER` log-roundtrip observes `editor_console_exec`. Known flake noted in
 passing: bun `reads.test.ts` `editor_live_coding_compile` can exceed its 5s default
 timeout against a GUI editor with Live Coding enabled — pre-existing, untouched.)
-- [ ] **Niagara ECHO cluster (one task, same pattern):** `niagara_emitter_add_renderer` (:143),
-  `niagara_renderer_set_material` (:157), `niagara_renderer_set_material_binding` (:175),
-  `niagara_module_set_input` (:229), `niagara_scratch_pad_module_add` (:239),
-  `niagara_user_parameter_set` (:273), `niagara_user_parameter_remove` (:280) — the oracle is
-  already imported in each case (`niagara_emitter_read` / `niagara_module_get_inputs` /
-  `niagara_system_read`); read the written value / absence back.
-- [ ] `niagara_script_create` (`test_niagara.py:289`) — echoed path only; assert the `.uasset` on
-  disk like `niagara_system_create` does.
+(the 5 observable niagara bullets landed 2026-07-03; pytest + bun mirrors in lockstep, green live
+against the GUI trong editor in attach mode. Oracle notes for future auditors:
+`niagara_module_get_inputs` DOES surface per-input values (AppendValueToJson) and a set survives
+the setter's recompile re-bake — the shared `_VALUE_KEYS_FOR_TYPE` payloads are now DISTINCTIVE
+(7.25 etc.) so readback can never pass on InitializeParticle's 0/1/10-and-ones defaults;
+`niagara_system_read` user_parameters carry `value` — set is observed as 12.5 via the reader and
+remove as absence; `niagara_scratch_pad_module_add` is invisible to every typed niagara reader
+(emitter_read's script list / RI counts unchanged; custom-HLSL pins are not Module.* RI params) —
+observed via the py-hatch ObjectIterator pair (scratch UNiagaraScript registered under
+`<system>:<emitter>.NiagaraScratchPadContainer_N.<Name>` + the UNiagaraNodeFunctionCall whose
+function_script is that script, both path-scoped to the system); `niagara_script_create`
+auto-saves — asserted via the attach-safe live-project-root `.uasset` (B6/D3 mtime-keyed
+precedent). The three renderer ops moved to the consolidated #DEFERRED niagara entry.)
 
 ### Animation / IK / state machines / StateTree
 - [ ] `anim_list_sequences` — tagged in FIVE `@covers` decorators (`test_animation.py:363-422`) but
@@ -262,9 +267,15 @@ timeout against a GUI editor with Live Coding enabled — pre-existing, untouche
   makes the DEEP design (spawn namespaced capture → bake `save:false` → observe registry →
   restore) straightforward.
 
-- **Niagara setter quartet** — `niagara_emitter_set_local_space`, `niagara_renderer_set_enabled`,
-  `niagara_renderer_set_alignment`, `niagara_mesh_renderer_set_mesh` (2026-07-02) — needs reader
-  extension + rebuild; blocked by shared editor. Investigated in full: none of the four written
+- **Niagara renderer readback family (7 ops)** — the setter quartet
+  `niagara_emitter_set_local_space`, `niagara_renderer_set_enabled`,
+  `niagara_renderer_set_alignment`, `niagara_mesh_renderer_set_mesh` (2026-07-02) plus the
+  D-hardening echo trio `niagara_emitter_add_renderer`, `niagara_renderer_set_material`,
+  `niagara_renderer_set_material_binding` (consolidated 2026-07-03 — these three HAVE tests in
+  `test_niagara.py` / `niagara.test.ts` but their assertions are the mutators' echoes; hardening
+  them is the same blocked renderer readback, so they ride the same reader extension rather than
+  a separate entry) — needs reader extension + rebuild; blocked by shared editor.
+  Investigated in full: none of the four written
   fields (`FVersionedNiagaraEmitterData::bLocalSpace`, renderer `GetIsEnabled`, sprite
   `Alignment`/`FacingMode`, mesh-renderer `Meshes[0].Mesh/Scale` —
   `MCPNiagaraCommands_Create.cpp:654-1001`) is surfaced by ANY read primitive:
@@ -281,9 +292,14 @@ timeout against a GUI editor with Live Coding enabled — pre-existing, untouche
   editor loads the plugin DLL from `src/Plugin/UnrealMCP/Binaries/Win64`, Live Coding patches the
   host project's copy, so NO plugin C++ change (even body-only) can hot-load — activation needs
   the full stop → build → copy-DLL → relaunch cycle. Pick this up right after the next legitimate
-  full editor rebuild: extend the reader, then the four tests are straightforward
+  full editor rebuild: extend the reader, then all seven tests are straightforward
   (arrange NS + emitter + sprite/mesh renderer under /Game/__MCPTest__/, act the setter,
-  observe via the extended `niagara_emitter_read`).
+  observe via the extended `niagara_emitter_read`). Interim-oracle note (2026-07-03, recorded,
+  not acted on): the py hatch CAN see renderer state — a live probe found the
+  `unreal.NiagaraSpriteRendererProperties` object at `<system>:<emitter>.…Properties_N` via
+  ObjectIterator with its `material` editor-property readable — so a py-hatch observation is
+  technically available if this deferral needs to be broken before the rebuild; the typed
+  reader extension remains the intended fix.
 
 - `editor_build_game_target` positive path (2026-07-02) — the validation-gate slice is covered in
   `src/server/test/editor_build_game_target.test.ts` (real registry handler, real dirs/files, no
