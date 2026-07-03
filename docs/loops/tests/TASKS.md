@@ -9,11 +9,8 @@ anything — do not take these descriptions at face value.
 
 ## A. Harness integrity (do these first — they gate everything below)
 
-- [ ] **Report (not fix) dead C++ wire names.** 8 dispatch keys are unreachable from any server
-  tool: `add_conduit`, `editor_focus_actor`, `get_blueprint_material_info` (tests reach it raw),
-  `get_mesh_bounds` (duplicate of `mesh_get_bounds`), `list_material_parameters`,
-  `merge_bones_into_skeletal_mesh`, `merge_bones_into_skeleton`, `spawn_actor`. Produce a report
-  for the human: expose-and-test, or delete. Do NOT remove C++ without approval.
+(none open — the dead-wire-name report landed in `docs/BUGS.md` § "Dead wire names report
+(2026-07-02)"; per-name expose/delete verdicts await the human's decision there.)
 
 ## B. Wire ops with NO test at all (from the set diff)
 

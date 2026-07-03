@@ -176,6 +176,146 @@ via the Blueprint asset's `GeneratedClass`) for `_C` names.
 
 ---
 
+## Dead wire names report (2026-07-02)
+
+Eight C++ dispatch keys are live in the plugin but unreachable from any canonical
+server tool (found by the test-coverage loop's surface diff; verified against current
+code below). This is a **report for a human decision** — no C++ was changed. Three
+verdict classes: **DELETE** (dead duplicate), **EXPOSE + TEST** (unique capability
+worth a canonical tool), **KEEP-INTERNAL** (deliberately used raw by the harness).
+Note: `add_conduit` and `merge_bones_*` appear on the C++ PIE/dry-run blocklists
+(`MCPCommonUtils.cpp:290,304`) and are documented as intentionally absent from the
+TS mirror (`src/server/src/bridge/gates.ts:14-17`) — any delete/expose must touch
+those lists on both sides.
+
+### `add_conduit` — EXPOSE + TEST
+
+- **Handler:** `FMCPAnimationCommands::HandleAddConduit`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPAnimationCommands.cpp:267`,
+  dispatched at `:47`).
+- **Does:** adds a conduit node to a named state-machine graph inside an Anim
+  Blueprint (`blueprint_name`, `state_machine_graph`, optional `conduit_name`).
+- **Canonical coverage:** none — the `anim_state_machine_*` family has states,
+  transitions, entry, and inner-node property tools but no conduit op. Unique.
+- **Callers:** none anywhere (tests exclude it; `tests/tools/regen_operations.py:35`
+  lists it as deliberately excluded from the manifest).
+- **Verdict:** EXPOSE + TEST as `anim_state_machine_conduit_add`, completing the
+  family — or DELETE if conduits are declared out of scope. Exposing is the cheap,
+  consistent option.
+
+### `editor_focus_actor` — EXPOSE + TEST
+
+- **Handler:** `FMCPAutomationCommands::HandleFocusActor`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPAutomationCommands.cpp:108`,
+  dispatched at `:84`).
+- **Does:** points the level-editor perspective viewport at an actor (colliding-only
+  bounds first, optional `focus_location`/distance overrides) so
+  `editor_screenshot` (editor mode) frames it — the handler's own comment calls it
+  "the controllable-camera primitive".
+- **Canonical coverage:** none — `editor_viewport_get_camera` is read-only; there is
+  no viewport set-camera tool.
+- **Callers:** none anywhere.
+- **Verdict:** EXPOSE + TEST (e.g. `editor_viewport_focus_actor`). It is exactly the
+  "set-camera primitive; add one if missing" that the `editor_viewport_get_camera`
+  test task in `docs/loops/tests/TASKS.md` §B calls for.
+
+### `get_blueprint_material_info` — EXPOSE + TEST (currently KEEP-INTERNAL de facto)
+
+- **Handler:** `FMCPBlueprintCommands::HandleGetBlueprintMaterialInfo`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPBlueprintCommands.cpp:2300`,
+  dispatched at `:162`).
+- **Does:** reads material-slot info for a named mesh component on a Blueprint (the
+  SCS template) — the Blueprint-side sibling of the canonical
+  `mesh_get_actor_material_info` (`src/server/src/domains/mesh.ts:53`), which only
+  covers placed actors.
+- **Callers:** both parity suites call it raw and annotate "bridge-internal command
+  (no standalone MCP tool)" — `tests/integration/test_material.py:355-357`,
+  `src/server/test/integration/material.test.ts:323-325`. The
+  `material_apply_to_blueprint` slot_index error hint **directs users to it**
+  (`MCPBlueprintCommands.cpp:2188`), and the hollow-test task at
+  `docs/loops/tests/TASKS.md` §D wants it as the oracle for
+  `material_apply_to_blueprint`.
+- **Verdict:** EXPOSE + TEST (e.g. `mesh_get_blueprint_material_info`) — the surface
+  already advertises it in an error hint, and tests already depend on it; a
+  canonical tool removes the raw-bridge exception documented in
+  `tests/README.md:30-31`.
+
+### `get_mesh_bounds` — DELETE (dead duplicate)
+
+- **Handler:** `FMCPBlueprintCommands::HandleGetMeshBounds`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPBlueprintCommands.cpp:3632`,
+  dispatched at `:187`) — a **separate implementation**, not an alias, of the same
+  capability as canonical `mesh_get_bounds`
+  (`FMCPMeshCommands`, `Commands/MCPMeshCommands.cpp:58`).
+- **Does:** mode 1 (`mesh_path`) returns a UStaticMesh asset's local bounds —
+  duplicating canonical `mesh_get_bounds`; mode 2 (`actor_name`) returns a placed
+  actor's world-space AABB including scale.
+- **Canonical coverage:** asset mode fully duplicated; actor mode substantially
+  covered by `actor_inspect`, which returns per-component `world_bounds`
+  (`Commands/MCPInspectionCommands.cpp:646-655`) — the only delta is the aggregated
+  whole-actor box.
+- **Callers:** none anywhere.
+- **Verdict:** DELETE. If the aggregated actor AABB is wanted, add an `actor_name`
+  mode to the canonical `mesh_get_bounds` (with a test) as part of the same change.
+
+### `list_material_parameters` — EXPOSE + TEST
+
+- **Handler:** `FMCPMaterialCommands::HandleListMaterialParameters`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPMaterialCommands.cpp:679`,
+  dispatched at `:77`).
+- **Does:** enumerates ALL parameters (scalar/vector/texture …) of any
+  UMaterialInterface via reflection — including parameters inherited from a parent
+  material, on either a Material or a Material Instance.
+- **Canonical coverage:** partial only — `material_read` reads a base material's
+  expression graph and `material_read_instance` reads an MI's *overridden* params;
+  neither enumerates the full inherited parameter set on an arbitrary interface.
+- **Callers:** none anywhere (it is even listed in its own domain's dispatch error
+  hint, `MCPMaterialCommands.cpp:85`, so the error surface advertises a command no
+  tool can reach).
+- **Verdict:** EXPOSE + TEST as `material_list_parameters` — the natural discovery
+  primitive before `material_instance_set_parameter`.
+
+### `merge_bones_into_skeleton` / `merge_bones_into_skeletal_mesh` — DELETE (superseded), pending confirmation
+
+- **Handlers:** `FMCPSkeletalMeshCommands::HandleMergeBonesIntoSkeleton`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPSkeletalMeshCommands.cpp:921`)
+  and `…IntoSkeletalMesh` (`:1069`); contracts in
+  `Public/Commands/MCPSkeletalMeshCommands.h:65-77`.
+- **Do:** copy named bones from a source USkeleton into a target USkeleton
+  preserving hierarchy/bind pose; the `_mesh` variant also writes the mesh's ref
+  skeleton (the one governing skinning) and syncs the bound USkeleton.
+- **Canonical coverage:** no tool merges bones. However the header comments show
+  these were built for the same static-baked-rod problem that the canonical
+  `mesh_build_bend_chain` (`MCPSkeletalMeshCommands.h:79-89`) now solves end-to-end
+  (inserts a bone chain AND re-skins); the merge ops add bones without re-skinning.
+- **Callers:** none anywhere (excluded in `regen_operations.py:35`; noted as
+  wire-only in `gates.ts:16`).
+- **Verdict:** DELETE as superseded by `mesh_build_bend_chain` — unless arbitrary
+  cross-skeleton bone merge (e.g. attaching equipment bones) is a workflow someone
+  wants, in which case EXPOSE + TEST the pair. Human call.
+
+### `spawn_actor` — KEEP-INTERNAL today; DELETE after test migration
+
+- **Handler:** `FMCPEditorCommands::HandleSpawnActor`
+  (`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPEditorCommands.cpp:136`,
+  dispatched at `:49`).
+- **Does:** legacy spawn of a hardcoded native set (StaticMeshActor, Point/Spot/
+  DirectionalLight, CameraActor) by required unique `name`; refuses name collisions.
+- **Canonical coverage:** `actor_spawn` — a separate, richer handler
+  (`FMCPSceneCommands::HandleActorSpawn`, `Commands/MCPSceneCommands.cpp:118`) with
+  arbitrary class support and dry-run. Full duplicate in capability.
+- **Callers:** the parity suites use it raw and on purpose —
+  `tests/integration/test_actor.py:45` (plus `:5,54,68,145`),
+  `tests/integration/test_mesh.py:185,311`,
+  `src/server/test/integration/actor.test.ts:45` (plus mirrors),
+  `src/server/test/integration/mesh.test.ts:142,308`; the exception is documented in
+  `tests/README.md:30-31` and it is manifest-excluded in `regen_operations.py:35`.
+- **Verdict:** KEEP-INTERNAL as-is only while the tests depend on it; recommended
+  end state is DELETE — port the four test call sites to `actor_spawn`, drop the
+  README exception, then remove the handler.
+
+---
+
 # DEFERRED
 
 Issues understood but parked (the bugfix loop `docs/loops/mcp/mcp-bugfix-loop.md`
