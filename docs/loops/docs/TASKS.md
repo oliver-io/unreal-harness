@@ -15,14 +15,6 @@ each group.
 
 ## docs/ARCHITECTURE.md
 
-### DOC-033 — Concepts described but concrete surfaces unnamed
-ARCH §2 describes the searchable-catalog mode, code-execution mode, and result compaction
-but never names `catalog_*`, `code_api`/`code_run`, `result_read`, or the
-`UNREAL_MCP_SURFACE=full|compact|code` knob; it mentions the build lock but not that
-`scripts/build-coord.ps1` drives it over the `/build` REST endpoints.
-**Fix:** A sentence each so a reader can map doc→tool. Keep the doc conceptual; just anchor
-the names.
-
 ---
 
 ## docs/TESTING.md

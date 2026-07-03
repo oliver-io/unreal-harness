@@ -79,14 +79,19 @@ Around that core sit the supporting layers:
 - **Progressive disclosure** (server): a few hundred tool schemas are expensive
   to load up front, so the surface can be served whole, as a searchable catalog,
   or as a code-execution sandbox that calls tools programmatically — three modes
-  over the same registry. (The exact count drifts as tools are added; the boot
+  over the same registry, selected by `UNREAL_MCP_SURFACE=full|compact|code`.
+  Concretely: the catalog is `catalog_domains` / `catalog_search` /
+  `catalog_describe` / `catalog_call`; code mode is `code_api` / `code_run`
+  (contracts: USAGE §2.23). (The exact count drifts as tools are added; the boot
   log prints the authoritative figure: `[surface=…, N/M tools advertised]`.)
 - **Result compaction** (server): oversized results can return a digest plus a
-  pageable handle instead of flooding the model's context.
+  pageable handle instead of flooding the model's context; `result_read` pages
+  the full payload back by handle.
 - **Multi-agent coordination**: one editor is shared state. PIE access is
   serialized through a FIFO **lease** (one holder, queued waiters, TTL reclaim);
   full rebuilds serialize through a **build lock** exposed as REST endpoints on
-  the server. Both exist so concurrent agents never stomp each other's sessions.
+  the server (`/build/…`, driven by `scripts/build-coord.ps1`). Both exist so
+  concurrent agents never stomp each other's sessions.
 - **Skills** (`.claude/skills/`): agent-facing doctrine — setup, authoring,
   testing, advisory knowledge — ships with the harness so game projects don't
   have to carry it.
