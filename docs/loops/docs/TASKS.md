@@ -13,18 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-019 — PIE recording + video analysis pipeline entirely undocumented
-Zero USAGE coverage for: `pie_record_start/arm/disarm/stop/status` (`pie.ts:578-767`; C++
-`MCPRecorderCommands.cpp`/`MCPVideoRecorder.cpp`), `video_analyze` (`video.ts:103`,
-`src/server/src/video/analyzer.ts`), `pie_analyze` (`pie.ts:797`), `pie_capture_from_pose`
-(`pie.ts:486`), `pie_query` (`pie.ts:330`), `pie_inject_input_action` (`pie.ts:875`). The
-§2.18 table (USAGE:568-573) lists only 5 of ~14 PIE tools.
-**Fix:** Extend §2.18 (or add §2.19) covering: record lifecycle + `max_duration_s`
-watchdog + lease-awareness + refused-under-`-nullrhi`/Windows-only foot-guns; `video_analyze`
-contract incl. the server-side API-key requirement (`UNREAL_MCP_VIDEO_*` knobs,
-`config.ts:121-125`); `pie_capture_from_pose` as the sanctioned reproducible in-game
-screenshot; the remaining PIE tools.
-
 ### DOC-020 — Disclosure meta-tools (`catalog_*`, `result_read`) absent from USAGE
 `catalog_domains/search/describe/call` (`disclosure/metatools.ts:28/43/67/103`) and
 `result_read` (`compaction/tool.ts:15`), both registered (`register.ts:100,102`), have zero

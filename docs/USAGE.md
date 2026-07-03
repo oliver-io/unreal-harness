@@ -569,12 +569,27 @@ on the MCP server serializes builds:
 
 | Tool | Behavior |
 |---|---|
-| `pie_start` / `pie_stop` | Lifecycle |
-| `pie_get_state` | Current PIE state (running, paused, world type) |
-| `pie_send_keystrokes(keys, target?)` | Synthetic input |
-| `pie_send_mouse(x, y, button?, action?)` | Synthetic mouse |
+| `pie_start(map_path?, requester?)` / `pie_stop(session_id?)` | Lifecycle (lease-serialized — see below) |
+| `pie_get_state` | Current PIE state (running, world info) + the full lease/queue readout |
+| `pie_query(query?, filter?, limit?)` | Read the **live PIE world** — the editor-world actor tools never see PIE-spawned actors. `query`: `summary` (default), `players`/`player`/`pawn` (piloted pawn + camera POV), `actors` (substring-filtered, capped by `limit`), `all` |
+| `pie_send_keystrokes(actions, focus_viewport?)` | Synthetic keyboard events in order (per-event `delay_ms`/modifiers). `focus_viewport:true` only for sustained *polled* (held-key) input — it steals editor focus |
+| `pie_send_mouse(x, y, event_type?, button?)` | Synthetic mouse (`move`/`pressed`/`released`) |
+| `pie_inject_input_action(action_path, value?)` | Fire an **Enhanced Input** action (one-shot press) on the PIE player — the typed way to trigger event-driven actions (jump, vault, dash) that synthetic keystrokes can't fire; only continuous/axis input survives key simulation |
+| `pie_capture_from_pose(location, rotation, fov?, aspect?, restore?, filename?, directory?)` | Screenshot from an **exact camera pose** through the real game render path — the sanctioned capture rig (below) |
 
-For runtime queries during PIE, see §2.19. For console commands during PIE, use `editor_console_exec`.
+For AI-agent runtime introspection during PIE, see §2.19. For console commands during PIE, use `editor_console_exec`.
+
+**Reproducible in-game screenshots (`pie_capture_from_pose`).** This is the
+sanctioned "fixed capture rig" required by CLAUDE.md / `docs/TESTING.md` before any
+screenshot-based visual verdict — a deterministic pose, zero stateful navigation.
+It spawns a transient camera at the pose, swaps the player's view target to it
+(instant), waits a few frames to composite, captures the game viewport, then (with
+`restore:true`, the default) restores the original view and destroys the temp
+camera; `restore:false` parks the view for repeated captures. Feed it
+`location`/`rotation`/`fov`/`aspect` from `editor_viewport_get_camera` to reproduce
+a human-framed editor shot in-game (the `/capture-pose` skill wraps this pairing).
+Returns `result.path` once the bridge confirms the file. Never hand-fly the PIE
+camera to a spot and screenshot — that is the verboten play-acting.
 
 **PIE lease (multi-agent coordination).** One editor runs one PIE world, so
 `pie_start`/`pie_stop` are serialized by an in-process **lease** keyed by MCP
@@ -616,6 +631,56 @@ The lease codes — `pie_busy`, `pie_lease_lost`, `pie_not_holder` — are **del
 server-side additions outside the closed C++ taxonomy** (§1.2): coordination signals
 synthesized in `src/server/src/domains/pie.ts`, never emitted by the plugin.
 `result.pie_lease.state` carries the precise outcome alongside the code.
+
+**Video recording + analysis (`pie_record_*` → `video_analyze`; one-shot `pie_analyze`).**
+The recorder captures the live PIE viewport **in-engine** (no external binary):
+the 3D scene + UMG/HUD as presented, cropped to the game viewport, downscaled to
+FIT `width`×`height` (aspect preserved), H.264 MP4 — plus, by default, the game
+audio the player hears (main-submix mix, AAC, sample-clock-synced; `audio:false`
+or a missing audio device degrades to video-only, see `result.audio`/`audio_note`).
+Output defaults to `<Project>/Saved/MCPRecordings/`. Analysis is **pure
+server-side**: the MP4 goes to a video-understanding model; the editor bridge is
+never involved and never sees the API key.
+
+| Tool | Behavior |
+|---|---|
+| `pie_record_start(fps?, width?, height?, bitrate_kbps?, audio?, max_duration_s?, filename?, directory?, wait_for_pie_s?)` | Start recording; returns `recording_id` + output path. `fps:0` = every presented frame (fast/transient behaviour); default 30. `wait_for_pie_s` arms-and-retries until the PIE world is presenting — call `pie_start` then this immediately (no manual sleep) so the opening seconds are captured |
+| `pie_record_stop()` | Finalize the MP4: `path`, dimensions, `frames_encoded`/`frames_dropped`, `duration_s`, `bytes`, `stop_reason` |
+| `pie_record_status()` | Read-only: active?, `recording_id`, path, `elapsed_s`, frame counters, any encoder error |
+| `pie_record_arm(base_name?, …)` / `pie_record_disarm()` | Auto-record **every** PIE session on this editor until disarmed; takes land as `<base_name>_NN.mp4`. Disarm doesn't cut an in-flight take (it still finalizes normally) |
+| `video_analyze(path, expected_behavior, criteria?, analysis_fps?, clip_start_s?, clip_end_s?, model?)` | Judge any MP4 (typically `result.path` from `pie_record_stop`) against a stated expectation: structured `verdict` (`matches`/`diverged`/`inconclusive`), summary, timestamped severity-rated divergences, per-criterion results |
+| `pie_analyze(expected_behavior, criteria?, duration_s?, capture_fps?, width?, height?, analysis_fps?, model?)` | One-shot composite: record `duration_s` (default 10 s) → stop → `video_analyze`. Drive the scenario yourself (`pie_send_keystrokes` / `pie_inject_input_action`) while it records — the call occupies the session for its whole duration. For anything intricate prefer the explicit `pie_record_*` + `video_analyze` sequence |
+
+Foot-guns:
+
+- **Real RHI + Windows only.** Recording is refused with `feature_disabled` under
+  `-nullrhi` (no frames are rendered) and on non-Windows (Media Foundation
+  encoder) — known issue, see `docs/BUGS.md` ("PIE video recording requires a
+  real RHI and Windows"). Headless CI: launch with a GUI or `-RenderOffscreen`.
+- **One recording at a time** (`engine_busy` on a second start). The
+  `max_duration_s` **hard watchdog** (1–600 s, default 120) auto-stops and
+  finalizes the file so a recording can never leak — it is *not* the intended
+  length; call `pie_record_stop` when done. Recordings also auto-finalize when
+  PIE ends; a stop after that returns "no recording in progress".
+- **Lease-aware.** You may record your own session (you hold the PIE lease) or an
+  unleased one (e.g. a human started PIE by hand) — never another agent's:
+  `pie_record_*`/`pie_analyze` refuse with `pie_not_holder` when someone else
+  holds the lease. `pie_record_arm` applies to **any** PIE session on this editor
+  (yours, a human's, another agent's) — arm only with the operator's knowledge.
+- **`video_analyze` needs a server-side API key**: `GEMINI_API_KEY` (or
+  `GOOGLE_STUDIO_API_KEY`) in the repo-root `.env`; refused with
+  `feature_disabled` otherwise. The upload to the provider is transient (deleted
+  after analysis); the local file is untouched. Expect tens of seconds of latency
+  (upload + inference). Knobs: `UNREAL_MCP_VIDEO_PROVIDER` (`google` is the only
+  implementation), `UNREAL_MCP_VIDEO_MODEL` (default `gemini-3.5-flash`),
+  `UNREAL_MCP_VIDEO_ANALYSIS_FPS` (default 1), `UNREAL_MCP_VIDEO_MAX_ANALYSIS_FPS`
+  (cost guard, default 30 — exceeding it is `invalid_argument`),
+  `UNREAL_MCP_VIDEO_UPLOAD_TIMEOUT_MS` (default 120000).
+- **Two distinct fps knobs.** The recording's *capture* fps decides which frames
+  EXIST; `analysis_fps` decides how densely the model SAMPLES them (~300 tokens
+  per sampled second — default 1). Raise it only for fast/transient events, and
+  prefer clipping with `clip_start_s`/`clip_end_s` and raising fps over just the
+  window that matters.
 
 ### 2.19. AI runtime introspection (`ai_*`)
 
