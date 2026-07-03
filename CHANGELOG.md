@@ -60,4 +60,10 @@ same change that alters behavior.
   `UNREAL_MCP_VIDEO_ANALYSIS_FPS`, `UNREAL_MCP_VIDEO_MAX_ANALYSIS_FPS`,
   `UNREAL_MCP_VIDEO_PROVIDER`. The repo-root `.env` is now backfilled into the
   server env regardless of launch cwd.
-- Initial open-source release.
+- Initial open-source release. Included the progressive-disclosure / code-mode
+  subsystem (predates this changelog): the `catalog_domains` / `catalog_search` /
+  `catalog_describe` / `catalog_call` metatools, code mode (`code_api` +
+  `code_run`, agent-authored TS in a Bun Worker), result compaction
+  (`result_read` + `UNREAL_MCP_MAX_RESULT_BYTES`), and the three
+  `UNREAL_MCP_SURFACE` modes (`full`/`compact`/`code`). Server-only — no C++
+  counterpart (see `src/server/README.md`, "Token efficiency").

@@ -42,14 +42,6 @@ CLAUDE.md's skill list all verified accurate.)
 
 ## Changelogs
 
-### DOC-090 — Disclosure/code-mode subsystem absent from both changelogs
-`catalog_*` / progressive disclosure / `code_run` appear in neither `CHANGELOG.md` nor
-`src/Plugin/UnrealMCP/CHANGELOG.md` despite being a central server feature (README "Token
-efficiency"). Likely predates the "Initial open-source release" entry — if so, add it under
-that entry (or a "pre-release" note) so the "authoritative history" claim holds. Low
-priority; everything recent (pie_record_*, video_analyze, physics_material_create, texture
-LOD) is properly logged in both.
-
 ---
 
 # UNVERIFIED — suspicions needing confirmation before acting
