@@ -31,14 +31,6 @@ each group.
 
 ## CLAUDE.md (repo root)
 
-### DOC-070 — VERBOTEN/capture-rig section never names the sanctioned tool
-The "fixed capture rig" rule names only the `/capture-pose` skill; the underlying sanctioned
-tool `pie_capture_from_pose` (`pie.ts:486`) — whose own description calls it "the sanctioned
-way to get a reproducible in-game screenshot" — is never mentioned in the doctrine that
-demands it. **Fix:** name the tool alongside the skill. Also fold in the DOC-031 count fix
-("~260 canonical tools") and, optionally, add `install-plugins`, `google-key.sh`,
-`openai-key.sh` to the `scripts/` layout line (currently omitted).
-
 ---
 
 ## Skills

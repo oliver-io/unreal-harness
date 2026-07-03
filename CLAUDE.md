@@ -17,7 +17,8 @@ library. Two halves talk over TCP:
 
 - **`src/server/`** — MCP server (Bun/TypeScript, `@modelcontextprotocol/sdk`).
   Streamable-http MCP on `127.0.0.1:8765/mcp`; forwards each tool call as JSON to the
-  editor on `127.0.0.1:55557`. ~260 canonical tools.
+  editor on `127.0.0.1:55557`. A few hundred canonical tools (the boot log prints the
+  exact `[surface=…, N/M tools advertised]` figure).
 - **`src/Plugin/UnrealMCP/`** — UE **Editor** plugin (C++). Listens on `:55557`, runs gates
   (boot → PIE → dry-run), dispatches to a domain handler on the game thread, returns the
   uniform `{status, result, error, error_code, error_hint}` envelope.
@@ -45,7 +46,8 @@ play-tests. In order of preference:
    the professional move; faking a play-test is not.
 3. **Visual changes: no screenshot verdict without a fixed capture rig built FIRST** —
    a deterministic pose that frames the subject with zero stateful navigation
-   (`/capture-pose`). No rig → no verdict → rule 2.
+   (`/capture-pose`; inside PIE the sanctioned primitive is `pie_capture_from_pose`).
+   No rig → no verdict → rule 2.
 
 The bar: **if your "test" steers a character or a camera through space, it is not a test —
 it's a guess, and it's verboten.**
@@ -89,7 +91,7 @@ src/Plugin/UnrealMCP/  UE Editor plugin: MCPBridge.cpp (dispatch) · MCPServerRu
                        Commands/ (one handler .cpp per domain; MCPCommonUtils.cpp = errors, blocklists)
 docs/                  ARCHITECTURE · USAGE · TESTING · BUGS · DEBUGGING · loops/ (standing worklists)
 tests/                 pytest parity oracle over a LIVE editor (launches the Bun server)
-scripts/               run/stop-server · build/launch/stop-editor · build-coord · find-engine · neo4j
+scripts/               run/stop-server · build/launch/stop-editor · build-coord · find-engine · neo4j · install-plugins · google/openai-key.sh
 tools/neo4j/           generic Unreal→Neo4j ingester (doctrine: /neo4j)
 .claude/skills/        bundled skills — each self-describes in its SKILL.md
 projects/              YOUR GAMES (gitignored, self-managing)
