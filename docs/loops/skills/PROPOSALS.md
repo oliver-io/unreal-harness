@@ -249,6 +249,44 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   `statetree_read` ever emits context-data descriptors, extend this battery rather
   than writing a new one.
 
+### /automated-tester — `uassetDiskPath` wording is ALREADY accurate; no change (TASK-7, verified non-issue)
+
+- **Skill**: `.claude/skills/automated-tester/SKILL.md:74-77`.
+- **Test**: none (proposals-only task).
+- **Evidence** (orchestrator re-verified 2026-07-02): the iteration-2 analysis flagged that
+  the skill presents `uassetDiskPath` as a `test/harness/ops.ts` export, but the current
+  SKILL.md text already carries the exact disclaimer: "(`uassetDiskPath` — a file-local
+  helper, not part of `test/harness/ops.ts`; copy it from `test/integration/asset.test.ts`)".
+  The helper is indeed per-file (grep: `animation.test.ts:30`, `asset.test.ts:32`,
+  `blueprint.test.ts:24`, `data.test.ts:26`, `eqs.test.ts:28`, …) and the skill routes the
+  reader to copy it — accurate as written.
+- **Proposed change**: none. Recorded so future passes don't re-flag it. (A code de-dup —
+  promoting the helper into `ops.ts` and updating the skill to match — would be a normal
+  refactor deliverable, but it is out of band for this loop and not a skill defect.)
+
+### /capture-pose — rig validation leans entirely on a vision verdict; lead with the mechanical assertions (TASK-7)
+
+- **Skill**: `.claude/skills/capture-pose/SKILL.md` — the "confirm the rig works" step
+  validates the capture via a `/visual-critique` framing score (SKILL.md:64-74), a vision
+  judgment the repo's own VERBOTEN rule treats as the weakest evidence class.
+- **Test**: none — deliberately NOT built. The core "the render reproduces the framing"
+  claim is a pixel verdict (VERBOTEN without a rig, flaky even with one — standing
+  DEFERRED entry), and capture-file metadata is already covered by
+  `tests/integration/test_screenshot.py`.
+- **Evidence** (orchestrator re-verified 2026-07-02): `HandleCaptureFromPose` returns only
+  `file_path`, `path`, `status:"requested"`, `restored`, `message`
+  (`MCPAutomationCommands.cpp:1121-1129`) — the applied `location`/`rotation`/`fov`/
+  `aspect` are never echoed back. So there is NO non-pixel oracle that the pose was
+  applied; the only validation path the skill can offer today is the vision score.
+- **Proposed change (language)**: have the skill assert the rig's *mechanical* success
+  deterministically FIRST — call succeeded, output file exists with `bytes > 0` (the
+  bridge confirms the file server-side before returning) — and explicitly frame the
+  `/visual-critique` framing score as an advisory layer on top, not the proof the rig
+  works. **Companion observability gap filed in `docs/BUGS.md`** (orchestrator pass): if
+  the handler echoed the applied pose in its result, pose *application* (not framing)
+  would become a metadata assertion and capture-pose's core claim would gain a
+  deterministic guard. Do not fix inline.
+
 ### /ue-expert — coordinate/rotation claims are now machine-checked by the /position battery (TASK-4, cross-reference)
 
 - **Skill**: `.claude/skills/ue-expert/SKILL.md` — the coordinate/transform convention

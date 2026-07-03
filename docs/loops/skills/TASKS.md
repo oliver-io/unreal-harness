@@ -12,19 +12,18 @@ self-cleaning.
 ## TODO — iteration 2 (compiled 2026-07-02 from second-pass analyses: networking,
 npc_logic authoring flows, capture-pose, automated-tester)
 
-- **TASK-7 — proposals only, NO test (capture-pose + automated-tester).** Record in
-  PROPOSALS.md: (P1) automated-tester SKILL.md:74-76 presents `uassetDiskPath` as an
-  `ops.ts` harness export but it is a per-file local helper
-  (`animation.test.ts:30`, `asset.test.ts:32`) — an agent following the skill imports
-  it and fails; (P2) capture-pose's only rig-validation path is a /visual-critique
-  vision verdict because `HandleCaptureFromPose` never echoes the applied
-  location/rotation/fov (`MCPAutomationCommands.cpp:1121-1129`) — propose the skill
-  lead with the mechanical assertions (status==captured, file bytes>0) and mark the
-  framing score advisory; companion observability-gap entry for the orchestrator's
-  BUGS.md pass (echo the applied pose in the result). Also ledger the networking
-  unauthorable items (below).
+(empty — iteration 2 complete 2026-07-02)
 
 ## DONE
+
+- **TASK-7 — proposals only, NO test (capture-pose + automated-tester)** (2026-07-02):
+  both claims re-verified by the orchestrator before recording. (P1) was a FALSE
+  POSITIVE — automated-tester SKILL.md:74-77 already disclaims `uassetDiskPath` as a
+  file-local helper to copy from `asset.test.ts`; recorded in PROPOSALS.md as a
+  verified non-issue so it isn't re-flagged. (P2) confirmed — `HandleCaptureFromPose`
+  echoes no pose (`MCPAutomationCommands.cpp:1121-1129`, and note `status` is
+  `"requested"`, not `"captured"` as the analysis assumed); mechanical-first wording
+  proposal recorded, observability gap filed in docs/BUGS.md by the orchestrator.
 
 - **TASK-6 — /npc_logic StateTree Layer-3 placement guard** (2026-07-02):
   `tests/skills/test_npc_logic_statetree_placement.py`, 1/1 green first run vs a live
