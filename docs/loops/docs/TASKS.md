@@ -13,12 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-015 — §1.2/§3.2 cite a wrong C++ header path
-USAGE:44 and USAGE:645 say `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h`.
-Actual: `src/Plugin/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` (USAGE:3
-itself uses the correct form).
-**Fix:** `Plugins/` → `src/Plugin/` in both places.
-
 ### DOC-016 — §1.4/§3.3 dry-run blocklist massively understated
 USAGE:69 and USAGE:659 say "Initial registry: `add_node` / `bp_add_node` (still blocked)".
 Reality: `DRY_RUN_UNSUPPORTED` (`gates.ts:99-118`) has ~40 entries (all `ik_retarget_*`,

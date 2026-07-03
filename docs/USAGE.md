@@ -43,7 +43,7 @@ Server callers: use the envelope helpers in `src/server/src/bridge/envelope.ts` 
 
 `timeout` means an engine-side operation did not complete within its bounded budget (e.g. an editor-viewport screenshot that never rendered a qualifying frame — see GAP-007 in `docs/BUGS.md`); it is environmental, not a caller-input error.
 
-The set is owned by `EMCPErrorCode` in `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` and mirrored to `src/server/src/bridge/errors.ts` — those two enumerations are the authoritative list (31 codes as of this writing). Adding a code requires updating both ends.
+The set is owned by `EMCPErrorCode` in `src/Plugin/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` and mirrored to `src/server/src/bridge/errors.ts` — those two enumerations are the authoritative list (31 codes as of this writing). Adding a code requires updating both ends.
 
 **Hint quality bar.** An `error_hint` is good if an agent can act on it without further investigation. Tests:
 - "did you mean X" hints carry a candidate name list (top three by edit distance where the registry can produce them).
