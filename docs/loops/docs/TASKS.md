@@ -27,15 +27,6 @@ each group.
 
 ## src/server/README.md
 
-### DOC-060 — Stale counts and incomplete architecture tree
-- Line 82: "29 + core" domains → actually 34 + core (35 modules excl. `_schemas.ts`/`_shared.ts`).
-- Lines 42, 45: "~260" tools → ~290 (see DOC-031; use the same counting policy chosen there).
-- Lines 69-85: tree omits three load-bearing dirs — `build/` (REST build lock, `http.ts`/`lock.ts`),
-  `pie/` (`lease.ts`/`reconciler.ts`, wired in `main.ts:17-18`), `video/` (`analyzer.ts`);
-  and `registry/` row omits `aliases.ts`.
-- Env table (lines 32-38) missing the five `UNREAL_MCP_VIDEO_*` knobs (`config.ts:121-125`).
-**Fix:** one pass updating all four.
-
 ---
 
 ## CLAUDE.md (repo root)

@@ -36,15 +36,23 @@ bun run build          # single-binary: dist/unreal-harness
 | `UNREAL_MCP_LOG_LEVEL` | `info` | `debug`\|`info`\|`warn`\|`error` |
 | `UNREAL_MCP_SURFACE` | `full` | `full`\|`compact`\|`code` (see below) |
 | `UNREAL_MCP_MAX_RESULT_BYTES` | `0` (off) | compact results larger than N bytes to a handle |
+| `UNREAL_MCP_VIDEO_PROVIDER` | `google` | video-analysis backend (`video_analyze` / `pie_analyze`) |
+| `UNREAL_MCP_VIDEO_MODEL` | `gemini-3.5-flash` | Gemini video-understanding model id |
+| `UNREAL_MCP_VIDEO_ANALYSIS_FPS` | `1` | default fps the model samples an upload at |
+| `UNREAL_MCP_VIDEO_MAX_ANALYSIS_FPS` | `30` | cap on requested analysis fps |
+| `UNREAL_MCP_VIDEO_UPLOAD_TIMEOUT_MS` | `120000` | upload wall-clock timeout |
+| `GEMINI_API_KEY` | — | video-analysis key (`GOOGLE_STUDIO_API_KEY` accepted as fallback) |
 
 ## Token efficiency — progressive disclosure
 
-~260 tool schemas cost ~80–120k tokens if loaded up front. Three surface modes
-("compaction of operations until requested"):
+A few hundred tool schemas (~285 domain tools, ≈290 registered — the boot log
+prints the authoritative `[surface=…, N/M tools advertised]` figure) cost
+~80–120k tokens if loaded up front. Three surface modes ("compaction of
+operations until requested"):
 
-| `UNREAL_MCP_SURFACE` | advertises | the ~260 ops are reached by |
+| `UNREAL_MCP_SURFACE` | advertises | the full surface is reached by |
 |---|---|---|
-| `full` (default) | all ~260 + `catalog_*` | called directly (best with client-side tool-search) |
+| `full` (default) | every tool + `catalog_*` | called directly (best with client-side tool-search) |
 | `compact` | ~6: `mcp_status`, `catalog_*`, `result_read` | `catalog_search` → `catalog_describe` → `catalog_call` |
 | `code` | ~8: above + `code_api`, `code_run` | writing TS that calls `unreal.<tool>(params)` |
 
@@ -76,9 +84,12 @@ src/
   bridge/            connection.ts (TCP, boot gate, retry, framing)
                      envelope.ts · errors.ts · lifecycle.ts
                      gates.ts (PIE/dry-run sets, mirrors C++)
-  registry/          index.ts (register/search/describe/dispatch) + types.ts
-  domains/           one module per domain = the tool surface (29 + core)
+  registry/          index.ts (register/search/describe/dispatch) · types.ts · aliases.ts
+  domains/           one module per domain = the tool surface (34 + core)
                      _shared.ts (bridgeTool/defineTool) · _schemas.ts (Vec3, …)
+  build/             http.ts (REST /build endpoints) · lock.ts (build lock)
+  pie/               lease.ts (PIE lease) · reconciler.ts
+  video/             analyzer.ts (video_analyze backend, vendor-quarantined)
   disclosure/        metatools.ts (catalog_*) · codemode/ (generate, worker, sandbox, tools)
   compaction/        handles.ts (LRU digest) · tool.ts (result_read)
 test/                bun test (unit; integration is editor-gated)
