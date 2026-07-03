@@ -34,11 +34,15 @@ kills the listener; then re-run `scripts/run-server.{sh,ps1}`.
 **First start is slow** — dependency resolution happens on the first `bun install`.
 Subsequent starts are fast.
 
-**Sanity check the environment** (from `src/server/`):
+**Sanity check the environment** (from the repo root):
 
 ```bash
-bun run mcp --help
+bun run typecheck
 ```
+
+This compiles the server without starting it (`bun run mcp` takes no flags — any
+invocation boots a real server on :8765). Once the server *is* running, the real
+probe is the §3 smoke sequence: `ping` → `mcp_status`.
 
 ## 2. The client doesn't see the tools
 

@@ -23,11 +23,6 @@ each group.
 
 ## docs/DEBUGGING.md
 
-### DOC-051 — Bogus sanity check `bun run mcp --help`
-Lines 39-41. `main.ts` parses no argv — the command boots a real server on :8765 (then the
-next real start trips the already-listening guard). **Fix:** replace with a real probe
-(`bun run typecheck`, or the §3 `ping`/`mcp_status` smoke).
-
 ### DOC-052 — Missing troubleshooting topics (verified failure modes with no doc entry)
 Add a row/section each for:
 1. **Duplicate editor on 55557** — second editor's bind fails silently
