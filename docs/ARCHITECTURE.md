@@ -74,10 +74,11 @@ The wire contracts that make the whole surface predictable:
 
 Around that core sit the supporting layers:
 
-- **Progressive disclosure** (server): ~260 tool schemas are expensive to load up
-  front, so the surface can be served whole, as a searchable catalog, or as a
-  code-execution sandbox that calls tools programmatically — three modes over the
-  same registry.
+- **Progressive disclosure** (server): a few hundred tool schemas are expensive
+  to load up front, so the surface can be served whole, as a searchable catalog,
+  or as a code-execution sandbox that calls tools programmatically — three modes
+  over the same registry. (The exact count drifts as tools are added; the boot
+  log prints the authoritative figure: `[surface=…, N/M tools advertised]`.)
 - **Result compaction** (server): oversized results can return a digest plus a
   pageable handle instead of flooding the model's context.
 - **Multi-agent coordination**: one editor is shared state. PIE access is
@@ -137,7 +138,7 @@ Deep investments that define the harness. Don't trade them away for surface area
 - **Live Coding hot-patch** — sub-second C++ iteration against the live editor
   for function-body changes.
 - **Progressive disclosure and result compaction** — the token economics of a
-  260-tool surface are part of the architecture, not an afterthought.
+  several-hundred-tool surface are part of the architecture, not an afterthought.
 - **Openness** — vendor-independent, hackable, transparent.
 
 ## 5. What we refuse — deliberate non-goals

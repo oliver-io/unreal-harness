@@ -15,15 +15,6 @@ each group.
 
 ## docs/ARCHITECTURE.md
 
-### DOC-031 — Tool-count figure conflicts three ways (ARCH ~260, config 233, actual ~285)
-ARCH:72 and ARCH:135 say "~260"; `config.ts:58,60` says "233 domain tools" (3×); grep of
-tool `name:` declarations ≈ 285 (+ 4 `catalog_*`, `result_read`, `code_api`/`code_run`,
-`mcp_status`, `ping`). Same stale "~260" appears in `src/server/README.md:42,45` and
-CLAUDE.md ("~260 canonical tools").
-**Fix (doc side):** Stop hardcoding counts; reference the boot log's runtime figure
-(`[surface=…, N/M tools advertised]`) or use a loose band, consistently across ARCH, server
-README, and CLAUDE.md. The stale strings inside `config.ts` are code-side — see #DEFERRED.
-
 ### DOC-032 — Boot-gate attribution: pending is server-side, not plugin-side
 ARCH attributes all three gates (boot → PIE → dry-run) to "the plugin side," but the
 *pend-during-boot* behavior lives in the server (`bridge/connection.ts:12-14`); the C++ side
