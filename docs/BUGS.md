@@ -146,6 +146,34 @@ for `.cpp`-body edits; reflection-affecting changes (headers, `UPROPERTY`/
 (`docs/USAGE.md` §3.6). On crash, check the editor process and `MCP_Unified.log`
 (`LIVECODING`).
 
+### `ai_get_awareness` is hardwired to component names containing "CombatAwareness"
+
+The handler only recognizes an awareness component whose class name
+`Contains(TEXT("CombatAwareness"))`
+(`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPAIRuntimeCommands.cpp:185,202`) —
+a leak from a specific private game project. Any project whose pawn-side awareness
+component is named anything else gets `has_awareness:false` unconditionally, which
+makes the `/npc_logic` skill's central awareness-layer advice unobservable through
+this tool. Surfaced by the skill-test loop 2026-07-02
+(`docs/loops/skills/TASKS.md` TASK-3). Candidate fixes (not applied): accept a
+`component_class` parameter, or match any component implementing a marker
+interface/tag instead of a name substring.
+
+### `class_inspect` / `reflection_class_properties` cannot resolve Blueprint-generated classes
+
+Both resolvers walk `FindFirstObject<UClass>(…, EFindFirstObjectOptions::ExactClass)`
+(`src/Plugin/UnrealMCP/Source/UnrealMCP/Private/Commands/MCPBlueprintCommands.cpp:5551-5563`,
+`MCPReflectionCommands.cpp:72-87`), and `ExactClass` matches only objects whose class
+is exactly `UClass` — excluding every `UBlueprintGeneratedClass` instance. The load
+branch only handles `/Script/` paths, so a `BP_…_C` name returns `class_not_loaded`
+even though `class_inspect`'s error hint implies broader acceptance
+(`MCPBlueprintCommands.cpp:5571`). Live-verified during the skill-test loop 2026-07-02
+(TASK-2): CDO flags set by `bp_set_class_replication` could not be observed through
+either tool; the test observes via `actor_spawn` + dry-run reflective read instead
+(`tests/skills/test_networking_authoring.py` documents the workaround). Candidate fix
+(not applied): fall back to `FindFirstObject<UClass>` without `ExactClass` (or resolve
+via the Blueprint asset's `GeneratedClass`) for `_C` names.
+
 ---
 
 # DEFERRED
