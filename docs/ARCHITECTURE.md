@@ -54,9 +54,14 @@ handler → envelope back. The gates run in a fixed order on the plugin side:
 
 The wire contracts that make the whole surface predictable:
 
-- **One canonical name per operation.** Wire name == MCP tool name == C++ handler
-  key, `{domain}_{verb}` form. There is no alias or translation layer; the name an
-  agent sees is the name everywhere, from prompt to C++ dispatch.
+- **One canonical name per operation.** The MCP tool name, `{domain}_{verb}`
+  form, is the canonical agent-facing name, and wire name == C++ handler key.
+  Tool name and wire name coincide for all but a small, enumerated,
+  test-enforced translation set (per-tool `command:` overrides — the
+  `statetree_* → st_*` family and `bp_add_node → add_blueprint_node` — plus a
+  few legacy parameter aliases), kept in parity by `gate-error-parity.test.ts`
+  and `aliases.test.ts`. New operations get one identical name in all three
+  positions (USAGE §3).
 - **One envelope.** Every response is `{status, result, error, error_code,
   error_hint}`. Error codes come from a **closed taxonomy defined once in C++ and
   mirrored in TypeScript** — both sides must change together.

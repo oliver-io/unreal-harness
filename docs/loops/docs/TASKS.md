@@ -15,14 +15,6 @@ each group.
 
 ## docs/ARCHITECTURE.md
 
-### DOC-030 — §2 "no alias or translation layer" needs the same correction as USAGE
-ARCH lines 56-59 make the absolute claim; see DOC-013 evidence (`command:` overrides in
-`statetree.ts`/`bp.ts:532`, `gates.ts:15-18`, param aliases in `registry/aliases.ts`, C++
-resolver comment `MCPCommonUtils.h:178-181`).
-**Fix:** Soften to: wire name == handler key; tool name is canonical agent-facing; a small,
-enumerated, test-enforced translation set exists (`gate-error-parity.test.ts`,
-`aliases.test.ts`).
-
 ### DOC-031 — Tool-count figure conflicts three ways (ARCH ~260, config 233, actual ~285)
 ARCH:72 and ARCH:135 say "~260"; `config.ts:58,60` says "233 domain tools" (3×); grep of
 tool `name:` declarations ≈ 285 (+ 4 `catalog_*`, `result_read`, `code_api`/`code_run`,
