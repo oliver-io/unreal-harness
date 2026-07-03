@@ -210,6 +210,45 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   DEFERRED entries in TASKS.md ("networking (iteration 2 adds)"); recorded here so future
   passes do not re-litigate.
 
+### /npc_logic — Layer-3 placement claims are source-confirmed CORRECT and now machine-checked (TASK-6)
+
+- **Skill**: `.claude/skills/npc_logic/SKILL.md:89-92` — the Layer-3 placement claims:
+  the AI component schema is the decision layer's schema (:89); "Conditions gate
+  transitions; tasks own behavior" (:90); "Parallel tasks compose a mode … two tasks
+  under one state, not a sub-tree" (:92).
+- **Test**: `tests/skills/test_npc_logic_statetree_placement.py` — 1/1 green vs a live
+  editor (`--ue-attach`, 2026-07-02). Builds the skill's own Engage/Searching example
+  under `StateTreeAIComponentSchema`: two task nodes flat on Engage, an OnTick
+  Engage→Searching transition with a condition ON the transition; observes via the
+  independent `statetree_read` serializer (schema_class round-trip, both task GUIDs in
+  Engage's `tasks[]` with `child_count==0`/`depth==0`, condition GUID in the
+  transition's `conditions[]` and — negatively — in neither `tasks[]` nor
+  `enter_conditions[]`). Deliberately not compiled (compile covered by
+  `test_statetree.py::test_compile_verify_and_save`).
+- **Evidence — the placement is the engine's own data model** (UE 5.7 source, read
+  this task): `StateTree/Source/StateTreeEditorModule/Public/StateTreeState.h:422`
+  `UStateTreeState::Tasks`, `:419` `EnterConditions`, `:161`
+  `FStateTreeTransition::Conditions` — three separate `TArray<FStateTreeEditorNode>`,
+  so a condition that "gates a transition" is a different storage location, not a
+  convention. `GameplayStateTree/.../StateTreeAIComponentSchema.h:18-19`
+  (`UStateTreeAIComponentSchema : public UStateTreeComponentSchema`), class comment
+  `:14-16` ("guarantees access to an AIController…"). Harness mirrors it faithfully:
+  `StateTreeNodeMgr.cpp:118-124` slot vocabulary; `:208-217` task→`State->Tasks`,
+  enter_condition→`State->EnterConditions`; `:236-273` condition slot requires a
+  transition GUID and inserts into `Trans.Conditions` — structurally impossible to
+  misplace. Reader: `MCPStateTreeCommands.cpp:261` (schema_class), `:341-357`
+  (tasks), `:364-381` (enter_conditions), `:333-334` (depth/child_count),
+  `:467-484` (per-transition conditions).
+- **Proposed change**: none to the skill's content — the Layer-3 placement teaching is
+  engine-true and now harness-guarded. One annotation suggestion: mark SKILL.md:90/92
+  as machine-verified by this battery so future audits know these bullets are guarded
+  fact. **Observability caveat (cross-reference)**: the :89 schema-context claim
+  ("context actor is the AIController") remains engine-true but UNOBSERVABLE — the
+  read primitive emits only the schema class name, not its context-data descriptors;
+  see the standing "npc_logic (iteration 2 adds)" DEFERRED entry in TASKS.md. If
+  `statetree_read` ever emits context-data descriptors, extend this battery rather
+  than writing a new one.
+
 ### /ue-expert — coordinate/rotation claims are now machine-checked by the /position battery (TASK-4, cross-reference)
 
 - **Skill**: `.claude/skills/ue-expert/SKILL.md` — the coordinate/transform convention

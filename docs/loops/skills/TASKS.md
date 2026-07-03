@@ -12,25 +12,6 @@ self-cleaning.
 ## TODO — iteration 2 (compiled 2026-07-02 from second-pass analyses: networking,
 npc_logic authoring flows, capture-pose, automated-tester)
 
-- **TASK-6 — /npc_logic StateTree Layer-3 placement guard.** Claim (SKILL.md:89-92):
-  AI-component schema is the decision layer's schema; conditions gate *transitions*;
-  parallel tasks compose a mode — two tasks under ONE flat state, not a sub-tree.
-  Arrange: `statetree_create` (schema `StateTreeAIComponentSchema`) → two states
-  Engage/Searching → two task nodes on Engage (`slot:"task"`, type discovered via
-  `statetree_list_node_types base_class:"task"`) → `statetree_transition_add`
-  (Engage→Searching, OnTick) → condition node on that transition
-  (`slot:"condition"`, `StateTreeNodeMgr.cpp:236-274` inserts into `Trans.Conditions`).
-  Observe (different primitive): `statetree_read include_node_properties:true` —
-  assert schema_class round-trips (`MCPStateTreeCommands.cpp:261`); Engage has BOTH
-  task GUIDs in `tasks[]` with `child_count==0`/`depth==0` (flat); the transition's
-  `conditions[]` holds the condition GUID, and it is NOT in `tasks[]` or
-  `enter_conditions[]`. Engine oracles: `StateTreeState.h:419,422,161`
-  (EnterConditions/Tasks/FStateTreeTransition::Conditions),
-  `StateTreeAIComponentSchema.h:15,19`. Do NOT compile (covered by
-  `test_statetree.py::test_compile_verify_and_save`). One asset under
-  `/Game/__MCPTest__/skills_npc_logic`, asset_delete-force teardown, `_retry_busy`
-  helper, headless-safe.
-
 - **TASK-7 — proposals only, NO test (capture-pose + automated-tester).** Record in
   PROPOSALS.md: (P1) automated-tester SKILL.md:74-76 presents `uassetDiskPath` as an
   `ops.ts` harness export but it is a per-file local helper
@@ -44,6 +25,16 @@ npc_logic authoring flows, capture-pose, automated-tester)
   unauthorable items (below).
 
 ## DONE
+
+- **TASK-6 — /npc_logic StateTree Layer-3 placement guard** (2026-07-02):
+  `tests/skills/test_npc_logic_statetree_placement.py`, 1/1 green first run vs a live
+  editor (`--ue-attach`). Builds the skill's Engage/Searching example under
+  `StateTreeAIComponentSchema`; all three placement claims confirmed engine-true and
+  harness-faithful (`StateTreeState.h:161,419,422` are three separate arrays;
+  `StateTreeNodeMgr.cpp:208-217,236-273` mirrors them; reader oracle
+  `MCPStateTreeCommands.cpp:261,333-334,341-357,364-381,467-484` — spec's cited
+  anchors re-verified, no deviations). Proposal + schema-context observability
+  cross-reference recorded in PROPOSALS.md. No implementation bugs found.
 
 - **TASK-5 — /networking RPC net-type round-trip on a custom event** (2026-07-02):
   `tests/skills/test_networking_rpc_events.py` written; runs **xfailed** vs a live editor
