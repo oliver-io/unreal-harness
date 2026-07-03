@@ -36,10 +36,6 @@ anything — do not take these descriptions at face value.
   counts / heightmap values, not just shape.
 - [ ] `foliage_inspect` — needs fixture foliage (an InstancedFoliageActor with one type). If
   arranging needs a missing primitive, add it or defer with reason.
-- [ ] `bp_set_component_property` — observe via `bp_list_components`/`bp_inspect` value readback.
-- [ ] `bp_set_component_transform` — observe via `bp_list_components`/`bp_inspect` transform readback.
-- [ ] `bp_set_class_replication` — observe via `bp_inspect`/`reflection_class_properties`
-  (bReplicates on the generated class).
 - [ ] `gas_ability_set_cooldown` + `gas_ability_set_cost` — observe via an independent read of the
   generated GA (Cooldown/Cost GE class wired). If no read primitive can see it, add one or defer.
 - [ ] `editor_viewport_get_camera` — arrange a known camera pose (console exec / a set-camera

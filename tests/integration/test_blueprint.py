@@ -99,6 +99,129 @@ def test_create_variable_then_read(mcp, sample_bp):
     assert "MCPTestHealth" in str(content), content
 
 
+def _component_overrides(mcp, bp_path: str, component: str) -> dict:
+    """Independent readback: bp_read's archetype-diff override list for one SCS
+    component template. Returns {property_name: override_entry}."""
+    content = mcp.expect("bp_read", {
+        "blueprint_path": bp_path,
+        "include_event_graph": False,
+        "include_functions": False,
+        "include_variables": False,
+        "include_component_properties": True,
+    })
+    comp = next(c for c in content["components"] if c["name"] == component)
+    return {o["name"]: o for o in comp.get("property_overrides", [])}
+
+
+@covers("bp_set_component_property")
+def test_set_component_property_then_read_back(mcp):
+    """Write a component-template UPROPERTY, then prove the value landed via
+    bp_read's archetype-diff overrides (a different read primitive), not the
+    setter's echo."""
+    path = f"{NS}/BP_CompProp"
+    ensure_absent(mcp, path)
+    try:
+        mcp.expect("bp_create_blueprint", {"name": path, "parent_class": "Actor"})
+        mcp.expect("bp_add_component", {
+            "blueprint_name": path,
+            "component_type": "StaticMeshComponent",
+            "component_name": "PropMesh",
+        })
+        mcp.expect("bp_set_component_property", {
+            "blueprint_name": path,
+            "component_name": "PropMesh",
+            "property": "BoundsScale",
+            "value": 3.5,
+        })
+        overrides = _component_overrides(mcp, path, "PropMesh")
+        assert "BoundsScale" in overrides, overrides
+        entry = overrides["BoundsScale"]
+        assert float(entry["value"]) == pytest.approx(3.5), entry
+        # The archetype default is 1.0 — proves this is a real template override.
+        assert float(entry["archetype_value"]) == pytest.approx(1.0), entry
+    finally:
+        ensure_absent(mcp, path)
+
+
+@covers("bp_set_component_transform")
+def test_set_component_transform_then_read_back(mcp):
+    """Set the relative transform on a component template, then read the
+    RelativeLocation/Rotation/Scale3D overrides back through bp_read."""
+    path = f"{NS}/BP_CompXform"
+    ensure_absent(mcp, path)
+    try:
+        mcp.expect("bp_create_blueprint", {"name": path, "parent_class": "Actor"})
+        mcp.expect("bp_add_component", {
+            "blueprint_name": path,
+            "component_type": "StaticMeshComponent",
+            "component_name": "XformMesh",
+        })
+        mcp.expect("bp_set_component_transform", {
+            "blueprint_name": path,
+            "component_name": "XformMesh",
+            "location": [10.0, 20.0, 30.0],
+            "rotation": [0.0, 90.0, 0.0],
+            "scale": [2.0, 2.0, 2.0],
+        })
+        overrides = _component_overrides(mcp, path, "XformMesh")
+        # Values are the engine's on-disk export text, e.g. "(X=10.000000,...)".
+        assert overrides["RelativeLocation"]["value"] == \
+            "(X=10.000000,Y=20.000000,Z=30.000000)", overrides
+        assert "Yaw=90.000000" in overrides["RelativeRotation"]["value"], overrides
+        assert overrides["RelativeScale3D"]["value"] == \
+            "(X=2.000000,Y=2.000000,Z=2.000000)", overrides
+    finally:
+        ensure_absent(mcp, path)
+
+
+@covers("bp_set_class_replication")
+def test_set_class_replication_observed_on_spawned_instance(mcp):
+    """Flip bReplicates/bAlwaysRelevant on the Blueprint CDO, then observe the
+    flags on a FRESHLY SPAWNED instance of the generated class via
+    actor_set_property's dry-run diff (its `before` field re-exports the live
+    property by reflection and never mutates) — an independent readback.
+    reflection_class_properties can't resolve BP generated classes (its
+    FindFirstObject uses ExactClass, which excludes UBlueprintGeneratedClass),
+    so the spawned-instance read is the observation path."""
+    path = f"{NS}/BP_ClassRepl"
+    actor_name = "MCPTest_BP_ClassRepl"
+    ensure_absent(mcp, path)
+    try:
+        mcp.expect("bp_create_blueprint", {"name": path, "parent_class": "Actor"})
+        mcp.expect("bp_compile", {"blueprint_name": path})
+        result = mcp.expect("bp_set_class_replication", {
+            "blueprint_name": path,
+            "replicates": True,
+            "always_relevant": True,
+        })
+        assert result.get("success") is True, result
+
+        # Observe: a new instance initializes from the mutated CDO.
+        try:
+            mcp.command("actor_delete", {"name": actor_name})
+        except Exception:
+            pass
+        mcp.expect("actor_spawn", {
+            "class_path": f"{path}.BP_ClassRepl_C",
+            "name": actor_name,
+        })
+        for prop in ("bReplicates", "bAlwaysRelevant"):
+            probe = mcp.expect("actor_set_property", {
+                "name": actor_name,
+                "property": prop,
+                "value": True,
+                "dry_run": True,
+            })
+            before = probe["diff"]["properties_changed"][0]["before"]
+            assert before == "True", f"{prop}: {probe}"
+    finally:
+        try:
+            mcp.command("actor_delete", {"name": actor_name})
+        except Exception:
+            pass
+        ensure_absent(mcp, path)
+
+
 @covers("bp_create_variable")
 def test_create_variable_dry_run_does_not_mutate(mcp, sample_bp):
     result = mcp.expect("bp_create_variable", {
