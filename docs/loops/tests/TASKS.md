@@ -75,9 +75,6 @@ list is exactly the items below; landing each test with its `covers(...)` annota
 - [ ] `actor_spawn_physics` — composite never driven (only its sub-op is, raw). Static tier:
   ensureAbsent → act → observe via `actor_inspect`/`actor_query` that the actor exists AND
   simulate-physics landed true (`src/server/src/domains/actor.ts:214`).
-- [ ] `result_read` — the tool wrapper is never invoked (only the underlying store is, in
-  `compaction.test.ts`). Arrange a compacted payload (low maxBytes), act `result_read`, observe
-  chunk === original slice and `next_offset` walks to null.
 - [ ] `build_status` — lock logic is tested but the tool never called. Acquire a lock via the
   `__test` hook with a live pid, act `build_status`, observe `in_progress == true`.
 - [ ] `editor_read_logs` — marker roundtrip: emit a known marker via `editor_console_exec`, act
