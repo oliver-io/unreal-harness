@@ -1,6 +1,6 @@
 # MCP Bugs
 
-MCP and harness bugs are tracked in [bugs](../bugs.md).  This document should be kept as a living record of all the current bugs, and when something is fixed, if it doesn't need explicit confirmation, should be removed from the bugs list.  We want to keep this list as a pristine known issues list, and not confuse anyone with solved problems.
+MCP and harness bugs are tracked in [bugs](../../BUGS.md).  This document should be kept as a living record of all the current bugs, and when something is fixed, if it doesn't need explicit confirmation, should be removed from the bugs list.  We want to keep this list as a pristine known issues list, and not confuse anyone with solved problems.
 
 If it does not already have one, we should make sure that the bug report document has a #DEFERRED list in case we don't know how to handle it.
 

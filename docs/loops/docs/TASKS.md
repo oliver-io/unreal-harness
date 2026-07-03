@@ -11,16 +11,6 @@ each group.
 
 ---
 
-## docs/BUGS.md
-
-### DOC-002 — Loop docs link a nonexistent `docs/loops/bugs.md`
-`docs/loops/mcp/mcp-bugfix-loop.md:3` and `docs/loops/skills/PROPOSALS.md:3` link
-`[bugs](../bugs.md)` → resolves to `docs/loops/bugs.md`, which does not exist. The intended
-target is `docs/BUGS.md`.
-**Fix:** Repoint both links to `../../BUGS.md` (after DOC-001 gives them something to point at).
-
----
-
 ## docs/USAGE.md
 
 ### DOC-010 — §2.8 (IK retargeting) is grossly stale: "one primitive" vs 11 shipped tools
