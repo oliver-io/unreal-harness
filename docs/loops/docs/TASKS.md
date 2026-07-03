@@ -13,16 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-014 — §1.2 error taxonomy: count wrong, `timeout` missing, `isRecoverable()` fictional
-- USAGE:33 says "closed set, 30 codes" — both sides define **31** (`errors.ts:12-53`,
-  `MCPCommonUtils.h:31-97`); the table (USAGE:35-42) omits `timeout` (added post-doc,
-  GAP-007).
-- USAGE:53 documents an `isRecoverable(code)` helper "in `errors.ts`" — no such function
-  exists anywhere in `src/server` (errors.ts exports only `ErrorCode` and `asErrorCode`).
-**Fix:** Add `timeout`, say 31 (or drop the hardcoded count), delete the `isRecoverable`
-paragraph (or replace with whatever recoverability guidance is actually true — as of the
-audit, nothing implements it).
-
 ### DOC-015 — §1.2/§3.2 cite a wrong C++ header path
 USAGE:44 and USAGE:645 say `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h`.
 Actual: `src/Plugin/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` (USAGE:3

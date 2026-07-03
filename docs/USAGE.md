@@ -30,7 +30,7 @@ Every tool returns:
 
 Server callers: use the envelope helpers in `src/server/src/bridge/envelope.ts` for the raw string, or the typed `ErrorCode` accessor in `src/server/src/bridge/errors.ts`.
 
-### 1.2. Error code taxonomy (closed set, 30 codes)
+### 1.2. Error code taxonomy (closed set)
 
 | Group | Codes |
 |---|---|
@@ -39,9 +39,11 @@ Server callers: use the envelope helpers in `src/server/src/bridge/envelope.ts` 
 | **Asset state** | `asset_dirty`, `asset_compile_failed`, `asset_locked`, `name_collision` |
 | **Capability** | `unsupported_class`, `not_in_pie`, `pie_active`, `editor_not_ready`, `feature_disabled`, `dry_run_unsupported` |
 | **Authority / safety** | `would_break_references`, `circular_dependency` |
-| **Engine** | `engine_busy`, `live_coding_unavailable`, `compile_in_progress`, `internal` |
+| **Engine** | `engine_busy`, `live_coding_unavailable`, `compile_in_progress`, `timeout`, `internal` |
 
-The set is owned by `EMCPErrorCode` in `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` and mirrored to `src/server/src/bridge/errors.ts`. Adding a code requires updating both ends.
+`timeout` means an engine-side operation did not complete within its bounded budget (e.g. an editor-viewport screenshot that never rendered a qualifying frame — see GAP-007 in `docs/BUGS.md`); it is environmental, not a caller-input error.
+
+The set is owned by `EMCPErrorCode` in `Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` and mirrored to `src/server/src/bridge/errors.ts` — those two enumerations are the authoritative list (31 codes as of this writing). Adding a code requires updating both ends.
 
 **Hint quality bar.** An `error_hint` is good if an agent can act on it without further investigation. Tests:
 - "did you mean X" hints carry a candidate name list (top three by edit distance where the registry can produce them).
@@ -49,8 +51,6 @@ The set is owned by `EMCPErrorCode` in `Plugins/UnrealMCP/Source/UnrealMCP/Publi
 - "valid values are …" hints enumerate the closed set in the message body.
 
 Hints are optional — omit rather than ship filler.
-
-**Recovery helper.** `isRecoverable(code)` in `src/server/src/bridge/errors.ts` returns `true` for identity / input-shape / asset-state / `not_in_pie` / `engine_busy` / `compile_in_progress`. Returns `false` for `internal`, `unsupported_class`, `asset_compile_failed`, `would_break_references`, `circular_dependency`, `live_coding_unavailable`, `feature_disabled`, `dry_run_unsupported`.
 
 ### 1.3. Auto-save
 
