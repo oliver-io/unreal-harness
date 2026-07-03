@@ -5,6 +5,16 @@ same change that alters behavior.
 
 ## Unreleased
 
+- Bun-side coverage ledger for server-local tools (`src/server/test/coverage.test.ts`
+  + `test/harness/coverage.ts`): the analog of pytest's `test_zz_coverage.py` for the
+  13 registry tools whose wire name has no C++ dispatch key (`catalog_*`, `code_*`,
+  `result_read`, `build_status`, `pie_analyze`, `video_analyze`, `editor_read_logs`,
+  `editor_build_game_target`, `actor_spawn_physics`) — invisible to the pytest
+  manifest by construction. Tests declare coverage with `covers("tool")`; the gate is
+  expected-red until docs/loops/tests/TASKS.md §C completes. Supporting change:
+  `bridgeTool` now records its wire command on `ToolDef.command` so bridge-tier vs
+  server-local classification is runtime-introspectable (legacy overrides like
+  `statetree_node_add` → `st_add_node` stay pytest's job).
 - `asset_textures_import`: per-image `settings.lod_group` (World/UI/Effects/Skybox/
   Character/Weapon/Vehicle/Pixels2D) and `settings.mip_gen` (FromTextureGroup/
   NoMipmaps/SimpleAverage/LeaveExistingMips). UI-group textures are never streamed,

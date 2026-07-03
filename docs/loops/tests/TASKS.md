@@ -9,11 +9,6 @@ anything — do not take these descriptions at face value.
 
 ## A. Harness integrity (do these first — they gate everything below)
 
-- [ ] **Decide the ledger story for server-local tools.** ~33 canonical tools never hit the C++
-  bridge (`catalog_*`, `code_*`, `result_read`, `build_status`, `pie_analyze`, `video_analyze`,
-  `actor_spawn_physics`, `editor_read_logs`, `editor_build_game_target`, server-side composites),
-  so the pytest `@covers` oracle cannot see them. Add a bun-side coverage ledger over
-  `src/server/test/` or an explicit exemption list in the manifest — silent invisibility is the bug.
 - [ ] **Report (not fix) dead C++ wire names.** 8 dispatch keys are unreachable from any server
   tool: `add_conduit`, `editor_focus_actor`, `get_blueprint_material_info` (tests reach it raw),
   `get_mesh_bounds` (duplicate of `mesh_get_bounds`), `list_material_parameters`,
@@ -69,6 +64,16 @@ anything — do not take these descriptions at face value.
   observation is independent state — no play-acting, no navigation.
 
 ## C. Server-local tools with no test (bun tier)
+
+Enforced (2026-07-02) by the bun coverage gate `src/server/test/coverage.test.ts` — the analog of
+pytest's `test_zz_coverage.py`, expected red until this section completes. Rule: registry tools
+whose wire name (`ToolDef.command ?? name`) has no C++ dispatch key are server-local (invisible to
+the pytest manifest by construction) and must declare bun-side coverage via `covers("tool")` from
+`src/server/test/harness/coverage.ts`. Note the original "~33" estimate was the naive
+name-vs-manifest diff: 20 of those are legacy `command:`-override bridge tools (`statetree_*`,
+`bp_add_node`) that pytest already sees under their wire names — the true server-local set is 13,
+of which `catalog_*`/`code_*` (6) are covered in `disclosure.test.ts`. The gate's current missing
+list is exactly the items below; landing each test with its `covers(...)` annotation shrinks it.
 
 - [ ] `actor_spawn_physics` — composite never driven (only its sub-op is, raw). Static tier:
   ensureAbsent → act → observe via `actor_inspect`/`actor_query` that the actor exists AND

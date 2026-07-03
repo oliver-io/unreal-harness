@@ -61,6 +61,16 @@ export interface ToolDef<
    * key before `handler`. See `registry/aliases.ts` (GAP-021/041).
    */
   aliases?: Record<string, string>;
+  /**
+   * Bridge wire command this tool forwards to. Set by `bridgeTool` (equals
+   * `name` post naming-migration, except the legacy `command:` overrides such
+   * as `statetree_node_add` → `st_add_node`). Unset on custom-handler tools
+   * (`defineTool`): server-local tools and composites. The bun coverage gate
+   * (`test/coverage.test.ts`) keys off `command ?? name` vs the C++ dispatch
+   * keys to split bridge-tier (pytest `@covers`) from server-local (bun)
+   * coverage.
+   */
+  command?: string;
   handler: (args: z.infer<S>, ctx: ToolContext) => Promise<unknown> | unknown;
 }
 

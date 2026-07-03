@@ -5,6 +5,7 @@ import { defineTool } from "../src/domains/_shared.ts";
 import { metaTools } from "../src/disclosure/metatools.ts";
 import { codeTools } from "../src/disclosure/codemode/tools.ts";
 import type { ToolContext, ToolDef } from "../src/registry/types.ts";
+import { covers } from "./harness/coverage.ts";
 
 const ctx = { conn: undefined } as unknown as ToolContext;
 
@@ -33,6 +34,7 @@ function setup() {
 }
 
 describe("tier 2 — catalog meta-tools", () => {
+  covers("catalog_domains");
   test("catalog_domains hides catalog/code plumbing", async () => {
     const { get } = setup();
     const r: any = await get("catalog_domains").handler({}, ctx);
@@ -40,6 +42,7 @@ describe("tier 2 — catalog meta-tools", () => {
     expect(r.result.total).toBe(1);
   });
 
+  covers("catalog_search");
   test("catalog_search finds domain tools, excludes meta", async () => {
     const { get } = setup();
     const r: any = await get("catalog_search").handler({ query: "echo", limit: 20 }, ctx);
@@ -47,6 +50,7 @@ describe("tier 2 — catalog meta-tools", () => {
     expect(r.result.matches.some((m: any) => m.domain === "catalog")).toBe(false);
   });
 
+  covers("catalog_describe");
   test("catalog_describe returns schema + pie/dryrun annotations", async () => {
     const { get } = setup();
     const r: any = await get("catalog_describe").handler({ name: "actor_get_in_level" }, ctx);
@@ -56,6 +60,7 @@ describe("tier 2 — catalog meta-tools", () => {
     expect(miss.status).toBe("error");
   });
 
+  covers("catalog_call");
   test("catalog_call dispatches + validates", async () => {
     const { get } = setup();
     const ok: any = await get("catalog_call").handler({ name: "actor_get_in_level", params: { x: 5 } }, ctx);
@@ -67,6 +72,7 @@ describe("tier 2 — catalog meta-tools", () => {
 });
 
 describe("tier 3 — code-execution mode", () => {
+  covers("code_api");
   test("code_api lists callable unreal.* functions", async () => {
     const { get } = setup();
     const r: any = await get("code_api").handler({}, ctx);
@@ -74,6 +80,7 @@ describe("tier 3 — code-execution mode", () => {
     expect(r.result.api).toContain("actor_get_in_level(params");
   });
 
+  covers("code_run");
   test("code_run executes a snippet, returns logs + value, keeps work in sandbox", async () => {
     const { get } = setup();
     const code = `

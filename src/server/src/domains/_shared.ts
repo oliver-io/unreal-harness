@@ -43,6 +43,7 @@ export function bridgeTool<S extends z.ZodObject<z.ZodRawShape>>(
     description: spec.description,
     input: spec.input,
     annotations: spec.annotations,
+    command,
     handler: (args, ctx) =>
       ctx.conn.sendCommand(
         command,
