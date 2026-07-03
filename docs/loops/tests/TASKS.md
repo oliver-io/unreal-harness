@@ -20,10 +20,6 @@ anything — do not take these descriptions at face value.
   `tests/fixtures/TestProject/TestProject.uproject` does NOT enable the PCG plugin — enabling it
   (built-in engine plugin) is part of the task. Observe: topology via `pcg_graph_read` after
   node_add/connect; `pcg_component_generate` via `actor_inspect` on the host actor or a log marker.
-- [ ] **Level lifecycle:** `level_new`, `level_load`, `level_save`, `level_save_as` — untested.
-  Observe via `level_inspect` (level name / actor count) + on-disk `.umap`. CAUTION: mutates the
-  shared editor's open level — MUST restore the baseline map in `finally` and respect the
-  multi-agent shared-editor rules.
 - [ ] **Landscape (3 ops, one task):** `landscape_inspect`, `landscape_list_layers`,
   `landscape_read_heightmap`. Arrange: a fixture level containing a Landscape (via
   `editor_console_exec` py or a minimal committed fixture map). Deep = assert known component
@@ -177,6 +173,26 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
+
+- **Level lifecycle — tests WRITTEN, live execution deferred to the next fixture-editor
+  (launch-mode) run** (2026-07-02). `level_new`/`level_load`/`level_save`/`level_save_as` now
+  have parity twins (`tests/integration/test_level_lifecycle.py` +
+  `src/server/test/integration/level_lifecycle.test.ts`; coverage gate 24 → 20), but they are
+  skip-gated against a shared attached editor and have NOT yet executed. Hazard findings
+  (`MCPLevelCommands.cpp`): `level_new` passes `bSaveExisting=false` to
+  `NewBlankMap`/`NewMapFromTemplate` and `level_load` calls `LoadMap` with no save prompt — both
+  DISCARD the open map's unsaved changes (no save-all side effects; `level_save`/`level_save_as`
+  are surgical, `SaveMap` on the current map package only). Live probe at task time: the open map
+  `/Game/Trong/Maps/L_TestBed` was itself DIRTY plus 16 dirty `__MCPTest__` content packages of
+  other agents' WIP, so the "current map clean" exception did not apply and no lifecycle op was
+  executed. Gating: pytest skips under `--ue-attach` (runs in default launch mode against
+  `tests/fixtures/TestProject`); the bun mirror additionally requires `UE_MCP_FIXTURE_EDITOR=1`
+  (the bun tier always attaches, so an explicit fixture-editor attestation is the analog).
+  Launch mode could not be run this task: the shared trong editor holds :55557, and a second
+  editor on the port is forbidden/broken (duplicate-editor lock). Both modules verified by
+  collection + skip-gate run (4 skipped each, editor state unchanged before/after). First green
+  execution is expected on the next `tests/run.ps1` fixture run — if it fails there, treat as a
+  normal red test, not a coverage regression.
 
 - `editor_build_reflection_captures` (2026-07-02) — no observable beyond the echo that a test
   could both assert AND clean up; deferred as "mutates shared editor level state irrecoverably
