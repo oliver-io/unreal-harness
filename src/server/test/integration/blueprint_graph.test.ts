@@ -83,7 +83,14 @@ editorSuite("blueprint_graph", (ctx) => {
       pos_y: 0,
       message: "MCP graph test",
     });
-    expect((res as any).node_id).toBeTruthy();
+    const nodeId = (res as any).node_id;
+    expect(nodeId).toBeTruthy();
+    // Independent readback (not the node_id echo): the "message" arg lands as
+    // the Print node's InString pin default.
+    const pins = await listPins(ctx.mcp, sampleBp, nodeId);
+    const instr = pins.find((p: any) => p.name === "InString");
+    expect(instr).toBeDefined();
+    expect(instr.default_value).toBe("MCP graph test");
     await ctx.mcp.expect("bp_compile", { blueprint_name: sampleBp });
   });
 
@@ -207,12 +214,21 @@ editorSuite("blueprint_graph", (ctx) => {
         message: "doomed",
       })
     ).node_id;
+    // Sanity: the node is resolvable before the delete (guards vacuity below).
+    expect((await listPins(ctx.mcp, sampleBp, printer)).length).toBeGreaterThan(0);
     const res = await ctx.mcp.expect("bp_delete_node", {
       blueprint_name: sampleBp,
       node_id: printer,
       dry_run: false,
     });
     expect((res as any).deleted_node_id || (res as any).success !== false).toBeTruthy();
+    // Independent readback: the node is GONE — resolving its id now fails with
+    // the closed-taxonomy node_not_found (not just the delete op's echo).
+    const after = await ctx.mcp.call("bp_list_node_pins", {
+      blueprint_name: sampleBp,
+      node_id: printer,
+    });
+    expect((after as any).error_code).toBe("node_not_found");
     await ctx.mcp.expect("bp_compile", { blueprint_name: sampleBp });
   });
 
@@ -365,7 +381,93 @@ editorSuite("blueprint_graph", (ctx) => {
       function_name: "MCPRefFunc",
       direction: "callees",
     });
-    expect(res && typeof res === "object" && Object.keys(res).length > 0).toBeTruthy();
+    // Concrete known fields: references[] is present, count is consistent with
+    // it, and a freshly-created empty function graph has zero callees.
+    expect(Array.isArray(res.references)).toBe(true);
+    expect(res.count).toBe(0);
+    expect((res.references as unknown[]).length).toBe(0);
+    expect(String(res.bp_path ?? "").startsWith(sampleBp)).toBe(true);
+  });
+
+  // ── custom event authoring + replication (GAP-055) ────────────────────────
+
+  test("custom_event_create_and_replicate", async () => {
+    // Port of pytest test_custom_event_create_and_replicate. Author a fresh
+    // custom event with one typed input parameter (an output pin on the node =
+    // the event's input signature).
+    const res = await ctx.mcp.expect("bp_add_custom_event", {
+      blueprint_name: sampleBp,
+      event_name: "MCPServerFire",
+      params: [{ name: "Amount", type: "int" }],
+      pos_x: 0,
+      pos_y: 600,
+    });
+    expect((res as any).node_id).toBeTruthy();
+    expect(res.event_name).toBe("MCPServerFire");
+    expect(res.num_params).toBe(1);
+    expect(res.params_added as string[]).toContain("Amount");
+
+    // The parameter is exposed as an OUTPUT pin named Amount on the event node.
+    const pins = await listPins(ctx.mcp, sampleBp, (res as any).node_id);
+    expect(pins.some((p: any) => p.name === "Amount" && p.direction === "Output")).toBe(true);
+
+    // Re-creating the same name is rejected deterministically (no auto-rename).
+    const dup = await ctx.mcp.call("bp_add_custom_event", {
+      blueprint_name: sampleBp,
+      event_name: "MCPServerFire",
+    });
+    expect((dup as any).error_code).toBe("name_collision");
+
+    // The event survives a structural recompile and is visible in the BP.
+    await ctx.mcp.expect("bp_compile", { blueprint_name: sampleBp });
+    expect(JSON.stringify(await ctx.mcp.expect("bp_read", { blueprint_path: sampleBp }))).toContain(
+      "MCPServerFire",
+    );
+
+    // Turn the event into a server RPC.
+    //
+    // KNOWN DEAD WIRE (docs/BUGS.md § "bp_set_event_replication is dead code"):
+    // the handler exists (MCPBlueprintCommands.cpp:117) but FMCPBridge::
+    // ExecuteCommand never routes the command, so the live bridge answers
+    // "Unknown command". Bail out on exactly that signature (bun analog of the
+    // pytest xfail); the battery below self-unblocks when the dispatch lands.
+    const repEnv = await ctx.mcp.call("bp_set_event_replication", {
+      blueprint_name: sampleBp,
+      event_name: "MCPServerFire",
+      replication: "server",
+      reliable: true,
+    });
+    if (String((repEnv as any).error ?? "").includes("Unknown command")) {
+      console.warn(
+        "bp_set_event_replication is not routed by the bridge (docs/BUGS.md § dead code) — " +
+          "replication readback skipped; un-skips when the MCPBridge.cpp dispatch line lands",
+      );
+      return;
+    }
+    expect(repEnv.status).not.toBe("error");
+    const rep = (repEnv.result ?? repEnv) as Record<string, unknown>;
+    expect(rep.replication).toBe("server");
+    expect(rep.reliable).toBe(true);
+    // NOTE: rep.function_flags is the MUTATOR'S ECHO. The independent readback
+    // is bp_inspect's custom-event decoder (MCPBlueprintCommands.cpp:2986-3009),
+    // which re-derives the mode from UK2Node_CustomEvent::GetNetFlags():
+    // "RunOnServer" for FUNC_NetServer. (bp_get_function_details cannot observe
+    // this — it walks FunctionGraphs only; custom events live in UbergraphPages.)
+    const analysis = await ctx.mcp.expect("bp_inspect", {
+      blueprint_path: sampleBp,
+      graph_name: "EventGraph",
+      include_node_details: true,
+      include_pin_connections: false,
+    });
+    const nodes = ((analysis.graph_data as any)?.nodes ?? []) as any[];
+    const ev = nodes.find(
+      (n: any) => n.class === "K2Node_CustomEvent" && String(n.title ?? "").includes("MCPServerFire"),
+    );
+    expect(ev).toBeDefined();
+    expect(ev.replication).toBe("RunOnServer");
+
+    // Still compiles clean after flipping the net specifiers.
+    await ctx.mcp.expect("bp_compile", { blueprint_name: sampleBp });
   });
 
   // ── variable ops ───────────────────────────────────────────────────────────

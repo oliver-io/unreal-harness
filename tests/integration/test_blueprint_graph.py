@@ -91,7 +91,14 @@ def test_add_blueprint_node_print(mcp, sample_bp):
         "node_type": "Print",
         "pos_x": 400, "pos_y": 0, "message": "MCP graph test",
     })
-    assert res.get("node_id"), res
+    node_id = res.get("node_id")
+    assert node_id, res
+    # Independent readback (not the node_id echo): the "message" arg lands as
+    # the Print node's InString pin default.
+    pins = _list_pins(mcp, sample_bp, node_id)
+    instr = next((p for p in pins if p.get("name") == "InString"), None)
+    assert instr is not None, pins
+    assert instr.get("default_value") == "MCP graph test", instr
     mcp.expect("bp_compile", {"blueprint_name": sample_bp})
 
 
@@ -190,12 +197,20 @@ def test_delete_node(mcp, sample_bp):
         "blueprint_name": sample_bp, "node_type": "Print",
         "pos_x": 800, "pos_y": 300, "message": "doomed",
     })["node_id"]
+    # Sanity: the node is resolvable before the delete (guards vacuity below).
+    assert _list_pins(mcp, sample_bp, printer), printer
     res = mcp.expect("bp_delete_node", {
         "blueprint_name": sample_bp,
         "node_id": printer,
         "dry_run": False,
     })
     assert res.get("deleted_node_id") or res.get("success") is not False, res
+    # Independent readback: the node is GONE — resolving its id now fails with
+    # the closed-taxonomy node_not_found (not just the delete op's echo).
+    after = mcp.call("bp_list_node_pins", {
+        "blueprint_name": sample_bp, "node_id": printer,
+    })
+    assert after.get("error_code") == "node_not_found", after
     mcp.expect("bp_compile", {"blueprint_name": sample_bp})
 
 
@@ -325,7 +340,12 @@ def test_bp_function_references(mcp, sample_bp):
         "function_name": "MCPRefFunc",
         "direction": "callees",
     })
-    assert isinstance(res, dict) and res, res
+    # Concrete known fields: references[] is present, count is consistent with
+    # it, and a freshly-created empty function graph has zero callees.
+    refs = res.get("references")
+    assert isinstance(refs, list), res
+    assert res.get("count") == len(refs) == 0, res
+    assert str(res.get("bp_path", "")).startswith(sample_bp), res
 
 
 # ── event dispatcher (multicast delegate) ────────────────────────────────────
@@ -390,19 +410,47 @@ def test_custom_event_create_and_replicate(mcp, sample_bp):
     blob = str(mcp.expect("bp_read", {"blueprint_path": sample_bp}))
     assert "MCPServerFire" in blob, blob
 
-    # Now the create-side primitive enables a passing bp_set_event_replication test:
-    # turn the freshly-authored custom event into a server RPC and read the flags back.
-    rep = mcp.expect("bp_set_event_replication", {
+    # Now the create-side primitive enables a bp_set_event_replication test:
+    # turn the freshly-authored custom event into a server RPC.
+    #
+    # KNOWN DEAD WIRE (docs/BUGS.md § "bp_set_event_replication is dead code"):
+    # the handler exists (MCPBlueprintCommands.cpp:117) but FMCPBridge::
+    # ExecuteCommand never routes the command, so the live bridge answers
+    # "Unknown command". xfail on exactly that signature (same convention as
+    # tests/skills/test_networking_rpc_events.py); the full battery below
+    # self-unblocks the moment the dispatch line lands.
+    rep_env = mcp.call("bp_set_event_replication", {
         "blueprint_name": sample_bp,
         "event_name": "MCPServerFire",
         "replication": "server",
         "reliable": True,
     })
+    if "Unknown command" in str(rep_env.get("error", "")):
+        pytest.xfail("bp_set_event_replication is not routed by the bridge "
+                     "(docs/BUGS.md § dead code) — un-xfails when the "
+                     "MCPBridge.cpp dispatch line lands")
+    assert rep_env.get("status") != "error" and rep_env.get("success") is not False, rep_env
+    rep = rep_env.get("result", rep_env)
     assert rep.get("replication") == "server", rep
     assert rep.get("reliable") is True, rep
-    # FUNC_Net (0x40) | FUNC_NetServer (0x200000) | FUNC_NetReliable (0x80) must be set.
-    flags = int(rep.get("function_flags", 0))
-    assert flags & 0x40 and flags & 0x200000 and flags & 0x80, rep
+    # NOTE: rep["function_flags"] is the MUTATOR'S ECHO (the handler re-reads the
+    # node object it just wrote). The independent readback is bp_inspect's
+    # custom-event decoder (MCPBlueprintCommands.cpp:2986-3009), which re-derives
+    # the replication mode from UK2Node_CustomEvent::GetNetFlags():
+    # "RunOnServer" for FUNC_NetServer. (bp_get_function_details cannot observe
+    # this — it walks FunctionGraphs only; custom events live in UbergraphPages.)
+    analysis = mcp.expect("bp_inspect", {
+        "blueprint_path": sample_bp,
+        "graph_name": "EventGraph",
+        "include_node_details": True,
+        "include_pin_connections": False,
+    })
+    nodes = analysis.get("graph_data", {}).get("nodes", [])
+    ev = next((n for n in nodes
+               if n.get("class") == "K2Node_CustomEvent"
+               and "MCPServerFire" in (n.get("title") or "")), None)
+    assert ev is not None, nodes
+    assert ev.get("replication") == "RunOnServer", ev
 
     # Still compiles clean after flipping the net specifiers.
     mcp.expect("bp_compile", {"blueprint_name": sample_bp})

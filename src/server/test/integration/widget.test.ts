@@ -82,19 +82,50 @@ editorSuite("widget", (ctx) => {
     expect(blob).toContain("Button");
   });
 
-  test.skipIf(!GUI)("test_widget_set_property_then_readback", async () => {
-    const result = await ctx.mcp.expect("widget_set_property", {
-      widget_path: sample.path,
-      widget_name: sample.button,
-      property_name: "IsEnabled",
-      property_value: false,
-      target: "widget",
+  /** Independent readback for widget_set_property: read bIsEnabled straight
+   *  off the WidgetTree template subobject (path `<pkg>.<WBP>:WidgetTree.<name>`)
+   *  via the sanctioned py console hatch — widget_tree_read exports only
+   *  name/class/parent/slot, not widget-side properties. */
+  async function readButtonEnabled(widgetPath: string, button: string): Promise<string> {
+    const name = widgetPath.split("/").pop();
+    const probe = await ctx.mcp.expect("editor_console_exec", {
+      command:
+        "py import unreal; " +
+        `b = unreal.find_object(None, '${widgetPath}.${name}:WidgetTree.${button}'); ` +
+        "print('MCPTEST_EN=' + (str(b.get_editor_property('is_enabled')) if b else 'NOTFOUND'))",
     });
-    expect(result.success).not.toBe(false);
-    expect(result.property_name).toEqual("IsEnabled");
-    // The setter captures before/after exported text; 'after' must reflect False.
-    expect(result.after).toBeDefined();
-    expect(String(result.after ?? "").toLowerCase()).toContain("false");
+    const m = /MCPTEST_EN=(\w+)/.exec(String(probe.output ?? ""));
+    if (!m) throw new Error(`no probe marker: ${JSON.stringify(probe)}`);
+    return m[1]!;
+  }
+
+  test.skipIf(!GUI)("test_widget_set_property_then_readback", async () => {
+    // Disable the Button template, prove the value landed via an independent
+    // py readback of the WidgetTree subobject (NOT the setter's own
+    // before/after), and restore it in finally (the sample WBP is shared).
+    // Note: the FProperty's real FName is `bIsEnabled` — the un-prefixed
+    // "IsEnabled" is rejected with pin_not_found (verified live).
+    try {
+      const result = await ctx.mcp.expect("widget_set_property", {
+        widget_path: sample.path,
+        widget_name: sample.button,
+        property_name: "bIsEnabled",
+        property_value: false,
+        target: "widget",
+      });
+      expect(result.success).not.toBe(false);
+      expect(result.property_name).toEqual("bIsEnabled");
+      // Independent readback: the Button template itself now reports disabled.
+      expect(await readButtonEnabled(sample.path, sample.button)).toBe("False");
+    } finally {
+      await ctx.mcp.command("widget_set_property", {
+        widget_path: sample.path,
+        widget_name: sample.button,
+        property_name: "bIsEnabled",
+        property_value: true,
+        target: "widget",
+      });
+    }
   });
 
   test.skipIf(!GUI)("test_widget_bind_handler", async () => {
@@ -107,6 +138,23 @@ editorSuite("widget", (ctx) => {
     });
     expect(result.success).not.toBe(false);
     expect(result.event_name).toEqual("OnClicked");
+    // Independent readback (not the event_name echo): the bind authored a
+    // K2Node_ComponentBoundEvent in the WBP's event graph wired to this
+    // button's OnClicked delegate.
+    const analysis = await ctx.mcp.expect("bp_inspect", {
+      blueprint_path: sample.path,
+      graph_name: "EventGraph",
+      include_node_details: true,
+      include_pin_connections: false,
+    });
+    const nodes = ((analysis.graph_data as any)?.nodes ?? []) as any[];
+    const bound = nodes.find(
+      (n: any) =>
+        n.class === "K2Node_ComponentBoundEvent" &&
+        n.delegate_name === "OnClicked" &&
+        n.component_name === sample.button,
+    );
+    expect(bound).toBeDefined();
     await assertReady(ctx.mcp);
   });
 });

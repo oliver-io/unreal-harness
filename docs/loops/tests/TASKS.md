@@ -50,24 +50,22 @@ alignment and is 0 even on a perfect positional solve) — the test still skips 
 SkeletalCube, but the assertion path was validated by a manual 3-bone mannequin drive.)
 
 ### Blueprint / widget
-- [ ] `bp_compile` (`test_blueprint.py:47`) — bare success (the textbook hollow case); add
-  `bp_inspect` proving the generated class recompiled.
-- [ ] `bp_add_node` print-string (`test_blueprint_graph.py:88`) — node_id echo; read the `InString`
-  default back via `bp_list_node_pins`.
-- [ ] `bp_delete_node` (`test_blueprint_graph.py:188`) — echo; assert the node is gone via
-  `bp_list_node_pins`/`bp_inspect`.
-- [ ] `bp_set_event_replication` (`test_blueprint_graph.py:395`) — auditors disagreed whether the
-  function_flags assertion at :404 is an independent readback or the mutator's echo; verify, and
-  if echo, prove via `bp_get_function_details` on the resolved function. ALSO port the missing bun
-  mirror (custom-event + replication test absent from `blueprint_graph.test.ts`).
-- [ ] `bp_create_variable` dry-run (`test_blueprint.py:103`) — echo `dry_run:true`; assert the
-  variable is ABSENT via `bp_read`.
-- [ ] Shape-only reads (one task): `bp_brief`, `bp_read`, `bp_list_graphs`,
-  `bp_function_references` assert "non-empty dict"; assert one concrete known field each.
-- [ ] `widget_set_property` (`test_widget.py:78`) — setter's own before/after; re-read via
-  `widget_tree_read` (IsEnabled == false on the Button).
-- [ ] `widget_bind_handler` (`test_widget.py:94`) — echo event_name; prove the OnClicked binding
-  exists via `widget_tree_read`/`bp_read` of the WBP.
+(all 8 landed 2026-07-03; pytest + bun mirrors in lockstep, green live against the GUI trong
+editor in attach mode. Oracle notes for future auditors: `bp_compile` is observed via the
+py-hatch generated-class UFunction probe (`<pkg>.<Name>_C:<Event>` absent → compile → present;
+`bp_add_custom_event` regenerates the SKELETON only, so the before-state is real; class_inspect
+can't resolve BP generated classes — ExactClass); `bp_set_event_replication` remains a DEAD WIRE
+(docs/BUGS.md — handler exists, MCPBridge.cpp never routes it), so the hardened test xfails on
+exactly the "Unknown command" signature and self-unblocks with the full `bp_inspect`
+custom-event-decoder readback (`replication == "RunOnServer"`; the :404 function_flags WAS the
+mutator's echo; `bp_get_function_details` can't observe it — walks FunctionGraphs only, custom
+events live in UbergraphPages) — the missing bun custom-event+replication mirror is ported with
+the same guard; `widget_set_property`'s suggested `widget_tree_read` oracle was wrong
+(tree read exports only name/class/parent/slot) — observed via the py-hatch WidgetTree-subobject
+`is_enabled` readback instead, restore-in-finally, and the property's real FName is `bIsEnabled`
+("IsEnabled" → pin_not_found, verified live — the old test could never have run green);
+`widget_bind_handler` is observed via `bp_inspect`'s K2Node_ComponentBoundEvent serialization
+(delegate_name/component_name).)
 
 ### Material / niagara / mesh / asset / editor
 - [ ] `material_connect` (`test_material.py:108`) — connection never read back; assert via

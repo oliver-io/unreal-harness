@@ -47,14 +47,58 @@ editorSuite("blueprint", (ctx) => {
     expect(existsSync(disk) && statSync(disk).isFile()).toBe(true);
   });
 
+  /** Independent readback for bp_compile: does the GENERATED class carry a
+   *  UFunction of this name? The function subobject's path is
+   *  `<pkg>.<Name>_C:<Function>` — it exists only after a real kismet compile
+   *  (bp_add_custom_event marks the BP structurally modified, which regenerates
+   *  the SKELETON class only). Observed via the sanctioned py console hatch. */
+  async function generatedClassHasFunction(bpPath: string, fn: string): Promise<boolean> {
+    const name = bpPath.split("/").pop();
+    const probe = await ctx.mcp.expect("editor_console_exec", {
+      command:
+        "py import unreal; " +
+        `f = unreal.find_object(None, '${bpPath}.${name}_C:${fn}'); ` +
+        "print('MCPTEST_FN=' + ('present' if f else 'absent'))",
+    });
+    const m = /MCPTEST_FN=(\w+)/.exec(String(probe.output ?? ""));
+    if (!m) throw new Error(`no probe marker: ${JSON.stringify(probe)}`);
+    return m[1] === "present";
+  }
+
   test("compile_blueprint", async () => {
-    const result = await ctx.mcp.expect("bp_compile", { blueprint_name: SAMPLE });
-    expect(result.success).not.toBe(false);
+    // bp_compile must actually recompile the generated class — not just return
+    // success. A custom event added via bp_add_custom_event exists only on the
+    // graph/skeleton; the generated class gains its UFunction only at compile.
+    const path = `${NS}/BP_CompileProbe`;
+    await ensureAbsent(ctx.mcp, path);
+    try {
+      await ctx.mcp.expect("bp_create_blueprint", { name: path, parent_class: "Actor" });
+      await ctx.mcp.expect("bp_compile", { blueprint_name: path });
+      await ctx.mcp.expect("bp_add_custom_event", {
+        blueprint_name: path,
+        event_name: "MCPCompileProbeEvent",
+      });
+      // Before the compile under test (proves the observation is not vacuous).
+      expect(await generatedClassHasFunction(path, "MCPCompileProbeEvent")).toBe(false);
+
+      const result = await ctx.mcp.expect("bp_compile", { blueprint_name: path });
+      expect(result.compiled).toBe(true);
+
+      // Independent readback: the generated class now exposes the UFunction.
+      expect(await generatedClassHasFunction(path, "MCPCompileProbeEvent")).toBe(true);
+    } finally {
+      await ensureAbsent(ctx.mcp, path);
+    }
   });
 
   test("bp_brief", async () => {
     const result = await ctx.mcp.expect("bp_brief", { bp_path: SAMPLE });
-    expect(result && typeof result === "object").toBeTruthy();
+    // Concrete known fields (not just "non-empty dict"): parent class path
+    // resolves to Actor and the ubergraph is listed by its real name.
+    expect(String(result.parent_class ?? "")).toContain("Actor");
+    const graphNames = ((result.graphs ?? []) as Array<{ name?: string }>).map((g) => g.name);
+    expect(graphNames).toContain("EventGraph");
+    expect(typeof result.variables_count).toBe("number");
   });
 
   test("bp_get_parent_class", async () => {
@@ -66,12 +110,19 @@ editorSuite("blueprint", (ctx) => {
 
   test("read_blueprint_content", async () => {
     const result = await ctx.mcp.expect("bp_read", { blueprint_path: SAMPLE });
-    expect(result && typeof result === "object").toBeTruthy();
+    // Concrete known fields: the parent class and the asset's own name.
+    expect(result.parent_class).toBe("Actor");
+    expect(result.blueprint_name).toBe("BP_Sample");
   });
 
   test("list_blueprint_graphs", async () => {
     const result = await ctx.mcp.expect("bp_list_graphs", { blueprint_path: SAMPLE });
-    expect(result && typeof result === "object").toBeTruthy();
+    // Concrete known fields: parent class + the ubergraph entry by name/category.
+    expect(result.parent_class).toBe("Actor");
+    const graphs = (result.graphs ?? []) as Array<{ name?: string; category?: string }>;
+    const eventGraph = graphs.find((g) => g.name === "EventGraph");
+    expect(eventGraph).toBeDefined();
+    expect(eventGraph?.category).toBe("ubergraph");
   });
 
   test("add_component_then_list", async () => {
@@ -235,5 +286,12 @@ editorSuite("blueprint", (ctx) => {
       dry_run: true,
     });
     expect(result.dry_run).toBe(true);
+    // The dry-run diff must describe the would-be variable...
+    const diff = (result.diff ?? {}) as { variables_added?: Array<{ variable_name?: string }> };
+    expect(diff.variables_added?.[0]?.variable_name).toBe("ShouldNotExist");
+    // ...and the variable must be ABSENT — proved via an independent read.
+    const content = await ctx.mcp.expect("bp_read", { blueprint_path: SAMPLE });
+    const names = ((content.variables ?? []) as Array<{ name?: string }>).map((v) => v.name);
+    expect(names).not.toContain("ShouldNotExist");
   });
 });

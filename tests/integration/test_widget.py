@@ -14,6 +14,8 @@ Pattern for every test: arrange prerequisite state -> dispatch the op (raises on
 non-success envelope) -> assert the resulting state via a read/inspect op.
 """
 
+import re
+
 import pytest
 
 from harness import config
@@ -74,20 +76,50 @@ def test_widget_tree_read_lists_child(mcp, sample_widget):
     assert "Button" in blob, result
 
 
+def _read_button_enabled(mcp, widget_path: str, button: str) -> str:
+    """Independent readback for widget_set_property: read bIsEnabled straight
+    off the WidgetTree template subobject (path `<pkg>.<WBP>:WidgetTree.<name>`)
+    via the sanctioned py console hatch — widget_tree_read exports only
+    name/class/parent/slot, not widget-side properties."""
+    name = widget_path.rsplit("/", 1)[-1]
+    probe = mcp.expect("editor_console_exec", {"command": (
+        "py import unreal; "
+        f"b = unreal.find_object(None, '{widget_path}.{name}:WidgetTree.{button}'); "
+        "print('MCPTEST_EN=' + (str(b.get_editor_property('is_enabled')) if b else 'NOTFOUND'))"
+    )})
+    m = re.search(r"MCPTEST_EN=(\w+)", probe.get("output", ""))
+    assert m, probe
+    return m.group(1)
+
+
 @covers("widget_set_property")
 def test_widget_set_property_then_readback(mcp, sample_widget):
-    result = mcp.expect("widget_set_property", {
-        "widget_path": sample_widget["path"],
-        "widget_name": sample_widget["button"],
-        "property_name": "IsEnabled",
-        "property_value": False,
-        "target": "widget",
-    })
-    assert result.get("success") is not False, result
-    assert result.get("property_name") == "IsEnabled", result
-    # The setter captures before/after exported text; 'after' must reflect False.
-    assert "after" in result, result
-    assert "false" in str(result.get("after", "")).lower(), result
+    """Disable the Button template, prove the value landed via an independent
+    py readback of the WidgetTree subobject (NOT the setter's own before/after),
+    and restore it in finally (the sample WBP is shared by the module).
+    Note: the FProperty's real FName is `bIsEnabled` — the un-prefixed
+    "IsEnabled" is rejected with pin_not_found (verified live)."""
+    try:
+        result = mcp.expect("widget_set_property", {
+            "widget_path": sample_widget["path"],
+            "widget_name": sample_widget["button"],
+            "property_name": "bIsEnabled",
+            "property_value": False,
+            "target": "widget",
+        })
+        assert result.get("success") is not False, result
+        assert result.get("property_name") == "bIsEnabled", result
+        # Independent readback: the Button template itself now reports disabled.
+        assert _read_button_enabled(
+            mcp, sample_widget["path"], sample_widget["button"]) == "False"
+    finally:
+        mcp.command("widget_set_property", {
+            "widget_path": sample_widget["path"],
+            "widget_name": sample_widget["button"],
+            "property_name": "bIsEnabled",
+            "property_value": True,
+            "target": "widget",
+        })
 
 
 @covers("widget_bind_handler")
@@ -101,4 +133,20 @@ def test_widget_bind_handler(mcp, sample_widget):
     })
     assert result.get("success") is not False, result
     assert result.get("event_name") == "OnClicked", result
+    # Independent readback (not the event_name echo): the bind authored a
+    # K2Node_ComponentBoundEvent in the WBP's event graph wired to this
+    # button's OnClicked delegate — bp_inspect serializes delegate_name +
+    # component_name for exactly that node class.
+    analysis = mcp.expect("bp_inspect", {
+        "blueprint_path": sample_widget["path"],
+        "graph_name": "EventGraph",
+        "include_node_details": True,
+        "include_pin_connections": False,
+    })
+    nodes = analysis.get("graph_data", {}).get("nodes", [])
+    bound = next((n for n in nodes
+                  if n.get("class") == "K2Node_ComponentBoundEvent"
+                  and n.get("delegate_name") == "OnClicked"
+                  and n.get("component_name") == sample_widget["button"]), None)
+    assert bound is not None, nodes
     assert_ready(mcp)

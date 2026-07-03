@@ -10,6 +10,8 @@ Pattern for every test: arrange prerequisite state -> dispatch the op (raises on
 a non-success envelope) -> assert the resulting state via a read/inspect op.
 """
 
+import re
+
 import pytest
 
 from harness import config
@@ -42,16 +44,61 @@ def test_create_blueprint_writes_uasset_on_disk(mcp):
     assert disk.is_file(), f"expected {disk} to exist after create+save"
 
 
+def _generated_class_has_function(mcp, bp_path: str, function_name: str) -> bool:
+    """Independent readback for bp_compile: does the GENERATED class carry a
+    UFunction of this name? The function subobject's path is
+    `<pkg>.<Name>_C:<Function>` — it exists only after a real kismet compile
+    (bp_add_custom_event marks the BP structurally modified, which regenerates
+    the SKELETON class only). Observed via the sanctioned py console hatch."""
+    name = bp_path.rsplit("/", 1)[-1]
+    probe = mcp.expect("editor_console_exec", {"command": (
+        "py import unreal; "
+        f"f = unreal.find_object(None, '{bp_path}.{name}_C:{function_name}'); "
+        "print('MCPTEST_FN=' + ('present' if f else 'absent'))"
+    )})
+    m = re.search(r"MCPTEST_FN=(\w+)", probe.get("output", ""))
+    assert m, probe
+    return m.group(1) == "present"
+
+
 @covers("bp_compile")
-def test_compile_blueprint(mcp, sample_bp):
-    result = mcp.expect("bp_compile", {"blueprint_name": sample_bp})
-    assert result.get("success") is not False
+def test_compile_blueprint(mcp):
+    """bp_compile must actually recompile the generated class — not just return
+    success. Arrange: a custom event added via bp_add_custom_event exists only
+    on the graph/skeleton (no full compile). Observe: the generated class gains
+    the event's UFunction only after bp_compile (py-hatch find_object probe)."""
+    path = f"{NS}/BP_CompileProbe"
+    ensure_absent(mcp, path)
+    try:
+        mcp.expect("bp_create_blueprint", {"name": path, "parent_class": "Actor"})
+        mcp.expect("bp_compile", {"blueprint_name": path})
+        mcp.expect("bp_add_custom_event", {
+            "blueprint_name": path,
+            "event_name": "MCPCompileProbeEvent",
+        })
+        # Before the compile under test: graph node exists, generated class
+        # does NOT yet carry the function (proves the observation is not vacuous).
+        assert not _generated_class_has_function(mcp, path, "MCPCompileProbeEvent")
+
+        result = mcp.expect("bp_compile", {"blueprint_name": path})
+        assert result.get("compiled") is True, result
+
+        # Independent readback: the freshly compiled generated class now
+        # exposes the event as a UFunction.
+        assert _generated_class_has_function(mcp, path, "MCPCompileProbeEvent")
+    finally:
+        ensure_absent(mcp, path)
 
 
 @covers("bp_brief")
 def test_bp_brief(mcp, sample_bp):
     result = mcp.expect("bp_brief", {"bp_path": sample_bp})
-    assert isinstance(result, dict) and result
+    # Concrete known fields (not just "non-empty dict"): the parent class path
+    # resolves to Actor and the ubergraph is listed by its real name.
+    assert "Actor" in str(result.get("parent_class", "")), result
+    graph_names = [g.get("name") for g in result.get("graphs", [])]
+    assert "EventGraph" in graph_names, result
+    assert isinstance(result.get("variables_count"), (int, float)), result
 
 
 @covers("bp_get_parent_class")
@@ -65,13 +112,20 @@ def test_bp_get_parent_class(mcp, sample_bp):
 @covers("bp_read")
 def test_read_blueprint_content(mcp, sample_bp):
     result = mcp.expect("bp_read", {"blueprint_path": sample_bp})
-    assert isinstance(result, dict) and result
+    # Concrete known fields: the parent class and the asset's own name.
+    assert result.get("parent_class") == "Actor", result
+    assert result.get("blueprint_name") == "BP_Sample", result
 
 
 @covers("bp_list_graphs")
 def test_list_blueprint_graphs(mcp, sample_bp):
     result = mcp.expect("bp_list_graphs", {"blueprint_path": sample_bp})
-    assert isinstance(result, dict) and result
+    # Concrete known fields: parent class + the ubergraph entry by name/category.
+    assert result.get("parent_class") == "Actor", result
+    graphs = result.get("graphs", [])
+    event_graph = next((g for g in graphs if g.get("name") == "EventGraph"), None)
+    assert event_graph is not None, result
+    assert event_graph.get("category") == "ubergraph", event_graph
 
 
 @covers("bp_add_component", "bp_list_components")
@@ -231,3 +285,10 @@ def test_create_variable_dry_run_does_not_mutate(mcp, sample_bp):
         "dry_run": True,
     })
     assert result.get("dry_run") is True
+    # The dry-run diff must describe the would-be variable...
+    added = result.get("diff", {}).get("variables_added", [])
+    assert added and added[0].get("variable_name") == "ShouldNotExist", result
+    # ...and the variable must be ABSENT — proved via an independent read.
+    content = mcp.expect("bp_read", {"blueprint_path": sample_bp})
+    names = [v.get("name") for v in content.get("variables", [])]
+    assert "ShouldNotExist" not in names, names
