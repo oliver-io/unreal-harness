@@ -920,6 +920,10 @@ semantics — PID-liveness, TTL, fail-open — are §2.17; the wire shapes:
   **exits 75** (`EX_TEMPFAIL`) without building. Set a human label via
   `CLAUDE_BUILD_LABEL` (defaults to `build-editor:<Target>`).
 - `POST /build/release` `{build_id,pid}` — released in a `finally`, even on build failure.
+- `POST /build/heartbeat` `{build_id|pid, ttl_seconds?}` — holder-only TTL refresh: resets
+  the lock's expiry to now + `ttl_seconds` (default TTL if omitted) for a build that
+  legitimately outlives the 45-min default. Non-holders get `{ok:false}` — it never steals
+  the lock. (Same-PID `acquire` also refreshes, so the scripts today just re-acquire.)
 - `GET /build/status` — `{in_progress, holder:{label,pid,target,held_ms,expires_in_ms,
   pid_alive,…}}`. Poll this to wait for a clear window instead of hammering acquire.
 

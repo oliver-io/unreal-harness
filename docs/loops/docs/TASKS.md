@@ -13,13 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-022 — §3.6 omits the `/build/heartbeat` endpoint
-`POST /build/heartbeat` exists (`build/http.ts:103`); §3.6 (USAGE:696-705) lists only
-acquire/release/status. **Fix:** add a line. (Everything else in the build-lock contract —
-exit 75, TTL, PID-liveness, fail-open — verified accurate.)
-
----
-
 ## docs/ARCHITECTURE.md
 
 ### DOC-030 — §2 "no alias or translation layer" needs the same correction as USAGE
