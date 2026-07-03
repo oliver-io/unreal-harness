@@ -1,46 +1,17 @@
 # Documentation-update tasks
 
 Pending work for the [docs update loop](./docs-update-loop.md). Each task is self-contained:
-claim → code reality (with evidence) → fix direction. **Code is ground truth** — every item
-below was verified against the source by a research pass on 2026-07-02; re-verify the cited
-evidence before editing (the code may have moved again). One task per loop iteration.
+claim → code reality (with evidence) → fix direction. **Code is ground truth** — verify the
+cited evidence before editing (the code may have moved). One task per loop iteration.
 
-Conventions: `USAGE` = `docs/USAGE.md`, `ARCH` = `docs/ARCHITECTURE.md`, etc. Evidence is
-`file:line` as of the audit. Tasks are grouped by document, ordered most-severe-first within
-each group.
+## Pending
 
----
+None. The 2026-07-02 audit produced 25 tasks (DOC-001…DOC-090); all were executed and
+committed the same day by the update loop. New tasks go here, grouped by document.
 
-## docs/USAGE.md
-
-## docs/ARCHITECTURE.md
-
----
-
-## docs/TESTING.md
-
----
-
-## docs/DEBUGGING.md
-
----
-
-## src/server/README.md
-
----
-
-## CLAUDE.md (repo root)
-
----
-
-## Skills
-
-(All other 19 skills audited clean: tool names, bundled files, cross-references, and
-CLAUDE.md's skill list all verified accurate.)
-
----
-
-## Changelogs
+Audit provenance note: all 21 bundled skills were audited 2026-07-02 — beyond the two
+fixed that day (/onboard, /automated-tester), tool names, bundled files, cross-references,
+and CLAUDE.md's skill list verified accurate.
 
 ---
 
