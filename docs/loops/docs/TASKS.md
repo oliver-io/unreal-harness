@@ -13,18 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-010 — §2.8 (IK retargeting) is grossly stale: "one primitive" vs 11 shipped tools
-USAGE:322-363 claims the MCP exposes "one low-level primitive today"
-(`ik_retarget_run_batch`), that "IK Rig + Retargeter asset authoring is intentionally not
-exposed," and lists `anim_auto_retarget` as *planned*. Reality: `src/server/src/domains/ik_retarget.ts`
-ships 11 tools — `ik_retarget_create` (:33), `_set_rigs` (:62), `_auto_map_chains` (:93),
-`_set_chain_mapping`, `_align_bones`, `_set_pelvis_settings`, `_set_root_motion_settings`,
-`_import_pose_from_animation`, `_import_pose_from_pose_asset`, `_read` — plus
-`ik_rig_list_chains` (`ik_rig.ts:13`). The "planned" auto-mapper is shipped.
-**Fix:** Rewrite §2.8 around the shipped authoring surface (contracts + foot-guns), drop the
-"intentionally not exposed" design note or scope it to what genuinely remains unexposed
-(manual IK-rig authoring — see the design note the code carries).
-
 ### DOC-011 — Nonexistent tool names cited as contracts
 Four USAGE references name tools that do not exist in any domain module or alias map:
 - `physics_spawn_blueprint_actor` (USAGE:227) → real tool is `actor_spawn_physics` (`actor.ts:219`)

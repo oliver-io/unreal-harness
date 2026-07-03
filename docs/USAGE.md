@@ -319,48 +319,48 @@ anim_blueprint_create(skeleton) → anim_blueprint_set_skeleton
 
 Inner anim-node property writes route through `bp_set_inner_node_property` — the reflection-based bypass-the-private-header path defends against engine refactoring `UAnimGraphNodeBinding`'s internal layout.
 
-### 2.8. Animation retargeting (`ik_retarget_run_batch`, planned `anim_auto_retarget`)
+### 2.8. IK retargeting (`ik_retarget_*`, `ik_rig_*`)
 
-The MCP exposes one low-level primitive today; the high-level path is planned. **IK Rig + Retargeter asset authoring is intentionally not exposed** — for compatible skeletons the editor's right-click → "Retarget Animations" flow auto-creates rigs / retargeter / chains in one click, and that's the operation we want to surface as a single MCP call. Manual rig authoring is editor UI territory.
+Full `UIKRetargeter` authoring — create, wire rigs, map chains, align, tune ops, import retarget poses — plus cross-skeleton batch retargeting. **`UIKRigDefinition` authoring (chains / goals / solvers) is the part that stays unexposed by design** — rigs are read-only via `ik_rig_list_chains`; author them in the editor or use vendor rigs.
 
-**Low-level primitive (shipped) — `ik_retarget_run_batch`:**
-
-Invokes `UIKRetargetBatchOperation::DuplicateAndRetarget` against a pre-built `UIKRetargeter` asset. Use only when you've hand-crafted a retargeter in the editor and want to execute it programmatically.
+**Typical authoring flow:**
 
 ```
-ik_retarget_run_batch(
-    retargeter,                  # path to a pre-built UIKRetargeter asset
-    source_animations,           # list of AnimSequence paths
-    name_search="",              # rename rule
-    name_replace="",
-    name_prefix="",
-    name_suffix="",
-    include_referenced_assets=true,  # also retarget referenced sub-blendspaces / sequences
-    overwrite_existing=false,    # unique-numeric-suffix on collision (UE's safer default)
-)
+ik_rig_list_chains (source + target rigs — discover chain names)
+  → ik_retarget_create (optionally wiring both rigs) → ik_retarget_set_rigs
+  → ik_retarget_auto_map_chains → ik_retarget_set_chain_mapping (manual fixes)
+  → ik_retarget_align_bones / ik_retarget_set_pelvis_settings / ik_retarget_set_root_motion_settings
+  → ik_retarget_import_pose_from_animation | ik_retarget_import_pose_from_pose_asset
+  → ik_retarget_run_batch → ik_retarget_read (verify)
 ```
 
-Validation chain (each step has a structured-error code):
-- retargeter not found → `asset_not_found`
+| Tool | Behavior |
+|---|---|
+| `ik_rig_list_chains(ik_rig_path)` | Per chain: name, start/end bones, IK goal; plus pelvis bone + preview mesh. Read-only. |
+| `ik_retarget_create(asset_path \| path+name, source_ik_rig_path?, target_ik_rig_path?)` | Factory runs `AddDefaultOps` → standard FK+IK op stack; optionally wires rigs in the same call. |
+| `ik_retarget_set_rigs(retargeter_path, source/target_ik_rig_path, rebuild_ops=true)` | At least one rig required. `rebuild_ops=true` (default) wipes + re-adds the op stack so chain mappings re-anchor; `false` preserves a vendor retargeter's baked-in op state. |
+| `ik_retarget_auto_map_chains(retargeter_path, match_type="Fuzzy", force_remap=true, align_target_pose=true)` | "Map All" — both rigs must already be set. `match_type` ∈ `Exact` / `Fuzzy` (Levenshtein) / `Clear`. `force_remap=false` fills only unmapped chains. |
+| `ik_retarget_set_chain_mapping(retargeter_path, target_chain, source_chain)` | One mapping (manual fix after auto-map); empty `source_chain` clears it. |
+| `ik_retarget_align_bones(retargeter_path, source_or_target="target", reset_first=true, excluded_bones[])` | `AutoAlignAllBones` on one side; `excluded_bones` are reset back to bind pose AFTER align (for garbage single-bone chains). |
+| `ik_retarget_set_pelvis_settings(retargeter_path, …)` | Tunes the Pelvis Motion Op (UE 5.7 ops architecture); only passed params are written. `scale_vertical=0` locks pelvis Z (kills SMPL-noise knee bounce). Errors if the retargeter has no Pelvis Motion op. |
+| `ik_retarget_set_root_motion_settings(retargeter_path, …)` | Tunes the Root Motion Op. `root_height_source="snap_to_ground"` locks root Z to 0 — the fix for body-bob + knee compensation that pelvis settings don't affect. |
+| `ik_retarget_import_pose_from_animation(retargeter_path, anim_sequence_path, source_or_target="source", frame_index=0, make_current=true, exclude_bone_substrings?)` | Samples one frame of a `UAnimSequence` as a retarget pose. Source pose at an idle frame ⇒ delta ≈ 0 ⇒ target outputs its bind pose at idle. Pelvis never excluded. |
+| `ik_retarget_import_pose_from_pose_asset(retargeter_path, pose_asset_path, source_or_target="source", pose_name="", make_current=true)` | Imports a `UPoseAsset` named pose (vendor `PA_*RetargetPose` assets for novel source skeletons — SMPL, mocap). Empty `pose_name` = first pose. |
+| `ik_retarget_run_batch(retargeter_path, source_animations[], name_search/replace/prefix/suffix, include_referenced_assets=true, overwrite_existing=false)` | `UIKRetargetBatchOperation::DuplicateAndRetarget`. Inputs may be `UAnimSequence` / `UBlendSpace` / `UAnimMontage`; source/target meshes are read from the rigs. Response includes `new_assets[]` for follow-up chain operations (rename, move, `asset_references`). |
+| `ik_retarget_read(retargeter_path)` | Source/target rig paths + current chain mappings (empty source = unmapped). Read-only. |
+
+**`ik_retarget_run_batch` validation chain** (each step has a structured-error code):
+- retargeter not found → `asset_not_found` (wrong class → `unsupported_class`)
 - controller null → `engine_busy`
 - source / target rig not configured → `asset_locked`
 - source / target mesh not assigned on rig → `asset_locked`
 - any source animation path fails to load → `asset_not_found` with `result.missing_animations` list
 - empty `source_animations` → `invalid_argument`
 
-Response includes `new_assets[]` for follow-up chain operations (rename, move, `asset_references`).
+**Foot-guns:**
 
-**Recommended high-level path (planned) — `anim_auto_retarget`:**
-
-```
-anim_auto_retarget(
-    source_animations,           # list of AnimSequence paths
-    target_skeleton,             # the project's standard skeleton path
-    persist_retargeter=false,    # true → save the auto-built retargeter asset
-)
-```
-
-Mirrors the editor's right-click flow: derives the source skeleton from each animation, auto-discovers or auto-creates IK Rigs for source + target, auto-maps chains, builds a transient (or persistent) retargeter, runs `DuplicateAndRetarget`. Fails closed with a structured error if the skeletons can't be auto-paired (hint: "open the IK Rig editor and configure manually").
+- Every `ik_retarget_*` mutator is **PIE-blocked and `dry_run`-unsupported** (both C++ blocklists; mirrored in `src/server/src/bridge/gates.ts`). Each is an atomic asset side effect: it saves the retargeter itself before returning (`SaveAsset`, even if not dirty) — a save failure returns `internal` with a "PIE is likely active or the package is read-only" hint.
+- `overwrite_existing=false` (the default, UE's safer behavior) resolves batch-output name collisions with a unique numeric suffix instead of clobbering.
 
 ### 2.9. UMG / Widgets (`widget_*`)
 
