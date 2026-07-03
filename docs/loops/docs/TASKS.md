@@ -13,15 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-017 — §2.18 PIE lease: `pie_not_holder` undocumented; lease codes are out-of-taxonomy
-`pie.ts:40-42` defines three server-synthesized codes: `pie_busy`, `pie_lease_lost`,
-`pie_not_holder`. §2.18 documents the first two but never `pie_not_holder` (returned by
-`pie_stop` when the caller never held the lease — directly relevant to USAGE:600's "only
-the holder may stop" claim). All three are also outside the closed error-code set §1.2
-promises.
-**Fix:** Document `pie_not_holder` in §2.18, and add a note (§1.2 or §2.18) that the three
-lease codes are deliberate out-of-taxonomy, server-side codes.
-
 ### DOC-018 — New domains with zero USAGE coverage: `pcg_*`, `kinematics_*`, `landscape_*`, `foliage_*`
 None of these prefixes appear anywhere in USAGE, including the §1.5 "prefixes in active
 use" list (USAGE:88):
