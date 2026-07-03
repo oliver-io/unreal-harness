@@ -105,6 +105,17 @@ size; verify *content* with the `/see` skill or a vision pass, not pixel diffs.
 Foot-gun: the capture silently no-ops if the viewport isn't rendering — keep the
 window foregrounded + realtime on (`docs/BUGS.md` GAP-007).
 
+**Fixed capture rig — no screenshot verdict without one.** Before any
+screenshot-based visual verdict, build a deterministic capture rig FIRST: a stored
+pose (location/rotation/FOV/aspect) that frames the subject with **zero stateful
+navigation** — no character driving, no camera flying (`CLAUDE.md` → VERBOTEN).
+Inside PIE the sanctioned primitive is `pie_capture_from_pose`, which spawns a
+transient camera at the stored pose and captures through the real game render
+path; the `/capture-pose` skill turns a human-framed editor viewport into that
+rig. Any later run re-captures the identical view with no human input — that
+reproducibility is what upgrades a screenshot from a guess to evidence. No rig →
+no verdict; fall back to asking the human to drive PIE.
+
 **Video evidence — the second render channel.** For behaviour that only reads over
 time (motion, VFX, UI transitions), record the live PIE viewport:
 `pie_record_start` → drive the scenario → `pie_record_stop` lands a real `.mp4`

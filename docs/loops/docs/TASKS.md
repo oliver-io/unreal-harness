@@ -19,13 +19,6 @@ each group.
 
 ## docs/TESTING.md
 
-### DOC-042 — Capture-rig requirement referenced by the skill, absent from the doctrine
-`.claude/skills/capture-pose/SKILL.md` says it builds "the fixed capture rig that …
-docs/TESTING.md require[s]" — TESTING.md never mentions capture rigs or
-`pie_capture_from_pose` (the requirement lives only in CLAUDE.md's VERBOTEN section).
-**Fix:** Add the fixed-capture-rig rule + `pie_capture_from_pose` to Tier-2b so doctrine,
-CLAUDE.md, and the skill agree.
-
 ---
 
 ## docs/DEBUGGING.md
