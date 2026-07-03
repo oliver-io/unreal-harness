@@ -70,6 +70,86 @@ editorSuite("gas", (ctx) => {
     expect(existsSync(disk)).toBe(true);
   });
 
+  test("test_gas_ability_set_cost_and_cooldown_bind_then_clear", async () => {
+    // Bind distinct Cost/Cooldown GameplayEffect classes on a GA Blueprint, then
+    // observe through the asset registry's dependency graph (not the setter's
+    // echo): both GE packages become hard outbound dependencies of the saved
+    // ability, and clearing ONE slot removes exactly that GE's dependency while
+    // the other survives — proving the two setters write independent CDO slots
+    // and that effect_class="" clears.
+    const ability = `${NS}/GA_CostCooldown`;
+    const geCost = `${NS}/GE_CostFx`;
+    const geCooldown = `${NS}/GE_CooldownFx`;
+
+    // Independent readback: the registry's outbound dependency set, rebuilt
+    // from the saved package's import table — a different, deeper primitive
+    // than the GAS setter's own echo.
+    const outboundRefs = async (assetPath: string): Promise<Set<string>> => {
+      const result = await ctx.mcp.expect("asset_references", {
+        asset_path: assetPath,
+        direction: "outbound",
+      });
+      const refs = (result.references ?? []) as Array<{ path: string }>;
+      return new Set(refs.map((r) => r.path));
+    };
+
+    for (const p of [ability, geCost, geCooldown]) await ensureAbsent(ctx.mcp, p);
+    try {
+      await ctx.mcp.expect("gas_ability_create", { asset_path: ability });
+      await ctx.mcp.expect("gas_effect_create", { asset_path: geCost, duration_policy: "Instant" });
+      await ctx.mcp.expect("gas_effect_create", {
+        asset_path: geCooldown,
+        duration_policy: "Duration",
+      });
+
+      // Baseline: the fresh ability references neither GE.
+      const baseline = await outboundRefs(ability);
+      expect(baseline.has(geCost)).toBe(false);
+      expect(baseline.has(geCooldown)).toBe(false);
+
+      const setCost = await ctx.mcp.expect("gas_ability_set_cost", {
+        ability_path: ability,
+        effect_class: geCost,
+      });
+      expect(setCost.cleared).toEqual(false);
+      const setCooldown = await ctx.mcp.expect("gas_ability_set_cooldown", {
+        ability_path: ability,
+        effect_class: geCooldown,
+      });
+      expect(setCooldown.cleared).toEqual(false);
+
+      // Observe: BOTH GEs are now hard dependencies of the saved ability. If the
+      // setters wrote the same property, the second bind would have overwritten
+      // the first and only one GE could be referenced.
+      let refs = await outboundRefs(ability);
+      expect(refs.has(geCost)).toBe(true);
+      expect(refs.has(geCooldown)).toBe(true);
+
+      // Clear the COST only; exactly its dependency drops, the cooldown's survives.
+      let cleared = await ctx.mcp.expect("gas_ability_set_cost", {
+        ability_path: ability,
+        effect_class: "",
+      });
+      expect(cleared.cleared).toEqual(true);
+      refs = await outboundRefs(ability);
+      expect(refs.has(geCost)).toBe(false);
+      expect(refs.has(geCooldown)).toBe(true);
+
+      // Clear the cooldown too; both gone.
+      cleared = await ctx.mcp.expect("gas_ability_set_cooldown", {
+        ability_path: ability,
+        effect_class: "",
+      });
+      expect(cleared.cleared).toEqual(true);
+      refs = await outboundRefs(ability);
+      expect(refs.has(geCost)).toBe(false);
+      expect(refs.has(geCooldown)).toBe(false);
+    } finally {
+      // Delete the ability first — it may still reference the GEs on failure.
+      for (const p of [ability, geCost, geCooldown]) await ensureAbsent(ctx.mcp, p);
+    }
+  }, 60_000); // ~13 bridge round-trips, several with auto-saves — exceeds bun's 5s default
+
   test("test_gas_effect_apply_requires_pie", async () => {
     // Runtime op: needs a live PIE world with an AbilitySystemComponent target.
     // The headless suite has none, so we assert the documented not_in_pie guard.
