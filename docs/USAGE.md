@@ -761,6 +761,22 @@ Spatial ground truth for bones, sockets, and attached meshes — the `/position`
 | `landscape_read_heightmap(actor_name?, region?, export_path?, include_samples=false)` | **Bounded** heightmap summary: resolved region, `samples_read`, `height_stats` (min/max/mean raw uint16 + min/max world Z). Never dumps a full grid inline — narrow with `region` (quad-space, clamped), set `include_samples` for a small inline grid (≤256×256 only), or pass `export_path` to write the raw row-major uint16 grid as `.r16` to disk. |
 | `foliage_inspect(mode="types"\|"instances", foliage_type?, limit=100, offset=0)` | `mode="types"` (default): per-type summary — placed-instance count, mesh, density, radius, align_to_normal, random_yaw, cull_distance. `mode="instances"`: placed-instance transforms for one `foliage_type` (identity / mesh path / display name from the types listing), paged via `limit` (1..1000) / `offset`, with `total_instances` + `truncated` — never dumps every instance. |
 
+### 2.23. Disclosure meta-tools (`catalog_*`, `result_read`) — server-side plumbing, not Unreal ops
+
+Five server-side tools (no C++ handler, no bridge round-trip) that let an agent work the ~260-tool catalog without paying the full schema tax. They are **advertised in every surface mode** (`UNREAL_MCP_SURFACE=full|compact|code`); in `compact`/`code` they are the *only* path to the domain tools. Discovery flow: `catalog_domains` → `catalog_search` → `catalog_describe` → `catalog_call`.
+
+| Tool | Behavior |
+|---|---|
+| `catalog_domains()` | List every tool domain + tool count (the shape of the toolset). Hides the meta-domains themselves (`catalog`, `code`). |
+| `catalog_search(query, domain?, limit=20)` | Keyword search over tool names + descriptions. Returns compact summaries (name, domain, one-liner) — **not** schemas. Empty query lists all. |
+| `catalog_describe(name)` | One tool's full input JSON Schema + annotations, including `blockedDuringPie` and `dryRunUnsupported`. Call before `catalog_call`. |
+| `catalog_call(name, params={})` | Invoke **any canonical tool** by name. Identical to a direct call — same Zod validation, same gates, same `{status,result,error}` envelope. Not read-only (it can reach mutators). |
+| `result_read(handle, offset=0, length=8000)` | Page a compacted result back by its `_handle` (raw JSON slice + `next_offset`, `null` when done). Only relevant when result compaction is on (`UNREAL_MCP_MAX_RESULT_BYTES > 0`; default 0 = off). Handles are a bounded LRU — an expired handle means re-run the original tool. For large data, prefer filtering in code mode over paging it into context. |
+
+Foot-gun: `catalog_search` results are summaries — never guess parameters from the one-liner; `catalog_describe` first.
+
+Deeper internals — the surface-mode table, compaction thresholds/digests, and code mode (`code_api`/`code_run`) — live in [`src/server/README.md`](../src/server/README.md) ("Token efficiency — progressive disclosure").
+
 ---
 
 ## 3. C++ author's contract

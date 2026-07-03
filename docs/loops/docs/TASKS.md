@@ -13,15 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-020 — Disclosure meta-tools (`catalog_*`, `result_read`) absent from USAGE
-`catalog_domains/search/describe/call` (`disclosure/metatools.ts:28/43/67/103`) and
-`result_read` (`compaction/tool.ts:15`), both registered (`register.ts:100,102`), have zero
-USAGE coverage. They ARE covered in `src/server/README.md` — decide whether USAGE should
-carry the agent-facing contract (it claims to hold "every tool contract") or explicitly
-delegate to the server README.
-**Fix:** Add a short section or an explicit pointer; don't leave them invisible to a USAGE
-reader.
-
 ### DOC-021 — Partial-coverage domains: documented sections omit shipped tools
 - **anim (§2.7):** clip-processing suite undocumented — `anim_smooth_sequence` (:317),
   `anim_normalize_z_offset` (:362), `anim_anchor_feet_to_floor` (:392),
