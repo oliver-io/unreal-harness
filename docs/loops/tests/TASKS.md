@@ -72,9 +72,6 @@ name-vs-manifest diff: 20 of those are legacy `command:`-override bridge tools (
 of which `catalog_*`/`code_*` (6) are covered in `disclosure.test.ts`. The gate's current missing
 list is exactly the items below; landing each test with its `covers(...)` annotation shrinks it.
 
-- [ ] `video_analyze` / `pie_analyze` — headless slice only: assert the `feature_disabled` guard
-  when no model key is configured (`src/server/src/domains/video.ts:56` path). The full
-  structured-verdict run needs the external model → note as partial, defer the rest.
 - [ ] `editor_build_game_target` — full offline UBT build (minutes, toolchain-dependent); expected
   outcome: #DEFERRED with that reason unless a cheap observable exists.
 
@@ -204,4 +201,14 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
-(nothing yet — the loop moves items here with reasons)
+
+- `video_analyze` / `pie_analyze` positive path (2026-07-02) — the guard slice is covered in
+  `src/server/test/video_analyze.test.ts` (real registry handlers, no mocks: `feature_disabled`
+  on missing key / unknown provider, `invalid_path` on a missing file, `invalid_argument` on an
+  over-budget `analysis_fps`, and pie_analyze's earliest headless guard, the record-lease
+  `pie_not_holder` refusal). The POSITIVE structured-verdict path remains untested: it requires
+  the external Gemini video model (network, key, cost, nondeterministic verdict), and for
+  pie_analyze additionally a live GUI editor + PIE recording before its (shared) key check is
+  even reached. Faking the provider would test the mock, not the pipeline — deferred per the
+  no-mocks doctrine. Note: `config` snapshots env at import, so the tests control
+  `config.geminiApiKey`/`videoProvider` directly (with afterEach restore) rather than env vars.
