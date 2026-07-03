@@ -80,6 +80,40 @@ editorSuite("material", (ctx) => {
     expect(result.expressions).toBeDefined();
   });
 
+  test("test_set_material_property_flips_flags", async () => {
+    // material_set_property flips top-level UMaterial flags after creation;
+    // material_read (blend_mode as raw enum value, two_sided as bool) proves
+    // the mutation landed. Teardown deletes the asset even on failure — in
+    // attach mode it lands in the live project.
+    const path = `${NS}/M_SetProp`;
+    await ensureAbsent(ctx.mcp, path);
+    try {
+      await ctx.mcp.expect("material_create", { material_path: path });
+
+      // Factory defaults: Opaque (BLEND_Opaque == 0), single-sided.
+      const before = await ctx.mcp.expect("material_read", { material_path: path });
+      expect(before.two_sided).toBe(false);
+      expect(before.blend_mode).toBe(0);
+
+      const result = await ctx.mcp.expect("material_set_property", {
+        material_path: path,
+        two_sided: true,
+        blend_mode: "Translucent",
+      });
+      const applied = (result.applied ?? {}) as Record<string, unknown>;
+      expect(applied.two_sided).toBe(true);
+      expect(applied.blend_mode).toBe("Translucent");
+
+      // Observe through the independent reader: both flags flipped
+      // (BLEND_Translucent == 2 in EBlendMode).
+      const after = await ctx.mcp.expect("material_read", { material_path: path });
+      expect(after.two_sided).toBe(true);
+      expect(after.blend_mode).toBe(2);
+    } finally {
+      await ensureAbsent(ctx.mcp, path);
+    }
+  });
+
   // ── full graph authoring round-trip ───────────────────────────────────────
   test("test_material_graph_build_and_teardown", async () => {
     const path = `${NS}/M_Graph`;

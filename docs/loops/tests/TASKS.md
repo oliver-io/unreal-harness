@@ -45,7 +45,6 @@ anything — do not take these descriptions at face value.
 - [ ] **Niagara setters (one task):** `niagara_emitter_set_local_space`,
   `niagara_renderer_set_enabled`, `niagara_renderer_set_alignment`,
   `niagara_mesh_renderer_set_mesh` — each observed via `niagara_emitter_read`.
-- [ ] `material_set_property` — observe via `material_read` (e.g. two-sided / blend-mode flip).
 - [ ] `editor_viewport_get_camera` — arrange a known camera pose (console exec / a set-camera
   primitive; add one if missing), read back and assert the pose.
 - [ ] `editor_build_reflection_captures` — investigate a log-marker observation via

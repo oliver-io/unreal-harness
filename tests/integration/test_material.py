@@ -76,6 +76,40 @@ def test_read_material_graph(mcp, sample_material):
     assert "expressions" in result, result
 
 
+@covers("material_create", "material_set_property", "material_read")
+def test_set_material_property_flips_flags(mcp):
+    """material_set_property flips top-level UMaterial flags after creation;
+    material_read (which reports blend_mode as the raw enum value and two_sided
+    as a bool) proves the mutation landed. The asset lands in the live project
+    in attach mode, so teardown deletes it even on failure."""
+    path = f"{NS}/M_SetProp"
+    ensure_absent(mcp, path)
+    try:
+        mcp.expect("material_create", {"material_path": path})
+
+        # Factory defaults: Opaque (BLEND_Opaque == 0), single-sided.
+        before = mcp.expect("material_read", {"material_path": path})
+        assert before.get("two_sided") is False, before
+        assert before.get("blend_mode") == 0, before
+
+        result = mcp.expect("material_set_property", {
+            "material_path": path,
+            "two_sided": True,
+            "blend_mode": "Translucent",
+        })
+        applied = result.get("applied", {})
+        assert applied.get("two_sided") is True, result
+        assert applied.get("blend_mode") == "Translucent", result
+
+        # Observe through the independent reader: both flags flipped
+        # (BLEND_Translucent == 2 in EBlendMode).
+        after = mcp.expect("material_read", {"material_path": path})
+        assert after.get("two_sided") is True, after
+        assert after.get("blend_mode") == 2, after
+    finally:
+        ensure_absent(mcp, path)
+
+
 # ── full graph authoring round-trip ─────────────────────────────────────────
 
 @covers(
