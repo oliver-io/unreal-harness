@@ -13,19 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-012 — §2.12 StateTree: "st_* retired" is wrong, and `st_set_entry_state` doesn't exist
-USAGE:437 claims "the abbreviated `st_*` aliases were retired in the naming migration" —
-but the *wire commands and C++ handler keys are still `st_*`*, mapped via `command:`
-overrides (`statetree.ts:146` `command: "st_add_state"`, ~20 overrides total; stated
-explicitly in `src/server/src/bridge/gates.ts:12-17`). Only the tool names are
-`statetree_*`. Separately, USAGE:448,453 documents `st_set_entry_state` / a
-`set_entry_state` step — no entry-state tool exists at all (grep `entry` in `statetree.ts`
-= 0).
-**Fix:** Reword to "tool names are `statetree_*`; wire/handler keys remain `st_*` via
-`command:` override." Remove the entry-state row/step, or document the real mechanism after
-verifying how entry states are actually set (likely `statetree_state_set_properties` /
-transitions — verify in C++ before writing).
-
 ### DOC-013 — "No alias or translation step" (§1.5 / §3.8 / §4) is false
 Same root cause as DOC-012 and ARCH DOC-030: a bounded tool-name→wire-command translation
 layer exists (`statetree_* → st_*` family, `bp_add_node → add_blueprint_node` at

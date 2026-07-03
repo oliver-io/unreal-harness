@@ -436,7 +436,7 @@ Tag inputs validate against `UGameplayTagsManager` and return `unknown_tag` with
 
 ### 2.12. StateTree (`statetree_*`) — preferred over Behavior Trees
 
-UE 5.4+ replacement for Behavior Trees + Blackboard. The full surface ships under canonical `statetree_*` names (the abbreviated `st_*` aliases were retired in the naming migration):
+UE 5.4+ replacement for Behavior Trees + Blackboard. The full surface ships under canonical `statetree_*` tool names, but the wire commands / C++ handler keys for the state / node / transition / binding operations remain `st_*` — each of those 18 tools declares a per-tool `command:` override in `src/server/src/domains/statetree.ts` (e.g. `statetree_state_add` → `st_add_state`), with parity test-enforced (`test/gate-error-parity.test.ts`; see the namespace note in `src/server/src/bridge/gates.ts`). The seven tree-level tools (`statetree_create` / `_read` / `_compile` / `_save` / `_verify` / `_list_node_types` / `_list_schemas`) use their tool name on the wire:
 
 | Tool | Purpose |
 |---|---|
@@ -446,13 +446,14 @@ UE 5.4+ replacement for Behavior Trees + Blackboard. The full surface ships unde
 | `statetree_node_add` / `_remove` / `_set_property` / `_get_properties` | Inline node (task / condition / consideration) |
 | `statetree_transition_add` / `_remove` / `_set_properties` | Transition CRUD. Event-driven transitions: `trigger="OnEvent"` + `event_tag=<registered gameplay tag>` writes the transition's `RequiredEvent.Tag` (unregistered tags → `unknown_tag` error; empty string on the setter clears; the read emits `event_tag` when set) |
 | `statetree_binding_add` / `_remove` / `_list` / `_list_bindable` | Property bindings — the Blackboard equivalent |
-| `st_set_entry_state` | Designate the entry state |
+
+There is no "entry state" tool because StateTree has no entry-state designator: runtime selection starts at the root and tries root-level states **in tree order**, entering the first whose conditions pass (per each state's `selection_behavior`). Control that order with `insert_index` on `statetree_state_add` or with `statetree_state_move`; set `selection_behavior` at add time or via `statetree_state_set_properties`.
 
 **Canonical authoring sequence:**
 
 ```
 statetree_create
-  → statetree_state_add × N → set_entry_state
+  → statetree_state_add × N (tree order = selection priority; use insert_index / statetree_state_move)
   → statetree_node_add(task | condition | consideration) per state
   → statetree_transition_add × N
   → statetree_binding_add (property → state's input)
