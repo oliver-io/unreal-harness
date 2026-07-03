@@ -39,3 +39,43 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   not (1,0,0). TASK-1's spec assumed identity authoring; the battery cancels the authored
   pitch with actor pitch −90 before testing yaw handedness. Any future test that treats a
   SkeletalCube bone's forward as the actor forward must do the same.
+
+### /networking — runtime multiplayer claims are STRUCTURALLY untestable in this harness (TASK-2, ledger note)
+
+- **Skill**: `.claude/skills/networking/SKILL.md` + `reference/REPLICATION.md` /
+  `reference/AUTHORITY.md` — the core runtime claims (Iris vs legacy behaviour, the CMC
+  ServerMove seam, COND_* condition overrides, RPC drop/ordering rules, distance relevancy
+  culling, late-join state delivery, prediction/reconciliation).
+- **Test**: none — deliberately NOT built. The authoring-side primitive the skill's advice
+  funnels into IS now covered (`tests/skills/test_networking_authoring.py`, 2/2 green vs a
+  live editor 2026-07-02: `bp_set_class_replication` round-trips
+  bReplicates/bAlwaysRelevant/bReplicateMovement/NetCullDistanceSquared onto the class
+  defaults and survives recompile).
+- **Evidence** (read this task): the harness's only PIE entry point starts a default
+  single-process, single-player session — `MCPAutomationCommands.cpp:374-375`:
+  `FRequestPlaySessionParams SessionParams; GEditor->RequestPlaySession(SessionParams);`
+  (no net mode, no client count, no dedicated-server flag). Every replication claim above
+  requires at least two connections (server + remote client) to observe; with one local
+  player there is no NetDriver traffic to assert on. Verifying them would mean building
+  multi-process net-PIE plumbing plus cross-process observation primitives — out of scope
+  for the skill-test loop (and arguably for the harness; see ARCHITECTURE §5 before anyone
+  builds it).
+- **Proposed change**: none to the skill's content — this is a testability ledger entry so
+  future loop passes do not re-litigate it. If the harness ever grows a net-PIE primitive,
+  start from the relevancy claim (`bAlwaysRelevant` vs distance culling) since its authoring
+  side is already machine-checked.
+
+### /networking — AUTHORITY.md calls the plugin "Mover (2.0)"; the 5.7 descriptor says VersionName 1.0 (TASK-2)
+
+- **Skill**: `.claude/skills/networking/reference/AUTHORITY.md:103` — "Epic's **Mover (2.0)**
+  plugin is the intended successor to the `CharacterMovementComponent`…".
+- **Test**: n/a (naming nit; no behaviour to test).
+- **Evidence** (read this task):
+  `C:\UE5\UnrealEngine-5.7-source\Engine\Plugins\Experimental\Mover\Mover.uplugin` —
+  `"VersionName": "1.0"`, `"IsExperimentalVersion": true`, FriendlyName "Mover". "Mover 2.0"
+  was Epic's marketing/roadmap name for the successor-to-CMC effort; the shipped 5.7 plugin
+  is simply "Mover" at version 1.0, Experimental. An agent grepping the engine for a
+  "Mover 2.0" plugin will not find one.
+- **Proposed change**: soften the reference to "the **Mover** plugin (Experimental in 5.7)" —
+  drop the "(2.0)". The sentence's substance (experimental, long-runway, CMC is the shipping
+  path) is correct and stays.

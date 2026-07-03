@@ -11,22 +11,6 @@ self-cleaning.
 
 ## TODO
 
-### TASK-2 — /networking: bp_set_class_replication parity test (effort S)
-The one uncovered authoring primitive the skill names. Mirror
-`tests/integration/test_blueprint_graph.py::test_custom_event_create_and_replicate`:
-`bp_create_blueprint` (Actor) → `bp_set_class_replication`
-(replicates / always_relevant / net_cull_distance_squared) → observe each native AActor
-flag round-trips on the CDO via `reflection_class_properties` / `class_inspect` →
-`bp_compile` clean. Place in `tests/skills/test_networking_authoring.py`.
-Proposals to record:
-- The skill's core multiplayer claims (Iris ServerMove seam, COND overrides, RPC drop
-  rules, relevancy, late-join) are STRUCTURALLY untestable here: `pie_start` is
-  single-process single-player (`MCPAutomationCommands.cpp` uses default
-  `FRequestPlaySessionParams`, no net mode / client count). Record as a ledger note, do
-  NOT build net-PIE plumbing.
-- Cosmetic: AUTHORITY.md calls Mover "Mover (2.0)" while the 5.7 plugin descriptor says
-  `VersionName 1.0` (Experimental) — soften to "the Mover plugin".
-
 ### TASK-3 — /npc_logic: StateTree taxonomy guard (effort S, marginal — keep tight)
 One headless test `tests/skills/test_npc_logic_statetree_taxonomy.py` asserting the
 skill's Layer-3 vocabulary is real in this engine build: `statetree_list_node_types`
@@ -56,6 +40,15 @@ Proposals to record:
   the /position battery (TASK-1) — the skill can point there instead of restating.
 
 ## DONE
+
+- **TASK-2 — /networking bp_set_class_replication parity** (2026-07-02):
+  `tests/skills/test_networking_authoring.py`, 2/2 green vs a live editor (`--ue-attach`);
+  round-trip observed on a spawned instance via dry-run reflective reads — NOT via
+  `reflection_class_properties`/`class_inspect` as specced, because their ResolveClass uses
+  `FindFirstObject<UClass>(…, ExactClass)` which cannot resolve a UBlueprintGeneratedClass
+  (real observability gap, documented in the loop report). Engine defaults re-verified
+  (Actor.cpp:287/:310 — bReplicateMovement defaults False, not True). Both proposals
+  recorded in PROPOSALS.md.
 
 - **TASK-1 — /position coordinate-convention battery** (2026-07-02):
   `tests/skills/test_position_conventions.py`, 3/3 green vs a live editor (`--ue-attach`);
