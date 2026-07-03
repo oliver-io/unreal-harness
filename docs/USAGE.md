@@ -66,7 +66,7 @@ Consequence: callers do **not** need to call `asset_save` after a mutation. `ass
 
 Most mutators accept `dry_run: true` and return `result.diff` instead of applying. Validation parity is the invariant: a passing dry-run implies a passing commit absent races. Only the apply step is skipped.
 
-**Bridge-level safety net.** Mutators that don't yet support dry-run return `error_code = dry_run_unsupported` when called with `dry_run = true`. The block list lives in `FMCPCommonUtils::IsBlockedFromDryRun(CommandType)`. Initial registry: `add_node` / `bp_add_node` (still blocked).
+**Bridge-level safety net.** Mutators that don't yet support dry-run return `error_code = dry_run_unsupported` when called with `dry_run = true`, instead of silently applying. The blocklist is **~40 tools**, not a one-off — by category: all `ik_retarget_*` mutators, the `gas_*` creators, `level_*` (new/save/save_as/load), asset-factory creators (`enum_create`, `struct_create`, `datatable_create`, `input_create`, `mpc_create`, `material_function_create`, `niagara_script_create`, `physics_material_create`), the `pie_record_*` lifecycle, the `widget_*` mutators, the anim batch fixups (`anim_anchor_feet_to_floor`, `anim_normalize_z_offset`, `anim_smooth_sequence`), `asset_import_mesh`, `input_add_mapping`, `editor_build_reflection_captures`, and `bp_add_node`. Don't enumerate from this doc — the authoritative lists are `FMCPCommonUtils::IsBlockedFromDryRun(CommandType)` (C++, where the bridge enforces the intercept before dispatch) and its mirror `DRY_RUN_UNSUPPORTED` in `src/server/src/bridge/gates.ts` (used for capability disclosure, e.g. `catalog_describe`).
 
 **Diff shapes per subsystem.**
 
@@ -659,7 +659,7 @@ If the handler is a mutator, support `dry_run`:
 2. On `dry_run = true`: run `validate` + `diff`, skip `apply`, return `result.diff` per the subsystem shape (§1.4).
 3. On `dry_run = false`: run all three.
 
-If the handler can't support dry-run (e.g., the apply path is co-mingled with construction), add the command name to `FMCPCommonUtils::IsBlockedFromDryRun` so the bridge returns `dry_run_unsupported` on attempted dry-run calls.
+If the handler can't support dry-run (e.g., the apply path is co-mingled with construction), add the command name to **both** blocklists — `FMCPCommonUtils::IsBlockedFromDryRun` (C++, the enforcing side: the bridge returns `dry_run_unsupported` before dispatch) and `DRY_RUN_UNSUPPORTED` in `src/server/src/bridge/gates.ts` (the TS mirror driving capability disclosure). The set is large (~40 tools across `ik_retarget_*`, `gas_*`, `level_*`, factory creators, `pie_record_*`, widget mutators, …; see §1.4) — joining it is normal, but shipping dry-run support later means removing the entry from both sides in the same commit.
 
 ### 3.4. File size limit
 

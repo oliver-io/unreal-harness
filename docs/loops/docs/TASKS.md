@@ -13,14 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-016 — §1.4/§3.3 dry-run blocklist massively understated
-USAGE:69 and USAGE:659 say "Initial registry: `add_node` / `bp_add_node` (still blocked)".
-Reality: `DRY_RUN_UNSUPPORTED` (`gates.ts:99-118`) has ~40 entries (all `ik_retarget_*`,
-`gas_*`, `level_*`, factory creators, `pie_record_*`, widget tools, …), and `add_node` is
-not a tool name.
-**Fix:** Stop implying the set is one tool; describe its categories and point at
-`gates.ts` as the authoritative list rather than enumerating (it drifts).
-
 ### DOC-017 — §2.18 PIE lease: `pie_not_holder` undocumented; lease codes are out-of-taxonomy
 `pie.ts:40-42` defines three server-synthesized codes: `pie_busy`, `pie_lease_lost`,
 `pie_not_holder`. §2.18 documents the first two but never `pie_not_holder` (returned by
