@@ -228,6 +228,22 @@ Iterates already-loaded sublevels only — reports `skipped_sublevels[]` so the 
 - `actor_set_property(name, property, value, save?)` — reflection write of any edit-exposed UPROPERTY on a placed actor via a dotted path (e.g. `DirectionalLightComponent.Intensity`); visible live but NOT saved to the .umap unless `save=true`. Supports dry_run.
 - `actor_spawn_physics` — server-side composite: builds a throwaway Blueprint (StaticMesh + physics + optional `[R,G,B(,A)]` color), compiles it, then spawns it. PIE-blocked like its constituent commands.
 
+**Mesh asset tools (`mesh_*`)** — operate on the mesh *asset*, not a placed actor:
+
+- `mesh_get_bounds(static_mesh_path)` — read-only LOCAL-space bounds of a `UStaticMesh` (`local_bounds{origin, box_extent, sphere_radius}`, `box_min`/`box_max`, `size`) — the asset-space counterpart to `actor_inspect`'s per-component `world_bounds`. Engine content allowed.
+- `mesh_get_collision(asset_path)` / `mesh_set_collision(asset_path, shape, …)` — read / author simple collision on a `UStaticMesh` (headless Static Mesh Editor → Collision menu). `shape` ∈ `box|sphere|capsule|kdop10_x/y/z|kdop18|kdop26|convex|none`; convex takes `hull_count`/`max_hull_verts`/`hull_precision`; optional `collision_trace_flag` sets the body-setup complexity; `replace_existing=true` by default. Engine content refused; PIE-blocked.
+- **Static-mesh socket CRUD:** `mesh_list_sockets` (resolve by asset path OR by a level actor's StaticMeshComponent — the actor path additionally returns each socket's resolved world transform) → `mesh_add_socket` / `mesh_modify_socket` / `mesh_remove_socket` (dry_run-able; PIE-blocked; engine content refused). Sockets are the scale-proof home for muzzle/attach/grip points — `GetSocketTransform` composes the relative transform with the component's live world transform *including scale*, killing the "hand-tuned offset × hold-fit scale" class of bug. Skeletal-mesh sockets are the `anim_skeleton_*_socket` family (§2.7).
+- `mesh_set_physics_asset(path, physics_asset)` — repoint a `USkeletalMesh`'s PhysicsAsset (`""` clears the binding). PIE-blocked.
+- `mesh_build_bend_chain(path, num_bones?, axis?, base_fraction?, segment_ratio?, …)` — heavyweight procedural re-skinner: (re)builds a Root→tip bone chain up one axis of a skeletal mesh and re-skins every vertex to it by position (smooth two-bone joint blends, segments shortening toward the tip) so the mesh can bend. Idempotent; saves the mesh **and** its bound skeleton; supports dry_run (returns the bone-station table without mutating); PIE-blocked.
+
+**Level persistence (`level_*` mutators)** — the four world-lifecycle tools are all PIE-blocked and refuse dry_run:
+
+- `level_new(template?)` — new blank (or template-copied) level replacing the current editor world. **The outgoing world is NOT auto-saved** — call `level_save` first to keep it. The new world is a transient `/Temp/` map until `level_save_as`.
+- `level_save` — save the current world to its existing on-disk package; errors `invalid_path` on a `/Temp/` untitled level (use `level_save_as` first).
+- `level_save_as(package_path)` — headless File → Save Current As; creates the package and makes it the active level.
+- `level_load(package_path)` — open an existing level, replacing the current world (no save prompt for the outgoing world).
+- `level_set_gamemode_override(level_path, gamemode_class)` — World Settings → GameModeOverride; BP path (auto-`_C`) or native `/Script/...` path; `""` / `"None"` clears. Saves the `.umap`.
+
 ### 2.5. Asset references (`asset_references`)
 
 Single direction-aware tool. Inputs:
@@ -285,7 +301,7 @@ anim_list_skeletons → anim_skeletal_mesh_inspect → anim_skeleton_list_socket
 
 **Skeletal mesh:** `anim_skeletal_mesh_set_section_disabled(mesh, lod, section, disabled)` — hide a bodypart at runtime.
 
-**Physics asset:** `anim_physics_inspect`, `physics_set_body_collision`.
+**Physics asset:** `anim_physics_inspect`, `physics_set_body_collision`, and `physics_set_constraint_motion(path, joint_name? | bone1+bone2, delete?, swing1/swing2/twist/linear_x/y/z?)` — edit or delete a constraint in a `UPhysicsAsset`'s ConstraintSetup. Key it by `joint_name` OR the `(bone1, bone2)` pair (order-insensitive; preferred); per-axis motions take `"Free"`/`"Limited"`/`"Locked"` (omitted axes unchanged), or `delete=true` removes the constraint. Run `anim_physics_inspect` first. PIE-blocked.
 
 **Anim sequences:** `anim_list_sequences`, `anim_sequence_set_property(asset, property_name, value)`.
 
@@ -302,6 +318,15 @@ anim_notify_add(asset, trigger_time, notify_class) → anim_notify_remove(asset,
 ```
 
 Closed-set property hints on `additive_anim_type` and `base_pose_type` enumerate engine source enum members.
+
+**Clip processing (batch fixups):** all four are PIE-blocked.
+
+- `anim_extract_between_notifies(source_path, dest_name, start_notify?/end_notify?/start_time?/end_time?)` — slice a sub-clip into a **new** asset. Boundaries by notify name or explicit time (notify wins); `start_occurrence`/`end_occurrence` pick among repeated notifies; `dest_path` defaults to the source's folder.
+- `anim_smooth_sequence(anim_path, window_size?, filter_type "box"|"gaussian", sigma_frames?, bone_substring_filter?, smooth_positions?)` — sliding-window smoothing of bone tracks (window forced odd; 3 mild, 5 balanced, 9+ aggressive).
+- `anim_normalize_z_offset(anim_path, target_z?, bone_substring_filter? default ["root"])` — rebase so frame-0 bone Z lands at `target_z`, subtracting one Z delta from every frame.
+- `anim_anchor_feet_to_floor(anim_path, foot_bone_substring?, pelvis_bone_substring?, target_z?, sample_frames?)` — FK-compose foot world Z over the leading frames (median) and shift the pelvis Z curve so feet rest at floor level. The typical post-retarget fixup.
+
+**Data-loss foot-gun:** the three track-mutating fixups (`anim_smooth_sequence`, `anim_normalize_z_offset`, `anim_anchor_feet_to_floor`) have **no dry_run** (`dry_run_unsupported`). Their only safety is `output_suffix`, which defaults to writing a suffixed copy (`_Smoothed` / `_ZNorm` / `_FootAnchored`) — **an empty `output_suffix` mutates the source sequence in place**, with no preview and no undo. Leave the default unless you mean it.
 
 **Blend spaces:**
 
@@ -414,6 +439,7 @@ Two tiers: **asset authoring** (mutates assets, auto-saves) and **runtime applic
 - `gas_ability_create(path, name, parent_class?, cost_tag?, cooldown_tag?, tags{}?)` — wraps `UBlueprintFactory` with `UGameplayAbility` parent.
 - `gas_effect_create(path, name, parent_class?, duration_policy?)` — `duration_policy` ∈ `{"Instant", "Duration", "Infinite"}` (closed set; case-insensitive).
 - `gas_attributeset_create(path, name, parent_class?)` — Blueprintable scaffolding tier. Production AttributeSets remain C++. Response carries `is_scaffolding: true` with a migrate-to-C++ hint.
+- `gas_ability_set_cost(ability_path, effect_class)` / `gas_ability_set_cooldown(ability_path, effect_class)` — bind the COST / COOLDOWN GameplayEffect class on a `UGameplayAbility` Blueprint (the engine's actual cost/cooldown model — committing the ability applies that GE; a cooldown's duration + tags live on the GE itself). `effect_class` takes a GE Blueprint path (auto-`_C`), native class, or short name; `""` clears the binding. Auto-saves; PIE-blocked; no dry_run.
 
 Tag inputs validate against `UGameplayTagsManager` and return `unknown_tag` with `tag_add` in the hint when missing.
 
@@ -476,22 +502,45 @@ statetree_create
 
 ### 2.14. Niagara (`niagara_*`)
 
+All `niagara_*` mutators are PIE-blocked. Emitter-scoped tools select the emitter via `emitter_name` or `emitter_index`.
+
 **Inspection:**
 
 - `niagara_list_systems` / `niagara_system_read` / `niagara_emitter_read` / `niagara_module_get_inputs`
 
-**System / emitter mutation:**
+**System / emitter authoring (create → structure → configure):**
+
+```
+niagara_system_create(system_path)                      (empty system — no emitters)
+  → niagara_emitter_add(emitter_name, sim_target?)      (blank-but-valid emitter, "cpu"|"gpu")
+  → niagara_module_add(target_usage, module_script_path) (insert an engine UNiagaraScript stack module)
+  → niagara_module_set_input(module, input, value)       (configure it)
+  → niagara_emitter_add_renderer(renderer_type, material_path?)
+```
+
+- `niagara_module_add` `target_usage` ∈ `{ParticleSpawn, ParticleUpdate, EmitterSpawn, EmitterUpdate, SystemSpawn, SystemUpdate}`; `target_index=-1` appends.
+- `niagara_emitter_add_renderer` `renderer_type` ∈ `{"ribbon"` (default)`, "sprite", "mesh"}`; `material_path` binds ribbon/sprite only.
+- `niagara_emitter_set_local_space(local_space)` — simulate particles in the emitter/owner frame instead of world space; essential for effects authored relative to a moving actor.
+
+**Renderer configuration** (`renderer_index` picks the renderer, default 0):
+
+- `niagara_renderer_set_material` — (re)bind the material on a ribbon/sprite renderer.
+- `niagara_renderer_set_material_binding(user_param_name)` — bind a ribbon/sprite renderer's material to a `User.*` Material parameter (`MaterialUserParamBinding`) so a runtime `SetVariableMaterial` drives it. Create the Material user param first (`niagara_user_parameter_add … "material"`).
+- `niagara_renderer_set_alignment(alignment?, facing?)` — SPRITE renderers only. `alignment="velocity"` orients each sprite's long axis along its velocity → streaks instead of round billboards; `alignment` ∈ `{unaligned, velocity, custom, automatic}`, `facing` ∈ `{camera, camera_plane, custom, camera_position, distance_blend, automatic}`.
+- `niagara_mesh_renderer_set_mesh(mesh_path, scale?)` — assign the static mesh (+ optional uniform scale) to a MESH renderer. **A mesh renderer added via `niagara_emitter_add_renderer` starts with NO mesh and draws nothing** — this is the missing half. The per-particle material comes from the mesh's own slot 0.
+- `niagara_renderer_set_enabled(enabled)` — silence/re-enable a single renderer (a disabled renderer keeps its config but draws nothing — the reliable way to kill a vestigial sprite renderer that co-draws billboards over a mesh emitter). Result lists ALL renderers (index, type, enabled).
+
+**Other mutation:**
 
 - `niagara_emitter_set_enabled(system, emitter, enabled)`
 - `niagara_user_parameter_add` / `_remove` / `_set`
-- `niagara_module_set_input(system, emitter, module, input, value)`
 - `niagara_scratch_pad_module_add(system, emitter, module_template)`
 
 **Standalone script creation:**
 
-- `niagara_script_create(usage, path, name)` — `usage` ∈ `{"module", "function", "dynamic_input"}` (closed set; `"dynamicinput"` accepted as typo-robust alias). Empty/seed-from-defaults graph — populate via existing Niagara node tools.
+- `niagara_script_create(usage, path, name)` — `usage` ∈ `{"module", "function", "dynamic_input"}` (closed set; `"dynamicinput"` accepted as typo-robust alias). Creates an asset shell with an empty/seed graph.
 
-Editing an existing standalone script's HLSL or visual graph isn't yet exposed.
+The system/emitter **stack** is fully authorable (modules + renderers above), but editing a standalone script asset's HLSL or internal node graph isn't yet exposed — `niagara_script_create` gives you the shell only.
 
 ### 2.15. Asset CRUD (`asset_*`)
 
@@ -539,7 +588,9 @@ Primitive asset creators. All auto-save; all enforce path uniqueness; all use cl
 | `editor_perf_snapshot` | Frame timing (`GAverageFPS`, `GAverageMS`, `GFrameCounter`, `FApp::GetDeltaTime`), memory (`FPlatformMemory::GetStats` in MB), GPU descriptor (`GDynamicRHI->GetName`, `GRHIAdapterName`, `GRHIVendorId`, `GMaxRHIShaderPlatform`). **No GPU per-frame timings** yet. |
 | `editor_screenshot` | Viewport screenshot |
 | `editor_window_screenshot(tab_name?)` | Specific tab. Empty `tab_name` falls back to active tab. Saves to `Saved/MCPScreenshots/<timestamp>_<tab>.png`. `window_not_found` if tab name doesn't resolve. |
+| `editor_viewport_get_camera` | Read the active level-editor PERSPECTIVE viewport camera pose: `{location, rotation, fov, aspect, ortho, viewport_size}`. Prefers the last-focused viewport. The "record my framing" half of the capture rig — feed the pose to `pie_capture_from_pose` (§2.18). If `ortho=true` the fov is meaningless: frame a perspective viewport instead. |
 | `editor_content_browser_refresh(path?, force_rescan?)` | `IAssetRegistry::ScanPathsSynchronous`. Default path `/Game`; `force_rescan=true` by default. Logical content paths only (rejects raw filesystem paths). |
+| `editor_build_reflection_captures(save?)` | Bake every reflection-capture cubemap into the current level's MapBuildData (headless Build → Build Reflection Captures). Fixes the editor-vs-PIE divergence where a reflective scene looks correct in the viewport (transient live re-capture) but washed-out grey in PIE / cooked builds (which read the serialized build data). `save` defaults true. PIE-blocked; no dry_run. |
 | `editor_live_coding_compile` | Ctrl+Alt+F11 equivalent — hot-patches compiled code into the running editor without restart. Use whenever the change is confined to function bodies in existing `.cpp` files. |
 | `editor_build_game_target(project_root?, target?)` | Full UBT rebuild of the host project's game target. Project resolution: `project_root` param → `UNREAL_PROJECT_ROOT` env → structured error; the `.uproject` is discovered by glob inside the root and the UBT target name defaults to its filename stem (`target` overrides). The engine is located via `UNREAL_ENGINE_ROOT` (must contain `Engine/Build/BatchFiles/Build.bat`). Unset env vars produce a structured error naming the variable. |
 

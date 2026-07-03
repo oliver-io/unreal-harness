@@ -13,27 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-021 — Partial-coverage domains: documented sections omit shipped tools
-- **anim (§2.7):** clip-processing suite undocumented — `anim_smooth_sequence` (:317),
-  `anim_normalize_z_offset` (:362), `anim_anchor_feet_to_floor` (:392),
-  `anim_extract_between_notifies` (:735) in `anim.ts`. **Data-loss foot-gun:** the first
-  three have no dry_run and default to writing a suffixed copy, but an empty
-  `output_suffix` mutates the source in place.
-- **mesh (§2.4/§2.6):** missing `mesh_set_collision`, `mesh_get_collision`,
-  `mesh_get_bounds`, `mesh_build_bend_chain` (heavyweight procedural re-skinner —
-  dry_run-able, PIE-blocked, saves mesh+skeleton), socket CRUD (`mesh.ts:141-404`).
-- **niagara (§2.14):** omits the creation/renderer set (`niagara_system_create`,
-  `niagara_emitter_add(_renderer)`, `niagara_module_add`, `niagara_renderer_set_*`,
-  `niagara_mesh_renderer_set_mesh`, `niagara.ts:314-616`) while USAGE:491 still claims graph
-  editing "isn't yet exposed".
-- **editor (§2.17):** omits `editor_viewport_get_camera` (`editor.ts:129`),
-  `editor_build_reflection_captures` (`editor.ts:158`).
-- **level (§2.4):** omits `level_new/save/save_as/load/set_gamemode_override` (`level.ts`).
-- **gas (§2.10):** omits `gas_ability_set_cost`/`gas_ability_set_cooldown` (`gas.ts:68/97`).
-- **physics (§2.16):** omits `physics_set_constraint_motion` (`physics.ts:122`).
-**Fix:** One loop iteration per domain bullet is acceptable; update each section and kill
-the stale "isn't yet exposed" claims.
-
 ### DOC-023 — §2.18: fourth synthesized lease code `pie_takeover_failed` undocumented
 Found during DOC-017: `pie.ts:43` defines `pie_takeover_failed` (stale PIE couldn't be
 cleared before a promoted start) alongside the three now-documented lease codes. §2.18's
