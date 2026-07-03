@@ -14,12 +14,10 @@ anything — do not take these descriptions at face value.
 
 ## B. Wire ops with NO test at all (from the set diff)
 
-- [ ] `pie_capture_from_pose` — GUI-gated: capture from a saved pose, observe the PNG on disk
-  (exists, non-zero, expected dimensions). The pose IS the fixed rig — doctrine-compliant.
-- [ ] `pie_inject_input_action` — design to stay non-VERBOTEN: bind a test input action to a
-  deterministic observable (C++ test actor flips a UPROPERTY / emits a `[FEATURE]` log marker),
-  inject once, observe via `pie_query`/`editor_read_logs`. The injection is the Act; the
-  observation is independent state — no play-acting, no navigation.
+(none open — `pie_capture_from_pose` + `pie_inject_input_action` landed 2026-07-03, gate 7 → 5;
+parity twins in `tests/integration/test_pie.py` + `src/server/test/integration/pie.test.ts`,
+all green live against the GUI trong editor in attach mode. The inject op's deep consumer-side
+positive observation is honestly partial — see #DEFERRED.)
 
 ## C. Server-local tools with no test (bun tier)
 
@@ -161,6 +159,26 @@ Keep the pytest and bun mirror in lockstep when fixing.)
   it needs primitives that don't exist, add them or defer.
 
 # DEFERRED
+
+- **`pie_inject_input_action` deep consumer-side positive observation** (2026-07-03) — the op
+  now has real live coverage (parity twins in `test_pie.py` / `pie.test.ts`, green against the
+  GUI trong editor): the no-PIE guard (`invalid_argument`, "PIE is not running" — note the C++
+  handler deliberately returns invalid_argument here, NOT not_in_pie), the in-PIE bad-path
+  `asset_not_found` guard, and the positive wire path (a fixture `IA_MCPInjectProbe` created via
+  `input_create` under `/Game/__MCPTest__/pie`, injected into the live player's
+  `UEnhancedInputLocalPlayerSubsystem`). What stays deferred is observing a CONSUMER react:
+  `InjectInputForAction` (MCPAutomationCommands.cpp:1275-1344) only evaluates for bindings made
+  via `UEnhancedInputComponent::BindAction`, the handler emits no log line of its own, and no
+  typed primitive can bind an InputAction to an observable reaction without C++ — a Blueprint
+  pawn with an EnhancedInputAction event node would additionally need spawn+POSSESS of the PIE
+  player (gameplay-state mutation in the shared editor, and BP event-node support for
+  EnhancedInputAction events is unverified). So the positive assertion is the injection ack
+  (envelope-level), the same concession the house already grants `pie_send_keystrokes`
+  ("doctrine permits injection-op-only assertions"). Unblock after the next legitimate full
+  rebuild with a small C++ test-consumer primitive: an `AMCPTestInputConsumer` actor (or a
+  handler-side flag) that BindAction()s a given IA path on spawn and flips a UPROPERTY / logs a
+  `[MCP:TestInput]` marker on Triggered — then Arrange (spawn consumer) → Act (inject) →
+  Observe (`pie_query`/`actor_inspect` the flag or `editor_read_logs` the consumer marker).
 
 - **Landscape value-bearing positive paths** — `landscape_read_heightmap` height stats /
   known-sample assertions and `landscape_list_layers` assigned-layer entries (2026-07-02). The

@@ -27,6 +27,8 @@ Pattern for every test: arrange prerequisite state -> dispatch the op -> assert
 the resulting state (or the documented guard envelope).
 """
 
+import os
+import struct
 import time
 
 import pytest
@@ -48,6 +50,31 @@ def _wait_for_pie(bridge, want_running: bool, timeout: float = 30.0) -> bool:
             return want_running
         time.sleep(0.5)
     return bool(state.get("is_running"))
+
+
+def _acquire_pie(mcp, requester: str, timeout: float = 120.0) -> dict:
+    """Acquire the shared PIE lease, honoring the queue protocol: pie_busy is a
+    queue position, not a failure — re-call pie_start to hold the place (FIFO)
+    until promoted or the deadline passes (docs/USAGE.md §2.18)."""
+    deadline = time.monotonic() + timeout
+    while True:
+        resp = mcp.command("pie_start", {"requester": requester})
+        if resp.get("status") == "success":
+            return resp
+        if resp.get("error_code") != "pie_busy" or time.monotonic() >= deadline:
+            pytest.fail(f"could not acquire the PIE lease: {resp}")
+        time.sleep(2.0)
+
+
+def _png_dimensions(path: str) -> tuple[int, int]:
+    """Parse width/height straight out of the PNG IHDR chunk (an observation
+    independent of the capture op's own envelope)."""
+    with open(path, "rb") as fh:
+        header = fh.read(24)
+    assert header[:8] == b"\x89PNG\r\n\x1a\n", f"not a PNG: {header[:8]!r}"
+    assert header[12:16] == b"IHDR", header
+    width, height = struct.unpack(">II", header[16:24])
+    return width, height
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +181,114 @@ def test_pie_lifecycle_start_query_input_stop(mcp):
     assert stop.get("status") == "stopping", stop
     assert _wait_for_pie(mcp, want_running=False), "PIE never stopped"
     assert_ready(mcp)
+
+
+# ---------------------------------------------------------------------------
+# Pose capture + Enhanced Input injection
+# ---------------------------------------------------------------------------
+
+@covers("pie_capture_from_pose")
+def test_pie_capture_from_pose_without_pie_errors_not_in_pie(mcp):
+    # The capture rig reproduces a pose INSIDE the running game; with no PIE
+    # session it returns the documented not_in_pie guard (checked before any
+    # camera is spawned or file written). Safe headless: nothing renders.
+    resp = mcp.command("pie_capture_from_pose", {
+        "location": {"x": 0.0, "y": 0.0, "z": 500.0},
+        "rotation": {"pitch": -90.0, "yaw": 0.0, "roll": 0.0},
+    })
+    assert resp.get("status") == "error", resp
+    assert resp.get("error_code") == "not_in_pie", resp
+    assert_ready(mcp)
+
+
+@covers("pie_inject_input_action")
+def test_pie_inject_input_action_without_pie_errors(mcp):
+    # Enhanced Input injection targets the live PIE player. With no session the
+    # handler refuses BEFORE loading the asset — the documented guard is
+    # invalid_argument ("PIE is not running"), not not_in_pie.
+    resp = mcp.command("pie_inject_input_action", {
+        "action_path": "/Game/__MCPTest__/pie/IA_DoesNotExist",
+    })
+    assert resp.get("status") == "error", resp
+    assert resp.get("error_code") == "invalid_argument", resp
+    assert "PIE" in str(resp.get("error", "")), resp
+    assert_ready(mcp)
+
+
+@pytest.mark.gui_only
+@covers("pie_capture_from_pose", "pie_inject_input_action")
+def test_pie_capture_from_pose_and_inject_input_action(mcp, tmp_path):
+    # One short PIE session exercises both ops (keeps shared-editor PIE time
+    # minimal). The pose IS the fixed capture rig — a supplied location/rotation/
+    # fov, zero navigation — per docs/TESTING.md.
+    #
+    # Capture observation: the PNG on disk (signature + IHDR dimensions + size),
+    # read back by the test itself — independent of the op's envelope.
+    # Injection observation: the positive path asserts the injection ack only
+    # (no typed primitive can bind an InputAction to an observable consumer
+    # without C++ — the deep consumer-side observation is #DEFERRED in
+    # docs/loops/tests/TASKS.md); the bad-path asserts the documented
+    # asset_not_found guard, which only fires inside a live session.
+    ns = "/Game/__MCPTest__/pie"
+    ia_path = f"{ns}/IA_MCPInjectProbe"
+
+    # Arrange (pre-PIE — asset mutation stays out of the session): a real
+    # UInputAction under the test namespace for the positive injection.
+    ensure_absent(mcp, ia_path)
+    created = mcp.expect("input_create", {
+        "type": "action", "name": "IA_MCPInjectProbe", "path": ns,
+        "value_type": "boolean",
+    })
+    assert created.get("asset_path"), created
+
+    acquired = False
+    try:
+        _acquire_pie(mcp, requester="pytest pie capture/inject")
+        acquired = True
+        assert _wait_for_pie(mcp, want_running=True), "PIE never reached is_running"
+
+        # Act: capture from an explicit top-down pose into a test-owned dir.
+        result = mcp.expect("pie_capture_from_pose", {
+            "location": {"x": 0.0, "y": 0.0, "z": 500.0},
+            "rotation": {"pitch": -90.0, "yaw": 0.0, "roll": 0.0},
+            "fov": 90.0,
+            "filename": "pytest_pose_capture",
+            "directory": str(tmp_path),
+        })
+        # The bridge confirms the file before returning: status flips
+        # "requested" -> "captured" only once the PNG exists on disk.
+        assert result.get("status") == "captured", result
+        path = result.get("path") or result.get("file_path")
+        assert path, result
+
+        # Observe: the file itself — a real, non-trivial PNG with sane dims.
+        assert os.path.isfile(path), f"capture not written to {path}"
+        assert os.path.getsize(path) > 1000, os.path.getsize(path)
+        width, height = _png_dimensions(path)
+        assert width > 0 and height > 0, (width, height)
+        assert_ready(mcp)
+
+        # Injecting a nonexistent action inside the live session is the
+        # documented asset_not_found guard (the PIE gate passed first).
+        bad = mcp.command("pie_inject_input_action", {
+            "action_path": f"{ns}/IA_DoesNotExist",
+        })
+        assert bad.get("status") == "error", bad
+        assert bad.get("error_code") == "asset_not_found", bad
+
+        # Positive injection into the live player's EnhancedInput subsystem.
+        injected = mcp.expect("pie_inject_input_action", {
+            "action_path": ia_path, "value": 1.0,
+        })
+        assert injected.get("injected") is True, injected
+        assert injected.get("action") == ia_path, injected
+        assert_ready(mcp)
+    finally:
+        if acquired:
+            mcp.command("pie_stop", {})
+            _wait_for_pie(mcp, want_running=False)
+        mcp.command("asset_delete", {"asset_path": ia_path, "force": True})
+        assert_ready(mcp)
 
 
 # ---------------------------------------------------------------------------

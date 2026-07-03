@@ -9,8 +9,11 @@
  */
 
 import { test, expect, afterEach } from "bun:test";
+import { mkdtemp, rm, readFile, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { editorSuite, NS as ROOT, GUI } from "../harness/suite.ts";
-import { assertReady } from "../harness/ops.ts";
+import { assertReady, ensureAbsent } from "../harness/ops.ts";
 import type { Commandable } from "../harness/ops.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -33,6 +36,30 @@ async function waitForPie(
     await sleep(500);
   }
   return Boolean(state.is_running);
+}
+
+/** Acquire the shared PIE lease, honoring the queue protocol: pie_busy is a
+ *  queue position, not a failure — re-call pie_start to hold the place (FIFO)
+ *  until promoted or the deadline passes (docs/USAGE.md §2.18). */
+async function acquirePie(bridge: Commandable, requester: string, timeout = 120.0): Promise<void> {
+  const deadline = Date.now() + timeout * 1000;
+  for (;;) {
+    const resp = await bridge.command("pie_start", { requester });
+    if (resp.status === "success") return;
+    if (resp.error_code !== "pie_busy" || Date.now() >= deadline) {
+      throw new Error(`could not acquire the PIE lease: ${JSON.stringify(resp)}`);
+    }
+    await sleep(2000);
+  }
+}
+
+/** Parse width/height straight out of the PNG IHDR chunk (an observation
+ *  independent of the capture op's own envelope). */
+function pngDimensions(buf: Buffer): { width: number; height: number } {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (!buf.subarray(0, 8).equals(sig)) throw new Error("not a PNG");
+  if (buf.subarray(12, 16).toString("ascii") !== "IHDR") throw new Error("no IHDR chunk");
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
 editorSuite("pie", (ctx) => {
@@ -167,4 +194,112 @@ editorSuite("pie", (ctx) => {
     expect(await waitForPie(ctx.mcp, false)).toBeTruthy();
     await assertReady(ctx.mcp);
   });
+
+  // ── Pose capture + Enhanced Input injection ────────────────────────────────
+  test("test_pie_capture_from_pose_without_pie_errors_not_in_pie", async () => {
+    // The capture rig reproduces a pose INSIDE the running game; with no PIE
+    // session it returns the documented not_in_pie guard (checked before any
+    // camera is spawned or file written). Safe headless: nothing renders.
+    const resp = await ctx.mcp.command("pie_capture_from_pose", {
+      location: { x: 0.0, y: 0.0, z: 500.0 },
+      rotation: { pitch: -90.0, yaw: 0.0, roll: 0.0 },
+    });
+    expect(resp.status).toEqual("error");
+    expect(resp.error_code).toEqual("not_in_pie");
+    await assertReady(ctx.mcp);
+  });
+
+  test("test_pie_inject_input_action_without_pie_errors", async () => {
+    // Enhanced Input injection targets the live PIE player. With no session the
+    // handler refuses BEFORE loading the asset — the documented guard is
+    // invalid_argument ("PIE is not running"), not not_in_pie.
+    const resp = await ctx.mcp.command("pie_inject_input_action", {
+      action_path: `${ROOT}/pie/IA_DoesNotExist`,
+    });
+    expect(resp.status).toEqual("error");
+    expect(resp.error_code).toEqual("invalid_argument");
+    expect(String(resp.error ?? "")).toContain("PIE");
+    await assertReady(ctx.mcp);
+  });
+
+  test.skipIf(!GUI)("test_pie_capture_from_pose_and_inject_input_action", async () => {
+    // One short PIE session exercises both ops (keeps shared-editor PIE time
+    // minimal). The pose IS the fixed capture rig — a supplied location/rotation/
+    // fov, zero navigation — per docs/TESTING.md.
+    //
+    // Capture observation: the PNG on disk (signature + IHDR dimensions + size),
+    // read back by the test itself — independent of the op's envelope.
+    // Injection observation: the positive path asserts the injection ack only
+    // (no typed primitive can bind an InputAction to an observable consumer
+    // without C++ — the deep consumer-side observation is #DEFERRED in
+    // docs/loops/tests/TASKS.md); the bad-path asserts the documented
+    // asset_not_found guard, which only fires inside a live session.
+    const ns = `${ROOT}/pie`;
+    const iaPath = `${ns}/IA_MCPInjectProbe`;
+    const outDir = await mkdtemp(join(tmpdir(), "mcp-pose-capture-"));
+
+    // Arrange (pre-PIE — asset mutation stays out of the session): a real
+    // UInputAction under the test namespace for the positive injection.
+    await ensureAbsent(ctx.mcp, iaPath);
+    const created = await ctx.mcp.expect("input_create", {
+      type: "action",
+      name: "IA_MCPInjectProbe",
+      path: ns,
+      value_type: "boolean",
+    });
+    expect(created.asset_path).toBeTruthy();
+
+    let acquired = false;
+    try {
+      await acquirePie(ctx.mcp, "bun pie capture/inject");
+      acquired = true;
+      expect(await waitForPie(ctx.mcp, true)).toBeTruthy();
+
+      // Act: capture from an explicit top-down pose into a test-owned dir.
+      const result = await ctx.mcp.expect("pie_capture_from_pose", {
+        location: { x: 0.0, y: 0.0, z: 500.0 },
+        rotation: { pitch: -90.0, yaw: 0.0, roll: 0.0 },
+        fov: 90.0,
+        filename: "bun_pose_capture",
+        directory: outDir,
+      });
+      // The bridge confirms the file before returning: status flips
+      // "requested" -> "captured" only once the PNG exists on disk.
+      expect(result.status).toEqual("captured");
+      const path = String(result.path ?? result.file_path ?? "");
+      expect(path).toBeTruthy();
+
+      // Observe: the file itself — a real, non-trivial PNG with sane dims.
+      expect((await stat(path)).size).toBeGreaterThan(1000);
+      const { width, height } = pngDimensions(await readFile(path));
+      expect(width).toBeGreaterThan(0);
+      expect(height).toBeGreaterThan(0);
+      await assertReady(ctx.mcp);
+
+      // Injecting a nonexistent action inside the live session is the
+      // documented asset_not_found guard (the PIE gate passed first).
+      const bad = await ctx.mcp.command("pie_inject_input_action", {
+        action_path: `${ns}/IA_DoesNotExist`,
+      });
+      expect(bad.status).toEqual("error");
+      expect(bad.error_code).toEqual("asset_not_found");
+
+      // Positive injection into the live player's EnhancedInput subsystem.
+      const injected = await ctx.mcp.expect("pie_inject_input_action", {
+        action_path: iaPath,
+        value: 1.0,
+      });
+      expect(injected.injected).toBe(true);
+      expect(injected.action).toEqual(iaPath);
+      await assertReady(ctx.mcp);
+    } finally {
+      if (acquired) {
+        await ctx.mcp.command("pie_stop", {});
+        await waitForPie(ctx.mcp, false);
+      }
+      await ctx.mcp.command("asset_delete", { asset_path: iaPath, force: true });
+      await rm(outDir, { recursive: true, force: true }).catch(() => {});
+      await assertReady(ctx.mcp);
+    }
+  }, 240000);
 });
