@@ -113,6 +113,32 @@ rather than inventing detail.
 The lost ledger's numbering can't be recovered, so new entries are unnumbered to
 avoid colliding with lost GAP ids.
 
+### `bp_set_event_replication` is dead code — never routed by the bridge
+
+Found by the skill-test loop (2026-07-02, `tests/skills/test_networking_rpc_events.py`,
+which xfails on exactly this signature). The handler exists and is wired inside
+`FMCPBlueprintCommands::HandleCommand` (`MCPBlueprintCommands.cpp:117` →
+`HandleSetEventReplication` `:1551-1673`), the server registers the tool
+(`src/server/src/domains/bp.ts:429`), and it sits in the PIE blocklist
+(`MCPCommonUtils.cpp:214`) — but `FMCPBridge::ExecuteCommand`'s Blueprint dispatch chain
+(`MCPBridge.cpp:748-788`) omits it, so the bridge falls through to `Unknown command`
+(`:1187`). The tool has never worked end-to-end. Candidate fix: add the dispatch line
+(mirroring `bp_set_class_replication` at `:753`); the xfailed test's full six-step
+battery goes green with zero test changes once it lands. Consider a server↔bridge
+dispatch-parity guard so a registered-but-unrouted tool can't ship silently again.
+
+### `pie_capture_from_pose` result echoes no pose — rig application has no non-pixel oracle
+
+Found by the skill-test loop (2026-07-02, capture-pose analysis; no test written —
+observability gap, not a defect). `HandleCaptureFromPose` returns only `file_path`,
+`path`, `status:"requested"`, `restored`, `message`
+(`MCPAutomationCommands.cpp:1121-1129`); the applied `location`/`rotation`/`fov`/`aspect`
+are never echoed back. Consequently the only way to validate a capture rig is a
+`/visual-critique` vision verdict. Candidate fix: echo the applied pose (and effective
+resolution) in the result so pose *application* becomes a deterministic metadata
+assertion, leaving only framing judgment to vision. See
+`docs/loops/skills/PROPOSALS.md` (TASK-7) for the companion skill-language proposal.
+
 ### PIE video recording requires a real RHI and Windows
 
 `pie_record_start` (and armed auto-record) is refused with `feature_disabled` under
