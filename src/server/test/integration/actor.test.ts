@@ -104,6 +104,16 @@ editorSuite("actor", (ctx) => {
 
   test("set_actor_transform_dry_run_does_not_mutate", async () => {
     // dry_run validates and emits a transforms_changed diff without mutating.
+    const before = (await ctx.mcp.expect("actor_inspect", { name: smActor }))
+      .location as Record<string, number>;
+    // Guard: the proposed location must differ from the current one, or the
+    // "did not move" observation below would be vacuous.
+    expect(
+      Math.abs(before.x! - 1.0) < 0.1 &&
+        Math.abs(before.y! - 2.0) < 0.1 &&
+        Math.abs(before.z! - 3.0) < 0.1,
+    ).toBe(false);
+
     const result = await ctx.mcp.expect("actor_set_transform", {
       name: smActor,
       location: [1.0, 2.0, 3.0],
@@ -112,11 +122,22 @@ editorSuite("actor", (ctx) => {
     expect(result.dry_run).toBe(true);
     const changed = (result.diff as any).transforms_changed;
     expect(changed[0].name).toEqual(smActor);
+
+    // Independent readback: the actor must NOT have moved.
+    const after = (await ctx.mcp.expect("actor_inspect", { name: smActor }))
+      .location as Record<string, number>;
+    for (const axis of ["x", "y", "z"] as const) {
+      expect(Math.abs(after[axis]! - before[axis]!) <= 0.01).toBe(true);
+    }
   });
 
   test("actor_set_property_then_readback", async () => {
-    // Reflective write of a leaf on a placed actor; the response re-exports the
-    // property after the write, which is the read-back.
+    // Reflective write of a leaf on a placed actor, proven by re-reading the
+    // stored value through a separate invocation — not the mutator's own echo.
+    // actor_inspect does not export component leaf properties, so the
+    // independent readback is actor_set_property's dry-run before-value:
+    // dry_run resolves and exports the CURRENT value without mutating
+    // (properties_changed diff, B4 convention).
     const result = await ctx.mcp.expect("actor_set_property", {
       name: smActor,
       property: "StaticMeshComponent.BoundsScale",
@@ -126,6 +147,18 @@ editorSuite("actor", (ctx) => {
     // Default BoundsScale is 1.0; the exported 'after' text must reflect 2.0.
     expect(String(result.after)).toContain("2");
     expect(result.before).not.toEqual(result.after);
+
+    // Independent readback: a fresh dry-run resolve of the same leaf must
+    // report the persisted 2.0 as its before-value (and not mutate anything).
+    const probe = await ctx.mcp.expect("actor_set_property", {
+      name: smActor,
+      property: "StaticMeshComponent.BoundsScale",
+      value: 4.0,
+      dry_run: true,
+    });
+    expect(probe.dry_run).toBe(true);
+    const entry = (probe.diff as any).properties_changed[0];
+    expect(Math.abs(parseFloat(String(entry.before)) - 2.0) < 0.001).toBe(true);
   });
 
   test("delete_actor_then_absent", async () => {
@@ -182,10 +215,31 @@ editorSuite("actor", (ctx) => {
     expect(JSON.stringify(result)).toContain("material_create_instance");
   });
 
+  /** Independent reader for AWorldSettings::DefaultGameMode on an arbitrary
+   *  saved level. level_inspect only surfaces the WorldSettings actor's path
+   *  and class (not its properties), so the sanctioned `py` console escape
+   *  hatch is the observer: load the UWorld and export the class path. */
+  async function readGamemodeOverride(levelPath: string): Promise<string> {
+    const name = levelPath.split("/").pop();
+    const probe = await ctx.mcp.expect("editor_console_exec", {
+      command:
+        "py import unreal; " +
+        `w = unreal.load_object(None, '${levelPath}.${name}'); ` +
+        "ws = w.get_world_settings(); " +
+        "gm = ws.get_editor_property('default_game_mode'); " +
+        "print('MCPTEST_GMO=' + (gm.get_path_name() if gm else 'None'))",
+    });
+    const m = /MCPTEST_GMO=(\S+)/.exec(String(probe.output ?? ""));
+    expect(m).toBeTruthy();
+    return m![1]!;
+  }
+
   test("set_world_gamemode_override", async () => {
-    // Bind a level's World Settings GameModeOverride. Requires a saved World
-    // asset to target — the transient untitled level has no /Game path, so we
-    // discover an on-disk level and skip cleanly if the project has none.
+    // Bind a level's World Settings GameModeOverride, prove it via an
+    // independent py readback of the saved world's DefaultGameMode, and
+    // RESTORE the prior override (this targets a real level of the host
+    // project — the original setting must survive the test). Requires a saved
+    // World asset — skip cleanly if the project has none.
     const listing = await ctx.mcp.expect("asset_list", {
       directory_path: "/Game/",
       recursive: true,
@@ -198,13 +252,27 @@ editorSuite("actor", (ctx) => {
       return;
     }
 
-    const levelPath = String(worlds[0].path).split(".")[0];
-    const result = await ctx.mcp.expect("level_set_gamemode_override", {
-      level_path: levelPath,
-      gamemode_class: "/Script/Engine.GameModeBase",
-    });
-    expect(result.success).toBe(true);
-    expect(String(result.gamemode_class ?? "")).toContain("GameMode");
+    const levelPath = String(worlds[0].path).split(".")[0]!;
+    const original = await readGamemodeOverride(levelPath);
+    try {
+      const result = await ctx.mcp.expect("level_set_gamemode_override", {
+        level_path: levelPath,
+        gamemode_class: "/Script/Engine.GameModeBase",
+      });
+      expect(result.success).toBe(true);
+      expect(String(result.gamemode_class ?? "")).toContain("GameMode");
+
+      // Independent readback: the world's DefaultGameMode is the set class.
+      expect(await readGamemodeOverride(levelPath)).toEqual("/Script/Engine.GameModeBase");
+    } finally {
+      // Restore the prior override ('' clears it) — never leave the host
+      // project's level pointing at the test gamemode.
+      await ctx.mcp.command("level_set_gamemode_override", {
+        level_path: levelPath,
+        gamemode_class: original === "None" ? "" : original,
+      });
+    }
+    expect(await readGamemodeOverride(levelPath)).toEqual(original);
     await assertReady(ctx.mcp);
   });
 });

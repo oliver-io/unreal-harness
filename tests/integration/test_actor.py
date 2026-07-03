@@ -15,6 +15,8 @@ Pattern for every test: arrange prerequisite state -> dispatch the op (raises on
 a non-success envelope) -> assert the resulting state via a read/inspect op.
 """
 
+import re
+
 import pytest
 
 from harness import config
@@ -113,6 +115,13 @@ def test_set_actor_transform_then_inspect(mcp, sm_actor):
 @covers("actor_set_transform")
 def test_set_actor_transform_dry_run_does_not_mutate(mcp, sm_actor):
     """dry_run validates and emits a transforms_changed diff without mutating."""
+    before = mcp.expect("actor_inspect", {"name": sm_actor})["location"]
+    # Guard: the proposed location must differ from the current one, or the
+    # "did not move" observation below would be vacuous.
+    assert not (before["x"] == pytest.approx(1.0, abs=0.1)
+                and before["y"] == pytest.approx(2.0, abs=0.1)
+                and before["z"] == pytest.approx(3.0, abs=0.1)), before
+
     result = mcp.expect("actor_set_transform", {
         "name": sm_actor,
         "location": [1.0, 2.0, 3.0],
@@ -122,11 +131,21 @@ def test_set_actor_transform_dry_run_does_not_mutate(mcp, sm_actor):
     changed = result["diff"]["transforms_changed"]
     assert changed[0]["name"] == sm_actor, changed
 
+    # Independent readback: the actor must NOT have moved.
+    after = mcp.expect("actor_inspect", {"name": sm_actor})["location"]
+    for axis in ("x", "y", "z"):
+        assert after[axis] == pytest.approx(before[axis], abs=0.01), (before, after)
+
 
 @covers("actor_set_property")
 def test_actor_set_property_then_readback(mcp, sm_actor):
-    """Reflective write of a leaf on a placed actor; the response re-exports the
-    property after the write, which is the read-back."""
+    """Reflective write of a leaf on a placed actor, proven by re-reading the
+    stored value through a separate invocation — not the mutator's own echo.
+
+    actor_inspect does not export component leaf properties (components carry
+    name/class/transform/bounds only), so the independent readback is
+    actor_set_property's dry-run before-value: dry_run resolves and exports the
+    CURRENT value without mutating (properties_changed diff, B4 convention)."""
     result = mcp.expect("actor_set_property", {
         "name": sm_actor,
         "property": "StaticMeshComponent.BoundsScale",
@@ -136,6 +155,18 @@ def test_actor_set_property_then_readback(mcp, sm_actor):
     # Default BoundsScale is 1.0; the exported 'after' text must reflect 2.0.
     assert "2" in result["after"], result
     assert result["before"] != result["after"], result
+
+    # Independent readback: a fresh dry-run resolve of the same leaf must report
+    # the persisted 2.0 as its before-value (and not mutate anything).
+    probe = mcp.expect("actor_set_property", {
+        "name": sm_actor,
+        "property": "StaticMeshComponent.BoundsScale",
+        "value": 4.0,
+        "dry_run": True,
+    })
+    assert probe.get("dry_run") is True, probe
+    entry = probe["diff"]["properties_changed"][0]
+    assert float(entry["before"]) == pytest.approx(2.0), entry
 
 
 @covers("actor_delete", "find_actors_by_name")
@@ -196,11 +227,32 @@ def test_set_mesh_material_color(mcp):
     assert "material_create_instance" in str(result), result
 
 
+def _read_gamemode_override(mcp, level_path: str) -> str:
+    """Independent reader for AWorldSettings::DefaultGameMode on an arbitrary
+    saved level. level_inspect only surfaces the WorldSettings actor's path and
+    class (not its properties), so the sanctioned `py` console escape hatch is
+    the observer: load the UWorld and export the class path (or 'None')."""
+    name = level_path.rsplit("/", 1)[-1]
+    probe = mcp.expect("editor_console_exec", {"command": (
+        "py import unreal; "
+        f"w = unreal.load_object(None, '{level_path}.{name}'); "
+        "ws = w.get_world_settings(); "
+        "gm = ws.get_editor_property('default_game_mode'); "
+        "print('MCPTEST_GMO=' + (gm.get_path_name() if gm else 'None'))"
+    )})
+    m = re.search(r"MCPTEST_GMO=(\S+)", probe.get("output", ""))
+    assert m, probe
+    return m.group(1)
+
+
 @covers("level_set_gamemode_override")
 def test_set_world_gamemode_override(mcp):
-    """Bind a level's World Settings GameModeOverride. Requires a saved World
-    asset to target — the transient untitled level has no /Game path, so we
-    discover an on-disk level and skip cleanly if the project has none."""
+    """Bind a level's World Settings GameModeOverride, prove it via an
+    independent py readback of the saved world's DefaultGameMode, and RESTORE
+    the prior override (this targets a real level of the host project — the
+    original setting must survive the test). Requires a saved World asset —
+    the transient untitled level has no /Game path, so we discover an on-disk
+    level and skip cleanly if the project has none."""
     listing = mcp.expect("asset_list", {
         "directory_path": "/Game/",
         "recursive": True,
@@ -212,10 +264,24 @@ def test_set_world_gamemode_override(mcp):
         pytest.skip("no saved World/level asset in the test project to target")
 
     level_path = worlds[0]["path"].split(".")[0]
-    result = mcp.expect("level_set_gamemode_override", {
-        "level_path": level_path,
-        "gamemode_class": "/Script/Engine.GameModeBase",
-    })
-    assert result.get("success") is True, result
-    assert "GameMode" in result.get("gamemode_class", ""), result
+    original = _read_gamemode_override(mcp, level_path)
+    try:
+        result = mcp.expect("level_set_gamemode_override", {
+            "level_path": level_path,
+            "gamemode_class": "/Script/Engine.GameModeBase",
+        })
+        assert result.get("success") is True, result
+        assert "GameMode" in result.get("gamemode_class", ""), result
+
+        # Independent readback: the world's DefaultGameMode is the set class.
+        assert _read_gamemode_override(mcp, level_path) \
+            == "/Script/Engine.GameModeBase"
+    finally:
+        # Restore the prior override ('' clears it) — never leave the host
+        # project's level pointing at the test gamemode.
+        mcp.command("level_set_gamemode_override", {
+            "level_path": level_path,
+            "gamemode_class": "" if original == "None" else original,
+        })
+    assert _read_gamemode_override(mcp, level_path) == original
     assert_ready(mcp)

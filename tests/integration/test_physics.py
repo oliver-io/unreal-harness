@@ -41,18 +41,20 @@ MESH = "/Engine/EngineMeshes/SkeletalCube"
 def physics_asset(mcp):
     """Return the path to *some* UPhysicsAsset, or None if the project/engine has
     none. Tried in order: the asset bound on the engine cube, then a content
-    scan of /Game, then /Engine (class_filter keeps the payload small)."""
-    info = mcp.expect("anim_skeletal_mesh_inspect", {"path": MESH})
+    scan of /Game, then /Engine (class_filter keeps the payload small).
+    Both reads are AssetManager-style handlers that nest their fields under
+    ``data`` — unwrap via payload() or the scan silently finds nothing."""
+    info = payload(mcp.expect("anim_skeletal_mesh_inspect", {"path": MESH}))
     bound = info.get("physics_asset") or ""
     if bound:
         return bound
     for directory in ("/Game/", "/Engine/"):
         try:
-            result = mcp.expect("asset_list", {
+            result = payload(mcp.expect("asset_list", {
                 "directory_path": directory,
                 "recursive": True,
                 "class_filter": "PhysicsAsset",
-            })
+            }))
         except CommandError:
             continue
         for asset in result.get("assets", []) or []:
@@ -96,6 +98,28 @@ def test_set_physics_properties_on_component(mcp):
         "angular_damping": 0.0,
     })
     assert result.get("success") is not False, result
+
+    # Independent readback: bp_read's archetype-diff overrides on the SCS
+    # template. The physics flags all live in the BodyInstance struct, which
+    # must now appear as an override whose exported text carries each value.
+    content = mcp.expect("bp_read", {
+        "blueprint_path": bp,
+        "include_event_graph": False,
+        "include_functions": False,
+        "include_variables": False,
+        "include_component_properties": True,
+    })
+    comp = next(c for c in content["components"] if c["name"] == "PhysMesh")
+    overrides = {o["name"]: o for o in comp.get("property_overrides", [])}
+    assert "BodyInstance" in overrides, overrides
+    body = overrides["BodyInstance"]["value"]
+    for fragment in ("bSimulatePhysics=True", "bOverrideMass=True",
+                     "MassInKgOverride=5.000000", "LinearDamping=0.020000",
+                     "bEnableGravity=True"):
+        assert fragment in body, (fragment, body)
+    # The archetype default has no simulate-physics override — proves the
+    # exported values are real template overrides, not inherited defaults.
+    assert "bSimulatePhysics=True" not in overrides["BodyInstance"]["archetype_value"]
     assert_ready(mcp)
 
 
@@ -238,7 +262,7 @@ def test_set_physics_body_collision(mcp, physics_asset):
 def test_set_physics_constraint_motion(mcp, physics_asset):
     if not physics_asset:
         pytest.skip("no PhysicsAsset present in project or engine content")
-    info = mcp.expect("anim_physics_inspect", {"path": physics_asset})
+    info = payload(mcp.expect("anim_physics_inspect", {"path": physics_asset}))
     constraints = info.get("constraints") or []
     if not constraints:
         pytest.skip("physics asset has no constraints to edit")
@@ -251,9 +275,26 @@ def test_set_physics_constraint_motion(mcp, physics_asset):
         params["bone1"] = target.get("bone1")
         params["bone2"] = target.get("bone2")
 
-    result = mcp.expect("physics_set_constraint_motion", params)
+    result = payload(mcp.expect("physics_set_constraint_motion", params))
     assert result.get("action") == "set_motion", result
     assert result.get("constraint_index") is not None, result
+    # The from-value of the mutating call is the pre-existing motion — keep it
+    # so the discovered (possibly game-owned) asset is restored afterwards.
+    original = ((result.get("changes") or {}).get("swing1") or {}).get("from")
+
+    try:
+        # Independent readback: anim_physics_inspect does not export motion
+        # states (only index/bone1/bone2/joint_name), so re-read the STORED
+        # value through a fresh no-op invocation — its from-value re-exports
+        # the constraint's current swing1, which must now be Free.
+        reread = payload(mcp.expect("physics_set_constraint_motion", params))
+        assert reread["changes"]["swing1"]["from"] == "Free", reread
+        assert reread.get("num_changed") == 0, reread
+    finally:
+        if original and original != "Free":
+            restore = dict(params)
+            restore["swing1"] = original
+            mcp.command("physics_set_constraint_motion", restore)
     assert_ready(mcp)
 
 
@@ -263,15 +304,22 @@ def test_set_skeletal_mesh_physics_asset(mcp, physics_asset):
         pytest.skip("no PhysicsAsset present in project or engine content")
     # Rebind the engine cube to the discovered asset, then restore — all with
     # save=False so the engine mesh package on disk is never modified.
-    info = mcp.expect("anim_skeletal_mesh_inspect", {"path": MESH})
+    info = payload(mcp.expect("anim_skeletal_mesh_inspect", {"path": MESH}))
     original = info.get("physics_asset") or ""
     try:
-        result = mcp.expect("mesh_set_physics_asset", {
+        result = payload(mcp.expect("mesh_set_physics_asset", {
             "path": MESH,
             "physics_asset": physics_asset,
             "save": False,
-        })
+        }))
         assert result.get("new_physics_asset"), result
+
+        # Independent readback: the mesh's live PhysicsAsset binding, through
+        # the inspect primitive, must now be the discovered asset.
+        after = payload(mcp.expect("anim_skeletal_mesh_inspect", {"path": MESH}))
+        bound = after.get("physics_asset") or ""
+        assert bound.split(".")[0] == physics_asset.split(".")[0], \
+            (bound, physics_asset)
     finally:
         mcp.command("mesh_set_physics_asset", {
             "path": MESH,

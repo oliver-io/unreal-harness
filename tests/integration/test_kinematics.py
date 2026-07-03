@@ -154,5 +154,22 @@ def test_kinematic_solve(mcp, posed_actor):
     assert result.get("solved") is True, result
     assert result.get("chain", {}).get("upper") == upper, result
     assert isinstance(result.get("resulting_rotations"), list), result
-    assert "verification" in result, result
+
+    # The verification payload must prove the solve actually REACHED its own
+    # hand target, not merely exist. Because the effector here IS the hand
+    # bone, the solver's hand_target_world is exactly the desired tip position
+    # — so the verified after-pose world location must land on it. (Validated
+    # live against a 3-bone mannequin chain: residual ~1e-6 when reachable.)
+    ver = result["verification"]
+    after_loc = ver["after"]["world"]["location"]
+    target = result["hand_target_world"]
+    residual = ((after_loc["x"] - target["x"]) ** 2
+                + (after_loc["y"] - target["y"]) ** 2
+                + (after_loc["z"] - target["z"]) ** 2) ** 0.5
+    if result.get("reachable") and result.get("pose_valid"):
+        assert residual < 1.0, (residual, ver)
+    else:
+        # Unreachable/invalid pose: best-effort — the solve must still report
+        # a finite, sane residual rather than garbage.
+        assert residual == residual and residual < 1e6, (residual, ver)
     assert_ready(mcp)

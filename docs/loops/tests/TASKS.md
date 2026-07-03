@@ -38,20 +38,16 @@ list is exactly the items below; landing each test with its `covers(...)` annota
 Keep the pytest and bun mirror in lockstep when fixing.)
 
 ### Actor / level / physics / kinematics
-- [ ] `actor_set_property` (`tests/integration/test_actor.py:126`) — echo before/after; re-read via
-  `actor_inspect` (BoundsScale == 2.0).
-- [ ] `actor_set_transform` dry-run (`test_actor.py:113`) — asserts `dry_run` flag only; follow
-  with `actor_inspect` proving the transform unchanged.
-- [ ] `level_set_gamemode_override` (`test_actor.py:199`) — echo; observe via `level_inspect`
-  world-settings readback.
-- [ ] `physics_set_properties` (`test_physics.py:75`) — `success is not False` only; read the
-  flags back via `bp_inspect`/`reflection_class_properties`.
-- [ ] `physics_set_constraint_motion` (`test_physics.py:237`) — echo; read back via
-  `anim_physics_inspect` (constraint swing1 == Free).
-- [ ] `mesh_set_physics_asset` (`test_physics.py:260`) — echo; read back via
-  `anim_skeletal_mesh_inspect` (physics_asset path).
-- [ ] `kinematics_solve` (`test_kinematics.py:134`) — asserts the `verification` key EXISTS, not
-  that it passed; assert residual / `reached == true`.
+(all 7 landed 2026-07-03; pytest + bun mirrors in lockstep, green live. Oracle notes for future
+auditors: `actor_inspect` exports NO component leaf properties → `actor_set_property` readback is
+the dry-run before-value (B4 convention); `level_inspect` surfaces only the WorldSettings
+actor's path/class → `level_set_gamemode_override` is observed via the py-hatch DefaultGameMode
+readback and now RESTORES the prior override in finally; `anim_physics_inspect` exports no
+constraint motion states → swing1 is re-read via a fresh no-op `physics_set_constraint_motion`
+call's from-value, then restored; `kinematics_solve` verification "passed" == the after-pose
+world location landing on `hand_target_world` (residual < 1; `score` conflates forward-axis
+alignment and is 0 even on a perfect positional solve) — the test still skips live on 2-bone
+SkeletalCube, but the assertion path was validated by a manual 3-bone mannequin drive.)
 
 ### Blueprint / widget
 - [ ] `bp_compile` (`test_blueprint.py:47`) — bare success (the textbook hollow case); add

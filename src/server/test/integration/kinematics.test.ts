@@ -168,7 +168,29 @@ editorSuite("kinematics", (ctx) => {
     expect(result.solved).toBe(true);
     expect((result.chain as Record<string, unknown>)?.upper).toEqual(upper);
     expect(Array.isArray(result.resulting_rotations)).toBe(true);
-    expect(result.verification).toBeDefined();
+
+    // The verification payload must prove the solve actually REACHED its own
+    // hand target, not merely exist. Because the effector here IS the hand
+    // bone, the solver's hand_target_world is exactly the desired tip position
+    // — so the verified after-pose world location must land on it. (Validated
+    // live against a 3-bone mannequin chain: residual ~1e-6 when reachable.)
+    const ver = result.verification as Record<string, any>;
+    expect(ver).toBeDefined();
+    const afterLoc = ver.after.world.location as Record<string, number>;
+    const target = result.hand_target_world as Record<string, number>;
+    const residual = Math.hypot(
+      afterLoc.x! - target.x!,
+      afterLoc.y! - target.y!,
+      afterLoc.z! - target.z!,
+    );
+    if (result.reachable && result.pose_valid) {
+      expect(residual).toBeLessThan(1.0);
+    } else {
+      // Unreachable/invalid pose: best-effort — the solve must still report
+      // a finite, sane residual rather than garbage.
+      expect(Number.isFinite(residual)).toBe(true);
+      expect(residual).toBeLessThan(1e6);
+    }
     await assertReady(ctx.mcp);
   });
 });

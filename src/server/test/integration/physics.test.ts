@@ -22,7 +22,9 @@ editorSuite("physics", (ctx) => {
   let physicsAsset: string | null = null;
 
   beforeAll(async () => {
-    const info = await ctx.mcp.expect("anim_skeletal_mesh_inspect", { path: MESH });
+    // Both reads are AssetManager-style handlers that nest their fields under
+    // `data` — unwrap via payload() or the scan silently finds nothing.
+    const info = payload(await ctx.mcp.expect("anim_skeletal_mesh_inspect", { path: MESH }));
     const bound = (info.physics_asset as string) || "";
     if (bound) {
       physicsAsset = bound;
@@ -31,11 +33,11 @@ editorSuite("physics", (ctx) => {
     for (const directory of ["/Game/", "/Engine/"]) {
       let result: Record<string, unknown>;
       try {
-        result = await ctx.mcp.expect("asset_list", {
+        result = payload(await ctx.mcp.expect("asset_list", {
           directory_path: directory,
           recursive: true,
           class_filter: "PhysicsAsset",
-        });
+        }));
       } catch (e) {
         if (e instanceof CommandError) continue;
         throw e;
@@ -84,6 +86,38 @@ editorSuite("physics", (ctx) => {
       angular_damping: 0.0,
     });
     expect(result.success).not.toBe(false);
+
+    // Independent readback: bp_read's archetype-diff overrides on the SCS
+    // template. The physics flags all live in the BodyInstance struct, which
+    // must now appear as an override whose exported text carries each value.
+    const content = await ctx.mcp.expect("bp_read", {
+      blueprint_path: bp,
+      include_event_graph: false,
+      include_functions: false,
+      include_variables: false,
+      include_component_properties: true,
+    });
+    const comp = ((content.components as any[]) ?? []).find((c) => c.name === "PhysMesh");
+    expect(comp).toBeDefined();
+    const overrides = new Map<string, any>(
+      ((comp.property_overrides as any[]) ?? []).map((o) => [o.name, o]),
+    );
+    expect(overrides.has("BodyInstance")).toBe(true);
+    const body = String(overrides.get("BodyInstance").value);
+    for (const fragment of [
+      "bSimulatePhysics=True",
+      "bOverrideMass=True",
+      "MassInKgOverride=5.000000",
+      "LinearDamping=0.020000",
+      "bEnableGravity=True",
+    ]) {
+      expect(body).toContain(fragment);
+    }
+    // The archetype default has no simulate-physics override — proves the
+    // exported values are real template overrides, not inherited defaults.
+    expect(String(overrides.get("BodyInstance").archetype_value)).not.toContain(
+      "bSimulatePhysics=True",
+    );
     await assertReady(ctx.mcp);
   });
 
@@ -231,7 +265,7 @@ editorSuite("physics", (ctx) => {
       console.log("SKIP no PhysicsAsset present in project or engine content");
       return;
     }
-    const info = await ctx.mcp.expect("anim_physics_inspect", { path: physicsAsset });
+    const info = payload(await ctx.mcp.expect("anim_physics_inspect", { path: physicsAsset }));
     const constraints = (info.constraints as Record<string, unknown>[]) || [];
     if (!constraints.length) {
       console.log("SKIP physics asset has no constraints to edit");
@@ -248,10 +282,27 @@ editorSuite("physics", (ctx) => {
       params.bone2 = target.bone2;
     }
 
-    const result = await ctx.mcp.expect("physics_set_constraint_motion", params);
+    const result = payload(await ctx.mcp.expect("physics_set_constraint_motion", params));
     expect(result.action).toEqual("set_motion");
     expect(result.constraint_index).not.toBeNull();
     expect(result.constraint_index).toBeDefined();
+    // The from-value of the mutating call is the pre-existing motion — keep it
+    // so the discovered (possibly game-owned) asset is restored afterwards.
+    const original = ((result.changes as any) ?? {}).swing1?.from as string | undefined;
+
+    try {
+      // Independent readback: anim_physics_inspect does not export motion
+      // states (only index/bone1/bone2/joint_name), so re-read the STORED
+      // value through a fresh no-op invocation — its from-value re-exports
+      // the constraint's current swing1, which must now be Free.
+      const reread = payload(await ctx.mcp.expect("physics_set_constraint_motion", params));
+      expect((reread.changes as any).swing1.from).toEqual("Free");
+      expect(reread.num_changed).toEqual(0);
+    } finally {
+      if (original && original !== "Free") {
+        await ctx.mcp.command("physics_set_constraint_motion", { ...params, swing1: original });
+      }
+    }
     await assertReady(ctx.mcp);
   });
 
@@ -262,15 +313,21 @@ editorSuite("physics", (ctx) => {
     }
     // Rebind the engine cube to the discovered asset, then restore — all with
     // save=false so the engine mesh package on disk is never modified.
-    const info = await ctx.mcp.expect("anim_skeletal_mesh_inspect", { path: MESH });
+    const info = payload(await ctx.mcp.expect("anim_skeletal_mesh_inspect", { path: MESH }));
     const original = (info.physics_asset as string) || "";
     try {
-      const result = await ctx.mcp.expect("mesh_set_physics_asset", {
+      const result = payload(await ctx.mcp.expect("mesh_set_physics_asset", {
         path: MESH,
         physics_asset: physicsAsset,
         save: false,
-      });
+      }));
       expect(result.new_physics_asset).toBeTruthy();
+
+      // Independent readback: the mesh's live PhysicsAsset binding, through
+      // the inspect primitive, must now be the discovered asset.
+      const after = payload(await ctx.mcp.expect("anim_skeletal_mesh_inspect", { path: MESH }));
+      const bound = String(after.physics_asset ?? "");
+      expect(bound.split(".")[0]).toEqual(physicsAsset!.split(".")[0]);
     } finally {
       await ctx.mcp.command("mesh_set_physics_asset", {
         path: MESH,
