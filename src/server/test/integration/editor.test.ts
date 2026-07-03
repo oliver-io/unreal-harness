@@ -12,6 +12,7 @@ import { expect, test, describe, beforeAll, afterAll } from "bun:test";
 import { startTestClient, type TestClient } from "../harness/mcpClient.ts";
 import { editorReady } from "../harness/bridge.ts";
 import { EditorSession } from "../harness/editor.ts";
+import { covers } from "../harness/coverage.ts";
 
 let session: EditorSession | undefined;
 let live = await editorReady();
@@ -55,6 +56,48 @@ describe.skipIf(!live)("live editor round-trips", () => {
     const env = await c.call("catalog_call", { name: "actor_get_in_level", params: {} });
     expect(env.status).toBe("success");
   });
+
+  covers("editor_read_logs");
+  test(
+    "editor_read_logs greps back a marker emitted via editor_console_exec",
+    async () => {
+      // Unique per-run marker so re-runs against a long-lived editor stay
+      // idempotent (each run matches only its own line).
+      const marker = `MCPTEST_LOGMARK_${Date.now()}_${process.pid}`;
+
+      // Act (arrange half): emit the marker through a bridge op. `ke *` is a
+      // harmless no-op — it broadcasts a nonexistent kismet event — but the
+      // command LINE is echoed into the unified log tagged [EDITOR:Cmd].
+      const execEnv = await c.call("editor_console_exec", {
+        command: `ke * ${marker}`,
+      });
+      expect(execEnv.status).toBe("success");
+      const exec = execEnv.result as { command: string; output: string };
+      expect(exec.command).toContain(marker);
+      expect(typeof exec.output).toBe("string");
+
+      // Observe via a DIFFERENT primitive: editor_read_logs (server-local —
+      // tails MCP_Unified.log on disk; returns its payload directly, no bridge
+      // envelope). The log writer may lag the bridge reply, so poll with a
+      // bounded deadline instead of a blind sleep.
+      let logs:
+        | { lines: string[]; returned: number; cursor: number; file: string }
+        | undefined;
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        logs = (await c.expect("editor_read_logs", { grep: marker })) as typeof logs;
+        if (logs!.returned > 0 || Date.now() > deadline) break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      expect(logs!.returned).toBeGreaterThanOrEqual(1);
+      expect(logs!.lines.some((l) => l.includes(marker))).toBe(true);
+      expect(logs!.file.endsWith("MCP_Unified.log")).toBe(true);
+      // Marker lines carry a [seq] prefix, so the batch cursor is populated.
+      expect(logs!.cursor).toBeGreaterThan(0);
+    },
+    20_000,
+  );
 
   test("code_run drives the editor and keeps data in-sandbox", async () => {
     const code = `
