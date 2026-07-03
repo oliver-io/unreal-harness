@@ -65,6 +65,58 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   start from the relevancy claim (`bAlwaysRelevant` vs distance culling) since its authoring
   side is already machine-checked.
 
+### /npc_logic — runtime AI-behavior claims deliberately NOT tested (TASK-3, ledger note)
+
+- **Skill**: `.claude/skills/npc_logic/SKILL.md` — the runtime layers: perception event
+  timing, pawn-side awareness memory, target stabilization/decay, StateTree runtime
+  semantics ("tree orchestrates, C++ thinks").
+- **Test**: only the static Layer-3 vocabulary is guarded
+  (`tests/skills/test_npc_logic_statetree_taxonomy.py`, 3/3 green vs a live editor
+  2026-07-02: task/condition/evaluator node families all discoverable via
+  `statetree_list_node_types`, and `statetree_list_schemas` exposes
+  `StateTreeAIComponentSchema` distinct from `StateTreeComponentSchema` — engine class
+  confirmed at `GameplayStateTree/.../StateTreeAIComponentSchema.h:18`, plugin
+  force-enabled by `UnrealMCP.uplugin`).
+- **Evidence for stopping there** (read this task): the fixture project has no AI
+  content — no AIController subclass, no awareness component, no StateTree assets with
+  behavior — so every runtime claim would need game C++ built per-test; and behavioral
+  perception assertions (sight gain/loss, stimulus aging, `SetPeripheralVisionAngle`
+  effects) are wall-clock/tick-timing dependent, exactly the flakiness class
+  `docs/TESTING.md` refuses. Matches the standing DEFERRED entry in TASKS.md.
+- **Proposed change**: none to the skill's content — testability ledger entry so future
+  loop passes do not re-litigate. If a project ever contributes a real AI fixture (a
+  compiled controller + awareness component), start from the awareness-memory claims,
+  which are deterministic once perception events are injected rather than sensed.
+
+### /npc_logic — team-affiliation gotcha is source-confirmed CORRECT; credit it (TASK-3)
+
+- **Skill**: `.claude/skills/npc_logic/SKILL.md:67` ("**`NoTeam` vs `NoTeam` resolves to
+  *Friendly*, and friendly stimuli get silently dropped** — a classic 'my AI ignores the
+  player' bug") and the pitfall recap at `SKILL.md:166`.
+- **Test**: n/a (engine-source fact; no fixture AI to observe it on — see the ledger
+  entry above).
+- **Evidence** (UE 5.7 source, re-verified this task):
+  - `Engine/Source/Runtime/AIModule/Private/AIInterfaces.cpp:28-34` —
+    `DefaultTeamAttitudeSolver(A, B)` returns `A != B ? Hostile : Friendly`, so two
+    agents both at NoTeam (equal IDs) resolve **Friendly**.
+  - `Engine/Source/Runtime/AIModule/Classes/GenericTeamAgentInterface.h:32` —
+    `NoTeamId = 255` (and `:40`: it is the default-constructed team), plus
+    `AIInterfaces.cpp:14-23`: any actor NOT implementing `IGenericTeamAgentInterface`
+    reports NoTeam — so "no team model at all" lands every pair on 255 vs 255.
+  - `Engine/Source/Runtime/AIModule/Classes/Perception/AIPerceptionTypes.h:217-224` —
+    `FAISenseAffiliationFilter` detect flags; `:231-234` `ShouldSenseTeam` gates
+    sensing on `1 << GetAttitude(...)` vs the flags, so a Friendly attitude with
+    `bDetectFriendlies` unset (the common enemies-only sight config) silently drops
+    the target. The skill's causal chain is correct end to end.
+  - (Note: the TASK spec cited `AIInterfaces.cpp:29-34` / `AIPerceptionTypes.h:218-224`
+    and a NoTeam id "in GenericTeamAgentInterface.h" — all confirmed, with the path
+    nuance that both headers live under `AIModule/Classes/`, and
+    `GenericTeamAgentInterface.h` is in the AIModule, not Engine/Classes.)
+- **Proposed change**: annotate the SKILL.md:67 bullet as verified-against-source, e.g.
+  append "(source-confirmed UE 5.7: `AIInterfaces.cpp:30-33` default attitude solver;
+  `AIPerceptionTypes.h:231-234` `ShouldSenseTeam`)" — so future audits know this claim
+  is load-bearing fact, not folklore, and don't soften it.
+
 ### /networking — AUTHORITY.md calls the plugin "Mover (2.0)"; the 5.7 descriptor says VersionName 1.0 (TASK-2)
 
 - **Skill**: `.claude/skills/networking/reference/AUTHORITY.md:103` — "Epic's **Mover (2.0)**

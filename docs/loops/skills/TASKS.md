@@ -11,22 +11,6 @@ self-cleaning.
 
 ## TODO
 
-### TASK-3 — /npc_logic: StateTree taxonomy guard (effort S, marginal — keep tight)
-One headless test `tests/skills/test_npc_logic_statetree_taxonomy.py` asserting the
-skill's Layer-3 vocabulary is real in this engine build: `statetree_list_node_types`
-returns non-empty task, condition, AND evaluator categories, and `statetree_list_schemas`
-exposes `StateTreeAIComponentSchema` distinct from the plain component schema. No PIE.
-Proposals to record:
-- Runtime AI-behavior claims are unobservable in the fixture: no AI content, and
-  behavioral perception tests would be timing-flaky — deliberately not built.
-- The skill's team-affiliation gotcha (NoTeam vs NoTeam → Friendly → sight silently
-  drops the target) was source-confirmed CORRECT (`AIInterfaces.cpp:29-34`,
-  `AIPerceptionTypes.h:218-224`) — credit it in the skill as verified-against-source.
-Bug to record in `docs/BUGS.md` (separate commit, no fix): `ai_get_awareness`
-(`MCPAIRuntimeCommands.cpp:196-238`) is hardwired to component class names containing
-`"CombatAwareness"` — a private-project leak that makes the skill's awareness-layer
-advice unobservable for any other project.
-
 ### TASK-4 — /ue-expert: proposals only, NO test (effort S)
 Recommendation from analysis is NONE for tests (verifiable core already covered by
 `test_kinematics.py` and owned by /position; the rest needs C++ fixtures / net PIE /
@@ -40,6 +24,17 @@ Proposals to record:
   the /position battery (TASK-1) — the skill can point there instead of restating.
 
 ## DONE
+
+- **TASK-3 — /npc_logic StateTree taxonomy guard** (2026-07-02):
+  `tests/skills/test_npc_logic_statetree_taxonomy.py`, 3/3 green vs a live editor
+  (`--ue-attach`); task/condition/evaluator families + base_class filter +
+  `StateTreeAIComponentSchema` distinct from `StateTreeComponentSchema` all confirmed
+  (engine class at `GameplayStateTree/.../StateTreeAIComponentSchema.h:18`; class_name
+  strings match the spec exactly). Both proposals recorded in PROPOSALS.md (runtime-AI
+  untestability ledger; team-affiliation gotcha source-confirmed — note the cited
+  headers live under `AIModule/Classes/`, `NoTeamId = 255` at
+  `GenericTeamAgentInterface.h:32`). `ai_get_awareness` CombatAwareness bug left for
+  the orchestrator's BUGS.md pass.
 
 - **TASK-2 — /networking bp_set_class_replication parity** (2026-07-02):
   `tests/skills/test_networking_authoring.py`, 2/2 green vs a live editor (`--ue-attach`);
