@@ -13,13 +13,6 @@ each group.
 
 ## docs/USAGE.md
 
-### DOC-023 — §2.18: fourth synthesized lease code `pie_takeover_failed` undocumented
-Found during DOC-017: `pie.ts:43` defines `pie_takeover_failed` (stale PIE couldn't be
-cleared before a promoted start) alongside the three now-documented lease codes. §2.18's
-lease-code note deliberately doesn't claim exhaustiveness, but the code should be listed.
-**Fix:** Verify its exact return path in `pie.ts`/`pie/lease.ts`, then add it to the §2.18
-lease-code documentation with accurate semantics.
-
 ### DOC-022 — §3.6 omits the `/build/heartbeat` endpoint
 `POST /build/heartbeat` exists (`build/http.ts:103`); §3.6 (USAGE:696-705) lists only
 acquire/release/status. **Fix:** add a line. (Everything else in the build-lock contract —

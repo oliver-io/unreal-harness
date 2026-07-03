@@ -43,7 +43,7 @@ Server callers: use the envelope helpers in `src/server/src/bridge/envelope.ts` 
 
 `timeout` means an engine-side operation did not complete within its bounded budget (e.g. an editor-viewport screenshot that never rendered a qualifying frame — see GAP-007 in `docs/BUGS.md`); it is environmental, not a caller-input error.
 
-The set is owned by `EMCPErrorCode` in `src/Plugin/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` and mirrored to `src/server/src/bridge/errors.ts` — those two enumerations are the authoritative list (31 codes as of this writing). Adding a code requires updating both ends. One deliberate exception: the PIE lease codes (`pie_busy`, `pie_lease_lost`, `pie_not_holder`) are synthesized server-side by the lease layer and live outside this set — see §2.18.
+The set is owned by `EMCPErrorCode` in `src/Plugin/UnrealMCP/Source/UnrealMCP/Public/Commands/MCPCommonUtils.h` and mirrored to `src/server/src/bridge/errors.ts` — those two enumerations are the authoritative list (31 codes as of this writing). Adding a code requires updating both ends. One deliberate exception: the PIE lease codes (`pie_busy`, `pie_lease_lost`, `pie_not_holder`, `pie_takeover_failed`) are synthesized server-side by the lease layer and live outside this set — see §2.18.
 
 **Hint quality bar.** An `error_hint` is good if an agent can act on it without further investigation. Tests:
 - "did you mean X" hints carry a candidate name list (top three by edit distance where the registry can produce them).
@@ -658,6 +658,12 @@ session (one agent = one session). Behaviour an agent must handle:
   promoted agent never inherits a session already in use. The reaped agent's next
   `pie_stop` returns `error_code:"pie_lease_lost"` (its session was reassigned;
   it must not stop the new holder's PIE).
+- If that stale PIE **cannot be stopped** within the takeover timeout (30s default,
+  `UNREAL_MCP_PIE_TAKEOVER_TIMEOUT_MS`), the promoted agent's `pie_start` returns
+  `status:"error"`, `error_code:"pie_takeover_failed"` — a clean session could not
+  be started and the editor may need manual attention. The lease is **released**
+  (`result.pie_lease.state:"start_failed"`) so the next agent can proceed; inspect
+  the error, then retry `pie_start`.
 - `pie_stop` only succeeds for the lease holder. If **another agent holds the
   lease**, you get `error_code:"pie_not_holder"` and the stop is **not forwarded** —
   it is their session; queue with `pie_start` instead. When the lease is **free** it
@@ -678,7 +684,8 @@ session (one agent = one session). Behaviour an agent must handle:
   `_TAKEOVER_TIMEOUT_MS` / `_LIVENESS_POLL_MS` / `_STARTUP_GRACE_MS` /
   `_EDITOR_DOWN_GRACE_MS`.
 
-The lease codes — `pie_busy`, `pie_lease_lost`, `pie_not_holder` — are **deliberate
+The lease codes — `pie_busy`, `pie_lease_lost`, `pie_not_holder`,
+`pie_takeover_failed` — are **deliberate
 server-side additions outside the closed C++ taxonomy** (§1.2): coordination signals
 synthesized in `src/server/src/domains/pie.ts`, never emitted by the plugin.
 `result.pie_lease.state` carries the precise outcome alongside the code.
