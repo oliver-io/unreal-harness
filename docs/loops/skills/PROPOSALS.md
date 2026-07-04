@@ -301,3 +301,34 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   so future audits know which bullets are harness-guarded fact vs advisory prose, and the
   two skills don't drift apart. No content change to the claims themselves (all
   spot-checked correct).
+
+### Iteration 3 (2026-07-03) — perceptual verifier plumbing
+
+### /visual-critique + gemini-cred-gate — Gemini key env-var naming is inconsistent across the repo (TASK-8)
+
+- **Skill/machinery**: `.claude/skills/visual-critique/critique.ts` `loadKey()` and
+  `.claude/hooks/gemini-cred-gate.py` `key_configured()` accept ONLY
+  `GOOGLE_STUDIO_API_KEY`; the Bun server prefers `GEMINI_API_KEY` and merely tolerates
+  the studio spelling (`src/server/src/config.ts:119,126`), and server-side user-facing
+  messages name only `GEMINI_API_KEY` (`domains/pie.ts:807`, `domains/video.ts:114`;
+  `video/analyzer.ts:199` at least names both). The repo `.env` template stores the
+  studio spelling. An operator who follows the server's error message and sets
+  `GEMINI_API_KEY` still gets denied by the cred gate; one who follows the hook sets a
+  key the server docs never mention.
+- **Test**: `tests/skills/test_vision_critic_helper.py` (TASK-8 guard suite, 15/15 green
+  headless, no editor). The new helper `tests/harness/vision_critic.py` deliberately
+  accepts BOTH spellings so tests don't inherit the split.
+- **Proposed change (language/process)**: pick `GEMINI_API_KEY` as canonical (matches the
+  server) and have `critique.ts` `loadKey()` and the cred-gate `key_configured()` accept
+  it alongside the legacy studio name; update the gate's denial message to name both.
+  No behavior change beyond acceptance.
+- **Second finding (hook parsing footgun)**: `gemini-cred-gate.py:46` matches `.env`
+  lines with `startswith("GOOGLE_STUDIO_API_KEY")`, so `GOOGLE_STUDIO_API_KEY_NAME=x`
+  (present in the real repo `.env`) satisfies the gate even if the actual key line is
+  missing — the gate can wave a call through to a guaranteed runtime failure. The
+  helper's guard test `test_gemini_key_exact_name_only` pins the exact-name behavior;
+  propose the hook split on `=` and compare the exact variable name.
+- **Note for TASK-9/10/11 authors**: the helper pins `gemini-3.5-flash` with NO fallback
+  (unlike critique.ts's 404→pro fallback) and temperature 0, and every `ask()` assertion
+  must ship a control arm with the opposite expected answer (anti-rubber-stamp rule,
+  enforced by convention — see the module docstring).

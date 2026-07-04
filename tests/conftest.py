@@ -61,6 +61,13 @@ def pytest_configure(config):
         "(the periodic Slate layout-save ticker fatals on a null window), so it is "
         "skipped unless --ue-mode=gui.",
     )
+    config.addinivalue_line(
+        "markers",
+        "perceptual: test validates a semantic claim about a captured image via "
+        "the Gemini vision critic (tests/harness/vision_critic.py). Perceptual "
+        "tests that capture from the live editor carry BOTH render and "
+        "perceptual; all of them skip without a Gemini key (requires_gemini).",
+    )
 
 
 @pytest.fixture(scope="session")
