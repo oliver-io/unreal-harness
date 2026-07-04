@@ -403,3 +403,46 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   - The fixture project's intentionally-blank startup map is a trap for any render-based
     test: it renders solid black under GUI. `level_new` from an engine template is the
     one-call fix; worth a note in docs/TESTING.md's render-test section.
+
+### /texture + material authoring — both graph idioms now perceptually machine-checked (TASK-10, iteration 3, 2026-07-03)
+
+- **Skill**: `.claude/skills/texture/SKILL.md` (and the material-authoring primitives its
+  workflow rides on: `material_create shading_model:Unlit`, `material_add_expression`
+  incl. the Custom-HLSL escape hatch, `material_connect`, `material_apply_to_actor`).
+- **Test**: `tests/skills/test_texture_perceptual.py` — 3/3 green on the FIRST full
+  `tests/run.ps1 --ue-mode=gui` launch (60.8s), clean teardown (ports 55557/8765 free,
+  no editor process, actors/assets/screenshots removed). One cube, one fixed
+  editor-viewport rig (the TASK-9 rig: `level_new` from `Template_Default`, py-hatch
+  `set_level_viewport_camera_info` verified via `editor_viewport_get_camera`,
+  `editor_screenshot mode=viewport`), three unlit materials swapped onto the SAME actor
+  between frames, 6 Gemini calls (each frame carries a control question with the
+  opposite expected answer):
+  - **Custom-HLSL checkerboard** (`fmod(floor(u*6)+floor(v*6),2)` fed by a
+    TextureCoordinate through a named `uv` custom input) → critic sees a repeating
+    pattern, NOT a solid.
+  - **Solid 0.5-gray control** (Constant3Vector → EmissiveColor) → critic sees a solid,
+    NOT a pattern (the anti-rubber-stamp arm — same questions, flipped answers).
+  - **Pure-node stripe chain** (TextureCoordinate → Multiply(×6) → ComponentMask(r) →
+    Frac → If(>0.5 ? white : black)) → critic sees parallel STRIPES and specifically NOT
+    a checkerboard — masking r alone is what makes it stripes, so the stripes-not-checker
+    pair observes the ComponentMask channel select perceptually.
+- **Findings / proposed changes (language only)**:
+  1. **Unlit + emissive is the trap-free capture idiom — say so in /texture.** The whole
+     battery is decidable regardless of scene lighting because every material is Unlit
+     with the pattern driven into EmissiveColor. This is the known editor-viewport-vs-PIE
+     brightness trap dodge (see the visual-compare memory); /texture's preview-mesh step
+     would benefit from one line recommending an unlit/emissive preview variant when the
+     goal is validating the TEXTURE (not the lighting response).
+  2. **The Custom-HLSL escape hatch is solid and connectable by input NAME** — the
+     `inputs:[{name:"uv"}]` pin is addressable in `material_connect` as
+     `target_input:"uv"` just like a built-in pin. Worth stating in the tool description
+     / skill so agents don't assume Custom nodes need index-based wiring.
+  3. **r-key footgun sidestep**: the battery avoids `material_set_expression_property`
+     entirely by passing r/g/b at `material_add_expression` time — a safe authoring
+     pattern worth recommending until the g-only silent no-op (test_material.py note) is
+     fixed.
+  4. **Rig reuse, no new bugs**: per the orchestrator's binding correction the battery
+     does NOT use `pie_capture_from_pose` (open BUGS.md defect from TASK-9); the
+     editor-viewport rig worked first try. The rig helpers are now duplicated across two
+     skill test files (`_set_viewport_camera`/`_capture_viewport`) — a future tests-only
+     refactor could promote them into `tests/harness/`, but that is out of band here.
