@@ -148,13 +148,28 @@ def _extract_text(response: dict) -> str:
 
 
 def _parse_json_reply(text: str) -> dict:
-    """Parse the model's JSON reply; tolerate a stray markdown fence."""
+    """Parse the model's JSON reply; tolerate a stray markdown fence or a short
+    prose preamble ("Here is the JSON: ..."), both observed live from
+    gemini-3.5-flash even with responseMimeType=application/json (TASK-9)."""
     s = text.strip()
     if s.startswith("```"):
         s = s.strip("`")
         if s.lower().startswith("json"):
             s = s[4:]
         s = s.strip()
+    if not s.startswith("{"):
+        # Fall back to the first balanced {...} block anywhere in the reply.
+        start = s.find("{")
+        if start != -1:
+            depth = 0
+            for i in range(start, len(s)):
+                if s[i] == "{":
+                    depth += 1
+                elif s[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        s = s[start:i + 1]
+                        break
     try:
         obj = json.loads(s)
     except json.JSONDecodeError as e:
@@ -206,7 +221,7 @@ def ask(image_path: str | Path, question: str, *, model: str = DEFAULT_MODEL,
     yes = 0
     for _ in range(votes):
         reply = _generate(image_path, prompt, model=model,
-                          max_output_tokens=256, timeout=timeout)
+                          max_output_tokens=2048, timeout=timeout)
         answer = reply.get("answer")
         if isinstance(answer, str):
             answer = {"true": True, "false": False}.get(answer.strip().lower())
@@ -236,7 +251,7 @@ def ask_choice(image_path: str | Path, question: str, choices: Sequence[str], *,
         'the form: {"choice": "<one of the allowed choices>"}.'
     )
     reply = _generate(image_path, prompt, model=model,
-                      max_output_tokens=128, timeout=timeout)
+                      max_output_tokens=1024, timeout=timeout)
     choice = reply.get("choice")
     if not isinstance(choice, str):
         raise VisionCriticError(f'critic reply lacks a string "choice": {reply!r}')

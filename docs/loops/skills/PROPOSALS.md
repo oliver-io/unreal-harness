@@ -332,3 +332,74 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
   (unlike critique.ts's 404→pro fallback) and temperature 0, and every `ask()` assertion
   must ship a control arm with the opposite expected answer (anti-rubber-stamp rule,
   enforced by convention — see the module docstring).
+
+### /position — directional semantics now perceptually machine-checked; the literal IK arm-raise is a PRIMITIVE GAP (TASK-9, iteration 3, 2026-07-03)
+
+- **Skill**: `.claude/skills/position/SKILL.md` §1.1 — the perceptual consequences of the
+  coordinate conventions: with forward=+X and +Z up, world +Y renders screen-RIGHT of a
+  +X-facing viewpoint, and +Z renders UP.
+- **Test**: `tests/skills/test_position_perceptual_directions.py` — colored-marker
+  surrogate (RED/BLUE emissive cubes via `material_create_instance` →
+  `material_instance_set_parameter` → `material_apply_to_actor`; the direct
+  `mesh_set_mesh_material_color` path is feature_disabled per GAP-009), two fixed-rig
+  editor-viewport frames, Gemini critic verdicts with mirrored control questions
+  (5 calls/run). Design A pins +Y=screen-right/−Y=left; Design B pins +Z=up. 2/2 green
+  vs a live GUI editor (attach) AND via the full `tests/run.ps1 --ue-mode=gui` launch.
+- **Rig deviation from the TASK-9 spec (deliberate, evidence-backed)**: the spec named
+  `pie_capture_from_pose` as the fixed rig, but live debugging showed its pixels do NOT
+  track the requested pose (bug below). The battery instead uses: `level_new` from
+  `/Engine/Maps/Templates/Template_Default` (the fixture's default map is an EMPTY unlit
+  Untitled world that renders **pure black** — no perceptual question is decidable on it),
+  the `py` hatch `UnrealEditorSubsystem().set_level_viewport_camera_info(...)` for an
+  explicit computed pose (verified through the independent `editor_viewport_get_camera`
+  read), and `editor_screenshot mode=viewport` (FScreenshotRequest through the real render
+  pipeline; bridge-confirmed on disk per GAP-007; immune to window occlusion). No PIE.
+- **BUG discovered (for the orchestrator's BUGS.md pass — not fixed here)**:
+  `pie_capture_from_pose` writes frames that do not reflect the requested pose. Observed
+  live (GUI editor, PIE running, 2026-07-03): requesting poses (−450,0,120)/pitch−8,
+  (−300,0,150)/pitch−15, (0,0,300)/pitch−90/yaw180, and (−150,150,60)/pitch0 — the last
+  one 100 units in front of a 100-unit emissive red cube — all returned the SAME
+  fixed-viewpoint frame (origin-ish, rotation-zero; the close-up cube absent; one capture
+  showed a TAA smear of that same view). The view-target swap itself works —
+  `pie_query` showed `PlayerCameraManager_0` AT the requested pose, and an auto-activated
+  `CameraActor` rig reproduced the same wrong pixels — so the defect is in the capture
+  path (`MCPCaptureGameViewportToFile`, `MCPAutomationCommands.cpp:658`: PrintWindow of
+  `GEngine->GameViewport`'s OS window ~3 ticks after the swap), most likely PrintWindow
+  returning stale/non-recomposited content for an occluded PIE window rather than the
+  swapped view. Note `tests/integration/test_pie.py`'s capture test only asserts the file
+  exists, so this was never caught; TASK-11 (framing differential) will hit this wall as
+  specced — it needs this bug fixed first, or the editor-viewport rig.
+- **vision_critic hardening (helper change, tests-only)**: live gemini-3.5-flash replies
+  sometimes carry a prose preamble + markdown fence even with
+  `responseMimeType: application/json`, and thinking tokens can exhaust a small
+  `maxOutputTokens`, leaving a truncated non-JSON reply ("Here is the JSON requested:
+  ```json" — observed live). `_parse_json_reply` now also extracts the first balanced
+  `{...}` block, and per-call output budgets were raised (ask 256→2048, ask_choice
+  128→1024). TASK-8's 15 guard tests still pass unchanged.
+- **Primitive gap (the reason the literal test wasn't buildable)**: TASKS.md's original
+  seed — "IK-raise the RIGHT arm skyward and ask the critic which arm is raised" — cannot
+  be arranged with today's primitives. `kinematics_probe`'s live mode APPLIES the pose and
+  then RESTORES it within the same call (`MCPKinematicsCommands_Probe.cpp:277`), so no
+  posed frame ever survives to be captured; there is no persistent live-pose primitive
+  (a "hold this bone transform until released" arrange op), and the fixture project has no
+  humanoid/mannequin skeletal content to pose anyway. The colored-marker surrogate
+  validates the same left/right/up semantics deterministically. If a persistent-pose
+  primitive ever lands (plus a humanoid fixture), upgrade this battery rather than writing
+  a new one.
+- **Proposed change (skill language)**: none to the convention content — §1.1 is now both
+  numerically (TASK-1) and perceptually (this test) machine-checked. Optional annotation:
+  mark the §1.1 axis bullets as perceptually verified by this battery. For
+  `/capture-pose`: until the PrintWindow bug is fixed, the skill's in-PIE capture step can
+  silently produce wrong-view frames while still returning `status:"captured"` — worth a
+  warning line once BUGS.md triages the defect.
+- **Harness friction noted while building** (not skill defects):
+  - `actor_spawn` (MCP tool) cannot attach a static mesh at spawn — the bridge's
+    `spawn_actor` accepts `static_mesh`, but the tool surface doesn't; tests must follow
+    up with a reflection write to `StaticMeshComponent.StaticMesh` and re-verify via
+    `mesh_get_actor_material_info`. A `static_mesh` passthrough on `actor_spawn` would
+    remove a two-step footgun.
+  - `pie_start`'s success envelope is inconsistent across paths (`"success"` vs
+    `"starting"`); lease-acquisition helpers must accept both.
+  - The fixture project's intentionally-blank startup map is a trap for any render-based
+    test: it renders solid black under GUI. `level_new` from an engine template is the
+    one-call fix; worth a note in docs/TESTING.md's render-test section.
