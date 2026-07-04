@@ -113,6 +113,25 @@ rather than inventing detail.
 The lost ledger's numbering can't be recovered, so new entries are unnumbered to
 avoid colliding with lost GAP ids.
 
+### `pie_capture_from_pose` pixels do not track the requested pose
+
+Found by the skill-test loop (2026-07-03, TASK-9, live GUI debugging). Four different
+requested poses — including one 100 units in front of an emissive cube — all returned
+the same fixed-viewpoint frame. The view-target swap itself works (`pie_query` showed
+`PlayerCameraManager_0` at the requested pose; an auto-activating CameraActor
+reproduced the same wrong pixels), so the defect is in the capture path:
+`MCPCaptureGameViewportToFile` (`MCPAutomationCommands.cpp:658`) PrintWindow-grabs the
+game viewport window ~3 ticks after the swap and gets stale / non-recomposited
+content for an occluded window. `tests/integration/test_pie.py` never caught this
+because it asserts only file existence, and the handler echoes no pose (see the
+capture-pose observability note in `docs/loops/skills/PROPOSALS.md`). Workaround for
+deterministic captures: editor-viewport rig — `level_new` from an engine template +
+`set_level_viewport_camera_info` via the py hatch (pose verified with
+`editor_viewport_get_camera`) + `editor_screenshot mode=viewport`
+(`tests/skills/test_position_perceptual_directions.py` is the reference).
+`tests/skills/test_capture_pose_framing.py` (TASK-11) xfails on exactly this defect
+and self-unblocks when the capture path is fixed. **Status: open.**
+
 ### `bp_set_event_replication` is dead code — never routed by the bridge
 
 Found by the skill-test loop (2026-07-02, `tests/skills/test_networking_rpc_events.py`,

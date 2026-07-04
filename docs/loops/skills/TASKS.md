@@ -9,10 +9,100 @@ go to `docs/BUGS.md`, never fixed inline. Every test must be strongly verifiable
 via one typed primitive, observe via a DIFFERENT read primitive, headless-safe, bounded,
 self-cleaning.
 
-## TODO — iteration 2 (compiled 2026-07-02 from second-pass analyses: networking,
-npc_logic authoring flows, capture-pose, automated-tester)
+## TODO — iteration 3 (opened 2026-07-03): PERCEPTUAL VALIDATION category
 
-(empty — iteration 2 complete 2026-07-02)
+Iteration 2 verified complete & non-stale 2026-07-03 (bp_set_event_replication still
+undispatched in MCPBridge.cpp → TASK-5 xfail valid; pose still un-echoed in
+HandleCaptureFromPose → capture-pose deferral valid). All 5 iteration-1/2 test files
+present in tests/skills/.
+
+New test category — **perceptual integration tests**: arrange deterministically via typed
+primitives, capture via a fixed rig (zero stateful navigation, per VERBOTEN rule 3), then
+validate a *semantic claim* by asking the Gemini critic (/visual-critique machinery) a
+narrow, binary-decidable question — optionally cross-checked by a second look (Claude
+reading the same image). This does NOT overturn prior pixel-verdict deferrals; it adds the
+missing verifier. Candidate seeds (scoped by the 2026-07-03 analysis pass): directional
+semantics (IK/pose: raise the RIGHT arm skyward → critic states which arm is raised),
+texture qualities (author a procedural wood-grain texture → render on a lit mesh → critic
+confirms grain).
+
+Category plumbing facts (from the 2026-07-03 scoping pass — reuse, don't rediscover):
+- Critic recipe: POST `generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`,
+  header `x-goog-api-key`, image as `inline_data` base64 PNG, `responseMimeType:"application/json"`,
+  temperature 0, PIN the model (no fallback in tests). Copy mechanics from
+  `.claude/skills/visual-critique/critique.ts`; key resolution accepts BOTH
+  `GEMINI_API_KEY` and `GOOGLE_STUDIO_API_KEY` (env or repo `.env`, cf.
+  `.claude/hooks/gemini-cred-gate.py` `key_configured()`).
+- Gating: `@pytest.mark.render` (auto-skipped unless `--ue-mode=gui`, tests/conftest.py)
+  PLUS a new key-skipif. Keep calls ≤~3/test; majority vote only if a question proves flaky.
+- Capture rig: `pie_capture_from_pose` with explicit computed location/rotation/fov is the
+  sanctioned fixed rig (real game render path; editor viewport has NO typed camera-set —
+  `editor_focus_actor` exists in C++ `MCPAutomationCommands.cpp:84` but is not surfaced).
+- Anti-rubber-stamp rule: every perceptual assertion ships a differential/control arm
+  (a frame where the expected answer is the OPPOSITE) so an always-agreeable critic fails.
+- `mesh_set_mesh_material_color` is DISABLED (GAP-009); color actors via
+  `material_create_instance` → `material_instance_set_parameter` → `material_apply_to_actor`.
+- PIE is leased: treat `pie_busy`+queue as retry, `finally: pie_stop`, bounded polls.
+
+(iteration 3 complete 2026-07-03 — all four tasks landed; outcomes appended per entry)
+
+- [x] **TASK-8 — vision-critic test helper (prerequisite).** Add
+  `tests/harness/vision_critic.py`: `ask(image_path, question) -> bool` forcing a JSON
+  `{answer: true|false, confidence}` reply per the recipe above, plus `requires_gemini`
+  skipif + a `perceptual` marker registered in `pytest_configure`, plus a no-network
+  guard test (missing key → clean skip/False path) modeled on
+  `src/server/test/video_analyze.test.ts`. No engine needed. Commit: tests only.
+  **DONE 2026-07-03** — commit `c7faf74`; 15/15 passed incl. one live Gemini smoke
+  (red/blue square, control arm). Later hardened in `a404265` (balanced-brace JSON
+  extraction, bigger output budget) after live Gemini returned prose-wrapped JSON.
+  Proposals: env-var naming split (GOOGLE_STUDIO_API_KEY vs GEMINI_API_KEY);
+  gemini-cred-gate.py `startswith` matches `GOOGLE_STUDIO_API_KEY_NAME=` (footgun).
+
+- [x] **TASK-9 — /position directional semantics (perceptual).**
+  `tests/skills/test_position_perceptual_directions.py`. Design A: reference actor at
+  origin facing +X; RED cube at (0,+150,50), BLUE at (0,−150,50) (material-instance
+  coloring); `pie_start` → `pie_capture_from_pose(location=(−450,0,120), pitch −8, yaw 0,
+  fov 90)`; critic: "Is the RED cube on the RIGHT side of the image?" YES + blue/left YES
+  (sign flip fails both). Design B (same file): red cube high (200,0,250) vs blue low
+  (200,0,20), level camera, "Is the red cube ABOVE the blue?" Validates SKILL.md §1.1
+  +Y=right / +Z=up. NOTE: the literal "IK raise the right arm" is NOT buildable — no
+  persistent live-pose primitive (`kinematics_probe` live mode applies-and-restores,
+  `MCPKinematicsCommands_Probe.cpp:277`) and no mannequin in the fixture; record that
+  primitive gap in PROPOSALS.md. Cleanup: delete actors + `/Game/__MCPTest__` materials.
+  **DONE 2026-07-03** — commit `a404265`; 2/2 passed vs a live GUI editor. RIG
+  DEVIATION: `pie_capture_from_pose` found broken (pixels don't track the pose —
+  filed in docs/BUGS.md); replaced with the editor-viewport rig (`level_new` from
+  Template_Default + py-hatch `set_level_viewport_camera_info` verified via
+  `editor_viewport_get_camera` + `editor_screenshot mode=viewport`), no PIE at all.
+  Also found: fixture startup map renders black under GUI (use an engine template).
+
+- [x] **TASK-10 — /texture + material authoring perceptual quality.**
+  `tests/skills/test_texture_perceptual.py`. UNLIT checkerboard material (Custom-HLSL
+  frac parity node, or pure-node stripe chain TextureCoordinate→Multiply→ComponentMask→
+  Frac→If) vs an unlit solid-gray control, applied to cubes, same fixed rig; critic pair:
+  "checkerboard/striped pattern?" YES on the patterned actor, "single solid color, no
+  pattern?" YES on the control. Optional secondary: stripe orientation H vs V (exercises
+  ComponentMask U/V). Unlit sidesteps the editor-vs-PIE brightness trap. Wood-grain
+  realism REJECTED (aesthetic). Watch the `material_set_expression_property` r-key
+  footgun (g-only payload = silent no-op). Cleanup: actors + material assets.
+  **DONE 2026-07-03** — commit `9e280fd`; 3/3 green on the first full run (unlit
+  Custom-HLSL checkerboard / solid-gray control / pure-node stripe chain, 6 Gemini
+  calls, editor-viewport rig, no PIE). Proposals: unlit/emissive preview variant for
+  /texture; Custom-HLSL named inputs wireable in material_connect; creation-time
+  r/g/b as the safe color pattern; rig helpers now duplicated → tests/harness
+  promotion candidate.
+
+- [x] **TASK-11 — /capture-pose framing differential (closes iteration-2 gap).**
+  `tests/skills/test_capture_pose_framing.py`. One vivid solid primitive at a known
+  location; `pie_capture_from_pose` twice — pose A aimed at it (critic: CENTERED),
+  pose B same location yawed ~90° away (critic: ABSENT/EDGE). Proves the pose parameter
+  is honored — the non-pixel oracle iteration 2 said didn't exist (`HandleCaptureFromPose`
+  echoes no pose). Does not require the BUGS.md pose-echo fix. Cleanup as above.
+  **DONE 2026-07-03 (re-specced)** — commit `cfdc2a8`; `1 passed, 1 xfailed`. Green
+  half proves pose→pixels tracking via the editor-viewport rig (CENTERED vs
+  ABSENT/EDGE differential + verdicts-must-differ). PIE half runs the same
+  differential through `pie_capture_from_pose` and xfails (strict=False) on the
+  open BUGS.md capture defect — XPASS is the closure signal; flip to strict then.
 
 ## DONE
 
@@ -83,6 +173,15 @@ npc_logic authoring flows, capture-pose, automated-tester)
   yaw 0" assumption was wrong for this mesh).
 
 ## DEFERRED / NOT TESTABLE (by design — do not revisit without new harness capability)
+
+- **iteration 3 adds (2026-07-03)**: literal "IK-pose a character's right arm skyward" —
+  no persistent live-pose primitive (kinematics probe restores within the call) and no
+  humanoid in the fixture; colored-marker surrogate (TASK-9) validates the same
+  left/right/up semantics. Wood-grain / realism judgments — aesthetic, high-variance
+  critic verdicts. /icon (external GPT image gen), /gimp-import (needs GIMP + authored
+  .xcf), /progress-video (corpus mining, not rig-able), /key-indicator-helper (fixture
+  lacks keycap content + C++ widget fixture), /see (self-verifying pure-CPU, no rig
+  applies), /visual-critique itself (it IS the oracle machinery).
 
 - **networking (iteration 2 adds)**: RepNotify/`ReplicatedUsing` and dormancy guidance —
   NO authoring primitive exists (`bp_set_variable_properties` writes only CPF_Net +
