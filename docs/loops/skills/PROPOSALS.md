@@ -446,3 +446,48 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
      editor-viewport rig worked first try. The rig helpers are now duplicated across two
      skill test files (`_set_viewport_camera`/`_capture_viewport`) — a future tests-only
      refactor could promote them into `tests/harness/`, but that is out of band here.
+
+### /capture-pose — framing differential is the anti-rubber-stamp pattern for capture claims; editor-level pose→pixels tracking is now machine-checked, the PIE path xfails on the open bug (TASK-11, iteration 3, 2026-07-03)
+
+- **Skill**: `.claude/skills/capture-pose/SKILL.md` — the core claim that a recorded pose,
+  replayed through the capture rig, governs the pixels that come back.
+- **Test**: `tests/skills/test_capture_pose_framing.py` — first full
+  `tests/run.ps1 --ue-mode=gui` launch: **1 passed, 1 xfailed in 37.3s**, clean teardown
+  (ports 55557/8765 free, no editor process, actor/materials/screenshots removed).
+- **The design pattern (record it as the standard for any capture claim)**: a
+  **framing differential**. One vivid emissive RED cube at a known spot; **pose A**
+  300 units in front looking straight at it (critic `ask_choice`: CENTERED); **pose B**
+  the SAME camera location yawed 90° away (critic: ABSENT, EDGE tolerated); plus an
+  explicit `verdict_a != verdict_b` assertion. Two frames with OPPOSITE expected answers
+  means a capture path that ignores the pose — or an always-agreeable critic — fails the
+  test instead of passing it. Strictly stronger than any single-frame "does it look
+  right?" score, and it costs only ONE critic call per frame (4 Gemini calls for the
+  whole file). Any future test claiming "this capture shows X" should be built as a
+  differential, never a lone frame.
+- **Green half (closes the iteration-2 capture-pose observability gap at the editor
+  level)**: the proven editor-viewport rig (`level_new` from `Template_Default`,
+  py-hatch `set_level_viewport_camera_info` verified via `editor_viewport_get_camera`,
+  `editor_screenshot mode=viewport`) demonstrably tracks the requested pose end to end:
+  CENTERED at the cube, ABSENT when yawed away. Camera-pose→pixels is now a
+  machine-checked fact for this rig.
+- **xfail half (self-unblocking guard on the BUGS.md defect)**: the identical
+  differential through `pie_capture_from_pose` (lease-honoring `pie_start` queue loop,
+  two pose captures, same critic questions) is `xfail(strict=False)` on docs/BUGS.md
+  "`pie_capture_from_pose` pixels do not track the requested pose"; it xfailed as
+  expected on this run. The mechanical assertions (status `"captured"`, PNG > 1000
+  bytes) sit BEFORE the perceptual ones, so when the capture path is fixed the test
+  flips to XPASS with zero edits — an unexpected PASS of this test is the "bug closed"
+  signal.
+- **Proposed changes (skill language)**:
+  1. **SKILL.md's "confirm the rig works" step should be a differential, not a single
+     framing score** — capture the recorded pose AND a deliberately-averted control pose
+     and require opposite verdicts. A single-frame `/visual-critique` score cannot
+     detect the exact failure mode BUGS.md documents (a plausible-looking frame from the
+     WRONG pose still scores well). One sentence plus the two-pose recipe suffices.
+  2. **Warning line until the bug is fixed**: the in-PIE capture step
+     (`pie_capture_from_pose`) can return `status:"captured"` with pixels from a stale
+     fixed viewpoint (open BUGS.md defect); until it is fixed, the editor-viewport rig
+     (py-hatch `set_level_viewport_camera_info` + `editor_screenshot mode=viewport`) is
+     the trustworthy replay path for framing decisions.
+  3. Reaffirms the TASK-7 proposal (mechanical assertions first, vision advisory on
+     top) — this test is the executable form of that ordering.
