@@ -1,0 +1,11 @@
+{
+  "name": "unreal-harness",
+  "owner": { "name": "oliver-io" },
+  "plugins": [
+    {
+      "name": "unreal-skills",
+      "source": "./plugin/unreal-skills",
+      "description": "Portable Unreal Engine agent skills (verification, authoring, advisors, neo4j analysis) that drive any project through the UnrealMCP tool surface."
+    }
+  ]
+}

@@ -22,7 +22,10 @@ library. Two halves talk over TCP:
 - **`src/Plugin/UnrealMCP/`** — UE **Editor** plugin (C++). Listens on `:55557`, runs gates
   (boot → PIE → dry-run), dispatches to a domain handler on the game thread, returns the
   uniform `{status, result, error, error_code, error_hint}` envelope.
-  **Wire name == tool name == handler key** — there is no alias layer anywhere.
+  **Wire name == tool name == handler key** — except the legacy wire `command:`
+  overrides (`statetree_* → st_*`, USAGE §2.12, plus `bp_add_node →
+  add_blueprint_node`) and the parameter-alias layer in `registry/aliases.ts`;
+  no other aliasing anywhere.
 
 **The split is the point.** This repo = the harness (server, plugin, skills, tests —
 reused across every game). `projects/<Name>/` = the game — gitignored here, owns its own
@@ -92,17 +95,23 @@ src/Plugin/UnrealMCP/  UE Editor plugin: MCPBridge.cpp (dispatch) · MCPServerRu
 docs/                  ARCHITECTURE · USAGE · TESTING · BUGS · DEBUGGING · loops/ (standing worklists)
 tests/                 pytest parity oracle over a LIVE editor (launches the Bun server)
 scripts/               run/stop-server · build/launch/stop-editor · build-coord · find-engine · neo4j · install-plugins · google/openai-key.sh
-tools/neo4j/           generic Unreal→Neo4j ingester (doctrine: /neo4j)
-.claude/skills/        bundled skills — each self-describes in its SKILL.md
+plugin/unreal-skills/  the PORTABLE skills plugin (Claude Code plugin: 18 skills + the
+                       Unreal→Neo4j ingester bundled inside skills/neo4j/tool/) —
+                       installable into any repo via the root .claude-plugin/marketplace.json
+.claude/skills/        harness-operating skills only (onboard · bootstrap · automated-tester · refactor)
 projects/              YOUR GAMES (gitignored, self-managing)
 ```
 
-### Bundled skills (`.claude/skills/`)
+### Bundled skills
 
-One line each; the SKILL.md is the contract. Setup: **`/onboard`** (engine + host project,
+Split in two: **harness-operating** skills stay in `.claude/skills/`; everything
+portable lives in the **`unreal-skills` plugin** (`plugin/unreal-skills/`) so other
+repos can load it (`/plugin marketplace add <this repo>` then `/plugin install
+unreal-skills@unreal-harness`). One line each; the SKILL.md is the contract.
+Setup: **`/onboard`** (engine + host project,
 run first on a fresh clone) · **`/bootstrap`** (scaffold/adopt a game, writes its CLAUDE.md)
 · **`/build`** (editor / packaged client / dedicated server). Verification:
-**`/automated-tester`** · **`/capture-pose`** · **`/visual-critique`** · **`/see`**.
+**`/automated-tester`** · **`/capture-pose`** · **`/visual-critique`** · **`/video-critique`** · **`/see`**.
 Authoring: **`/icon`** · **`/texture`** · **`/gimp-import`** · **`/key-indicator-helper`** ·
 **`/progress-video`** (QA screenshots → dev-story montage video).
 Design & docs: **`/architect`** (design specs) · **`/docs`** (taxonomy/reverse/audit doc
@@ -177,7 +186,7 @@ A throwaway script that *generated* an artifact (mesh, asset, seeded table) is a
 snapshot the moment the artifact exists — its baked-in constants poison the next agent's
 reasoning. **Measure the live editor, never a generator script.** At clean-up, delete the
 one-offs you or prior sessions left (`gen_*`, `make_*`, ad-hoc `scratch`/`Saved/*.ts`
-writers). Durable, re-runnable tooling (`scripts/`, `tools/neo4j/`, a project's app code)
+writers). Durable, re-runnable tooling (`scripts/`, `plugin/unreal-skills/skills/neo4j/tool/`, a project's app code)
 stays.
 
 # IMPORTANT

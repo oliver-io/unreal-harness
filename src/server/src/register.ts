@@ -3,8 +3,9 @@
  * that imports all domains. The registry is built once and shared by the server,
  * the meta-tools, and code-execution mode.
  *
- * StateTree note: there is exactly one canonical StateTree family, `statetree_*`.
- * The abbreviated `st_*` family was retired (full-word domain, strict superset).
+ * StateTree note: there is exactly one canonical StateTree family, `statetree_*`,
+ * at the tool/name layer; 18 of its tools still forward to the legacy `st_*` wire
+ * commands via `command:` overrides (see domains/statetree.ts).
  */
 
 import { ToolRegistry } from "./registry/index.ts";

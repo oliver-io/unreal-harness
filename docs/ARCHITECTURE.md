@@ -92,9 +92,13 @@ Around that core sit the supporting layers:
   full rebuilds serialize through a **build lock** exposed as REST endpoints on
   the server (`/build/…`, driven by `scripts/build-coord.ps1`). Both exist so
   concurrent agents never stomp each other's sessions.
-- **Skills** (`.claude/skills/`): agent-facing doctrine — setup, authoring,
-  testing, advisory knowledge — ships with the harness so game projects don't
-  have to carry it.
+- **Skills**: agent-facing doctrine — setup, authoring, testing, advisory
+  knowledge — ships with the harness so game projects don't have to carry it.
+  Harness-operating skills live in `.claude/skills/`; the portable majority
+  (verification, authoring, advisors, neo4j analysis) ship as the
+  `unreal-skills` Claude Code plugin (`plugin/unreal-skills/`), installable
+  into any other repo via the root marketplace manifest
+  (`/plugin marketplace add` + `/plugin install unreal-skills@unreal-harness`).
 - **Two test harnesses**: an in-process bun suite for server logic, and a pytest
   suite that boots a **real editor** and drives every bridge operation end-to-end
   — the parity oracle that fails if an operation lacks coverage.

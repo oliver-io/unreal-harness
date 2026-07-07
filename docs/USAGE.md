@@ -266,6 +266,9 @@ Routes through `IAssetRegistry::GetDependencies` / `GetReferencers`. BFS with vi
 material_create → material_add_expression → material_connect → material_set_expression_property → material_compile → [auto-saved]
 ```
 
+- `material_delete_expression(material_path, expression_name, dry_run?)` — remove a node from the graph; wires to/from it go null (dry-run enumerates the severed connections).
+- `material_set_property(material_path, blend_mode?, two_sided?, shading_model?, material_domain?)` — flip top-level `UMaterial` flags after creation (e.g. Translucent→Opaque); recompiles + saves. `material_create` only sets these at creation time.
+
 **Material instance:**
 
 ```

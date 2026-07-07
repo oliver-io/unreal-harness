@@ -55,9 +55,9 @@ export const config = {
 
   /**
    * Which tool surface to advertise (progressive disclosure):
-   *   full    — all 233 domain tools + catalog_* meta-tools (direct access +
+   *   full    — every domain tool + catalog_* meta-tools (direct access +
    *             discovery). Default; best for clients with native tool-search.
-   *   compact — core + catalog_* only; the 233 are reached via catalog_call.
+   *   compact — core + catalog_* only; domain tools are reached via catalog_call.
    *             Minimal schema tax for clients without tool-search.
    *   code    — core + catalog_* + code_api/code_run (execute TS that drives the
    *             editor; intermediate data stays out of context). Opt-in.

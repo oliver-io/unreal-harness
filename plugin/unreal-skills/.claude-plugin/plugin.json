@@ -1,0 +1,9 @@
+{
+  "name": "unreal-skills",
+  "version": "0.1.0",
+  "description": "Portable Unreal Engine agent skills from the unreal-harness: verification (capture-pose, visual/video-critique, see), authoring (icon, texture, gimp-import, key-indicator-helper, progress-video), design & docs (architect, docs), advisors (ue-expert, position, npc_logic, networking, gamelift), analysis (neo4j graph projection), and build guidance. Assumes the UnrealMCP tool surface (harness MCP server + editor plugin) is reachable; harness-operating skills (onboard, bootstrap, automated-tester, refactor) remain in the harness repo.",
+  "author": { "name": "oliver-io" },
+  "mcpServers": {
+    "unrealMCP": { "type": "http", "url": "http://127.0.0.1:8765/mcp" }
+  }
+}

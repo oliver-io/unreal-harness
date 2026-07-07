@@ -91,7 +91,7 @@ in the harness works until this builds.
 ### Server packages
 - **Why:** the MCP server's npm deps (`@modelcontextprotocol/sdk`, `zod`, `@google/genai`, …).
 - **Install:** `bun install` at the repo root — no separate machine installs.
-  (`tools/neo4j/` has its own `bun install`, run automatically by `scripts/neo4j.*` on first use.)
+  (`plugin/unreal-skills/skills/neo4j/tool/` has its own `bun install`, run automatically by `scripts/neo4j.*` on first use.)
 
 ---
 
@@ -129,7 +129,7 @@ in the harness works until this builds.
 - **Enables:** AI icon/keycap generation (`gpt-image-1`, including background removal —
   no local rembg/ImageMagick).
 - **Needs:** the key (Part 3 of the skill) **and** Python 3.10+ with
-  `pip install -r .claude/skills/icon/requirements.txt` (openai, httpx, python-dotenv,
+  `pip install -r plugin/unreal-skills/skills/icon/requirements.txt` (openai, httpx, python-dotenv,
   Pillow; add numpy for the `/see` geometry steps).
 - **Detect:** `scripts/openai-key.sh check`; `python -c "import openai, PIL"`.
 
@@ -170,10 +170,10 @@ in the harness works until this builds.
 - **Detect:** GIMP on PATH (`gimp --version`) or standard install locations; a
   `gimp-mcp` entry in the user's MCP client config (`claude mcp list`).
 
-### Docker + Neo4j 5 — Blueprint/graph projection (`/neo4j`, `tools/neo4j/`)
+### Docker + Neo4j 5 — Blueprint/graph projection (`/neo4j`, `plugin/unreal-skills/skills/neo4j/tool/`)
 - **Enables:** projecting Blueprints/StateTrees/materials into a queryable Neo4j graph.
 - **Needs:** any reachable **Neo4j 5** (Bolt). Docker is the documented default:
-  the exact `docker run … neo4j:5` line lives in `tools/neo4j/README.md`. Neo4j Desktop
+  the exact `docker run … neo4j:5` line lives in `plugin/unreal-skills/skills/neo4j/tool/README.md`. Neo4j Desktop
   or an existing server works too. The Bolt driver is fetched by `bun install`
   (automatic on first `scripts/neo4j.*` use).
 - **Env:** `NEO4J_URI` (default `bolt://localhost:7687`), `NEO4J_USER` (default `neo4j`),

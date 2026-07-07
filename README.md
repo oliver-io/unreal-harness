@@ -60,7 +60,7 @@ That starts the MCP server at `http://127.0.0.1:8765/mcp`.  Open Unreal with the
 
 ### Dependencies
 
-**Minimal** — enough to drive a live editor with all ~260 tools — is just Bun, the Unreal Engine, git, and a C++ toolchain UE can build with (on Windows that's VS 2022 with the "Game development with C++" workload).  Everything else is optional and per-feature: `uv` for the test suite, a Gemini key for video analysis & visual critique, an OpenAI key + Python for AI art, GIMP for the layered-UI pipeline, Docker + Neo4j for graph projection, Pulumi + the AWS CLI for hosting.  `/onboard` detects what you have, asks what you want (minimal / full / pick-and-choose), and installs the gaps from official sources with your say-so — the full matrix lives in [the onboard skill's dependency doc](.claude/skills/onboard/DEPENDENCIES.md).
+**Minimal** — enough to drive a live editor with all ~285 tools — is just Bun, the Unreal Engine, git, and a C++ toolchain UE can build with (on Windows that's VS 2022 with the "Game development with C++" workload).  Everything else is optional and per-feature: `uv` for the test suite, a Gemini key for video analysis & visual critique, an OpenAI key + Python for AI art, GIMP for the layered-UI pipeline, Docker + Neo4j for graph projection, Pulumi + the AWS CLI for hosting.  `/onboard` detects what you have, asks what you want (minimal / full / pick-and-choose), and installs the gaps from official sources with your say-so — the full matrix lives in [the onboard skill's dependency doc](.claude/skills/onboard/DEPENDENCIES.md).
 
 
 [^1]: Most basic editor actions are MCP-exposed.  Many are enriched with validation and guidance so that Claude does not repeat common mistakes (it struggles with spatial reasoning, for example).
