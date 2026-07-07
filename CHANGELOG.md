@@ -5,6 +5,15 @@ same change that alters behavior.
 
 ## Unreleased
 
+- Plain-HTTP `GET /status` liveness endpoint (`src/server/src/status/http.ts`),
+  routed in `main.ts` next to the `/build/*` surface: returns `{editorUp, phase,
+  pieActive, liveCodingInProgress, project, lastProbeAt}` so an external local
+  process (the Portable backend — portable.dev#19) can poll editor liveness
+  without an MCP session. Read-only over the lifecycle watchdog's newly cached
+  `mcp_status` probe (`getLastEditorStatus()` in `bridge/lifecycle.ts` — same 5s
+  cadence, zero extra bridge traffic); zero-state (editorUp false, lastProbeAt
+  null) is HTTP 200 before the first probe so pollers branch on fields, not
+  errors. Loopback-only like the rest of the listener.
 - **Test-harness project-identity guard.** Editor-gated tests can no longer run
   against a project the harness doesn't own: the Bun `editorSuite` now verifies the
   attached editor's `project_context` (settings_paths[0]) matches the test project

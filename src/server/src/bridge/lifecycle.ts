@@ -19,13 +19,38 @@ const PROBE_GRACE_MS = 15_000;
 let shuttingDown = false;
 let cleanup: (() => void) | undefined;
 
-/** Probe the bridge: "down" | "initializing" | "interactive". */
-async function probeEngineState(): Promise<"down" | "initializing" | "interactive"> {
+export type EnginePhase = "down" | "initializing" | "interactive";
+
+/** The watchdog's latest view of the editor bridge (see getLastEditorStatus). */
+export interface EditorStatusSnapshot {
+  phase: EnginePhase;
+  /** Raw `result` payload of the last `mcp_status` reply; null when unreachable/unparsed. */
+  status: Record<string, unknown> | null;
+  /** Epoch ms when the probe that produced this snapshot completed. */
+  probedAt: number;
+}
+
+let lastEditorStatus: EditorStatusSnapshot | null = null;
+
+/**
+ * Most recent watchdog probe result, for the plain-HTTP `/status` surface
+ * (`status/http.ts`) — read-only, no extra editor traffic. Null until the
+ * first probe completes (the watchdog waits PROBE_GRACE_MS after boot).
+ */
+export function getLastEditorStatus(): EditorStatusSnapshot | null {
+  return lastEditorStatus;
+}
+
+/** Probe the bridge: phase "down" | "initializing" | "interactive" + raw mcp_status result. */
+async function probeEngineState(): Promise<{
+  phase: EnginePhase;
+  status: Record<string, unknown> | null;
+}> {
   let socket: Awaited<ReturnType<typeof Bun.connect>> | undefined;
   return new Promise((resolve) => {
     let settled = false;
     const chunks: Uint8Array[] = [];
-    const finish = (s: "down" | "initializing" | "interactive") => {
+    const finish = (phase: EnginePhase, status: Record<string, unknown> | null = null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -34,7 +59,7 @@ async function probeEngineState(): Promise<"down" | "initializing" | "interactiv
       } catch {
         /* closed */
       }
-      resolve(s);
+      resolve({ phase, status });
     };
     const timer = setTimeout(() => finish(chunks.length ? "initializing" : "down"), PROBE_TIMEOUT_MS);
 
@@ -49,8 +74,12 @@ async function probeEngineState(): Promise<"down" | "initializing" | "interactiv
           chunks.push(data);
           try {
             const resp = JSON.parse(new TextDecoder().decode(concat(chunks)));
-            const ready = resp?.result?.ready === true;
-            finish(ready ? "interactive" : "initializing");
+            const result =
+              resp?.result && typeof resp.result === "object" && !Array.isArray(resp.result)
+                ? (resp.result as Record<string, unknown>)
+                : null;
+            const ready = result?.ready === true;
+            finish(ready ? "interactive" : "initializing", result);
           } catch {
             /* partial — keep waiting for timeout or more data */
           }
@@ -70,12 +99,13 @@ async function watchdogLoop(): Promise<void> {
   await sleep(PROBE_GRACE_MS);
   let last: string | undefined;
   while (!shuttingDown) {
-    const state = await probeEngineState();
-    if (state !== last) {
-      if (state === "down") log.warn("engine bridge unreachable — tool calls will fail until the editor is back");
-      else if (state === "initializing") log.info("editor initializing — real tool calls PEND at the boot gate");
+    const { phase, status } = await probeEngineState();
+    lastEditorStatus = { phase, status, probedAt: Date.now() };
+    if (phase !== last) {
+      if (phase === "down") log.warn("engine bridge unreachable — tool calls will fail until the editor is back");
+      else if (phase === "initializing") log.info("editor initializing — real tool calls PEND at the boot gate");
       else log.info("editor interactive — boot gate open");
-      last = state;
+      last = phase;
     }
     await sleep(PROBE_INTERVAL_MS);
   }
@@ -104,6 +134,13 @@ export function startLifecycleGuards(onCleanup?: () => void): void {
       `interval ${PROBE_INTERVAL_MS / 1000}s, mode=log-only)`,
   );
 }
+
+// ── test hooks ──────────────────────────────────────────────────────────
+export const __test = {
+  setLastEditorStatus(s: EditorStatusSnapshot | null) {
+    lastEditorStatus = s;
+  },
+};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
