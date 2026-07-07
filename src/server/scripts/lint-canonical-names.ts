@@ -21,7 +21,7 @@ const DOMAIN_PREFIXES = [
   "class", "enum", "ai", "reflection", "mesh", "physics", "kinematics",
   "input", "struct", "datatable", "dataasset", "mpc", "scene", "level",
   "landscape", "foliage", "project", "catalog", "code", "result", "pcg",
-  "video",
+  "video", "stream",
 ].sort((a, b) => b.length - a.length);
 
 // Protocol primitives intentionally un-prefixed (mirror the Python exempt set).

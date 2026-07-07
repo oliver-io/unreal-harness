@@ -127,6 +127,67 @@ describe("GET /status", () => {
     const body: any = await res.json();
     expect(body.project).toBe("HoverBall");
   });
+
+  test("stream field present: bridge snake_case stream maps to camelCase view", async () => {
+    lifecycle.setLastEditorStatus({
+      phase: "interactive",
+      status: {
+        ready: true,
+        phase: "interactive",
+        pie_active: false,
+        live_coding_in_progress: false,
+        stream: { active: true, viewer_port: 8890, streamers: ["Editor"] },
+      },
+      probedAt: 1_720_000_020_000,
+    });
+    const res = await fetch(`${base}/status`);
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect(body.stream).toEqual({ active: true, viewerPort: 8890, streamers: ["Editor"] });
+    // Pre-existing fields are untouched by the extension.
+    expect(body.editorUp).toBe(true);
+    expect(body.pieActive).toBe(false);
+  });
+
+  test("stream field with null viewer_port (PS2 unavailable): nulls survive verbatim", async () => {
+    lifecycle.setLastEditorStatus({
+      phase: "interactive",
+      status: {
+        ready: true,
+        stream: { active: false, viewer_port: null, streamers: [] },
+      },
+      probedAt: 1_720_000_025_000,
+    });
+    const res = await fetch(`${base}/status`);
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect(body.stream).toEqual({ active: false, viewerPort: null, streamers: [] });
+  });
+
+  test("stream field absent (pre-M2 plugin build): key is omitted, everything else unchanged", async () => {
+    lifecycle.setLastEditorStatus({
+      phase: "interactive",
+      status: {
+        ready: true,
+        phase: "interactive",
+        pie_active: true,
+        live_coding_in_progress: false,
+      },
+      probedAt: 1_720_000_000_000,
+    });
+    const res = await fetch(`${base}/status`);
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect("stream" in body).toBe(false);
+    expect(body).toEqual({
+      editorUp: true,
+      phase: "interactive",
+      pieActive: true,
+      liveCodingInProgress: false,
+      project: null,
+      lastProbeAt: 1_720_000_000_000,
+    });
+  });
 });
 
 describe("/status non-routes", () => {

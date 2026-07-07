@@ -284,6 +284,9 @@ ALL_OPERATIONS = frozenset({
     "statetree_read",
     "statetree_save",
     "statetree_verify",
+    "stream_start",
+    "stream_status",
+    "stream_stop",
     "struct_create",
     "tag_add",
     "tag_list",
@@ -296,4 +299,4 @@ ALL_OPERATIONS = frozenset({
     "widget_tree_read",
 })
 
-assert len(ALL_OPERATIONS) == 281
+assert len(ALL_OPERATIONS) == 284

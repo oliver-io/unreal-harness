@@ -48,6 +48,7 @@ import { projectTools } from "./domains/project.ts";
 import { reflectionTools } from "./domains/reflection.ts";
 import { sceneTools } from "./domains/scene.ts";
 import { statetreeTools } from "./domains/statetree.ts";
+import { streamingTools } from "./domains/streaming.ts";
 import { structTools } from "./domains/struct.ts";
 import { tagTools } from "./domains/tag.ts";
 import { videoTools } from "./domains/video.ts";
@@ -85,6 +86,7 @@ const ALL_DOMAINS = [
   reflectionTools,
   sceneTools,
   statetreeTools,
+  streamingTools,
   structTools,
   tagTools,
   videoTools,

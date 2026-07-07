@@ -89,6 +89,7 @@ src/
                      _shared.ts (bridgeTool/defineTool) · _schemas.ts (Vec3, …)
   build/             http.ts (REST /build endpoints) · lock.ts (build lock)
   status/            http.ts (REST GET /status — editor liveness for external pollers)
+  control/           http.ts (REST POST /control/stream/* — Pixel Streaming control for Portable)
   pie/               lease.ts (PIE lease) · reconciler.ts
   video/             analyzer.ts (video_analyze backend, vendor-quarantined)
   disclosure/        metatools.ts (catalog_*) · codemode/ (generate, worker, sandbox, tools)

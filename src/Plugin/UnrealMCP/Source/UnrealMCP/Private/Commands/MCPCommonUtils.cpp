@@ -179,6 +179,13 @@ bool FMCPCommonUtils::IsBlockedFromDryRun(const FString& CommandType)
         TEXT("pie_record_stop"),
         TEXT("pie_record_arm"),
         TEXT("pie_record_disarm"),
+
+        // ── Pixel Streaming 2 control (portable.dev#19 M2) ────────────────
+        // Live-session side effects (signalling-server child process + WebRTC
+        // streamer) — nothing meaningful to diff for a dry run. NOT in the PIE
+        // blocklist: streaming must keep working during PIE (AutoStreamPIE).
+        TEXT("stream_start"),
+        TEXT("stream_stop"),
     };
     return BlockedCommands.Contains(CommandType);
 }

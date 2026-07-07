@@ -257,6 +257,7 @@ UMCPBridge::UMCPBridge()
     DiagnosticsCommands = MakeShared<FMCPDiagnosticsCommands>();
     BlueprintPolishCommands = MakeShared<FMCPBlueprintPolishCommands>();
     KinematicsCommands = MakeShared<FMCPKinematicsCommands>();
+    StreamingCommands = MakeShared<FMCPStreamingCommands>(this);
 }
 
 UMCPBridge::~UMCPBridge()
@@ -290,6 +291,7 @@ UMCPBridge::~UMCPBridge()
     DiagnosticsCommands.Reset();
     BlueprintPolishCommands.Reset();
     KinematicsCommands.Reset();
+    StreamingCommands.Reset();
 }
 
 // Initialize subsystem
@@ -542,6 +544,31 @@ FString UMCPBridge::ExecuteCommand(const FString& InCommandType, const TSharedPt
             FScopeLock Lock(&LiveCodingCS);
             Result->SetBoolField(TEXT("live_coding_in_progress"),
                 LiveCodingPhase == ELiveCodingPhase::Compiling);
+        }
+        // Pixel Streaming state (portable.dev#19 M2) — read from the bridge's
+        // cache, NEVER from the PS2 modules: this reply is produced on the
+        // network thread, and the PS2 accessors are game-thread shaped. The
+        // cache is written by the game-thread stream_* handlers + the editor
+        // streamer's start/stop delegates (see FMCPStreamingCommands).
+        {
+            const FMCPStreamState Stream = GetStreamState();
+            TSharedRef<FJsonObject> StreamObj = MakeShared<FJsonObject>();
+            StreamObj->SetBoolField(TEXT("active"), Stream.bActive);
+            if (Stream.bViewerPortKnown)
+            {
+                StreamObj->SetNumberField(TEXT("viewer_port"), Stream.ViewerPort);
+            }
+            else
+            {
+                StreamObj->SetField(TEXT("viewer_port"), MakeShared<FJsonValueNull>());
+            }
+            TArray<TSharedPtr<FJsonValue>> StreamerValues;
+            for (const FString& StreamerId : Stream.Streamers)
+            {
+                StreamerValues.Add(MakeShared<FJsonValueString>(StreamerId));
+            }
+            StreamObj->SetArrayField(TEXT("streamers"), StreamerValues);
+            Result->SetObjectField(TEXT("stream"), StreamObj);
         }
 
         TSharedRef<FJsonObject> Envelope = MakeShared<FJsonObject>();
@@ -1181,6 +1208,14 @@ FString UMCPBridge::ExecuteCommand(const FString& InCommandType, const TSharedPt
             {
                 ResultJson = KinematicsCommands->HandleCommand(CommandType, Params);
             }
+            // Pixel Streaming 2 control (portable.dev#19 M2). Deliberately NOT in
+            // the PIE blocklist — streaming keeps running during PIE (AutoStreamPIE).
+            else if (CommandType == TEXT("stream_start") ||
+                     CommandType == TEXT("stream_stop") ||
+                     CommandType == TEXT("stream_status"))
+            {
+                ResultJson = StreamingCommands->HandleCommand(CommandType, Params);
+            }
             else
             {
                 ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
@@ -1304,6 +1339,18 @@ FString UMCPBridge::ExecuteCommand(const FString& InCommandType, const TSharedPt
     }
 
     return FinalEnvelope;
+}
+
+void UMCPBridge::SetStreamState(const FMCPStreamState& InState)
+{
+    FScopeLock Lock(&StreamStateCS);
+    StreamState = InState;
+}
+
+FMCPStreamState UMCPBridge::GetStreamState() const
+{
+    FScopeLock Lock(&StreamStateCS);
+    return StreamState;
 }
 
 void UMCPBridge::FinishLiveCoding(const FString& InResult)

@@ -62,6 +62,10 @@
 		{
 			"Name": "GeometryScripting",
 			"Enabled": true
+		},
+		{
+			"Name": "PixelStreaming2",
+			"Enabled": true
 		}
 	]
 }

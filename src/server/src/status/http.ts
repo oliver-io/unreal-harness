@@ -3,7 +3,12 @@
  * Portable backend) to poll editor state without an MCP session:
  *
  *   GET /status → { editorUp, phase, pieActive, liveCodingInProgress,
- *                   project, lastProbeAt }
+ *                   project, lastProbeAt, stream? }
+ *
+ * `stream` ({active, viewerPort, streamers} — portable.dev#19 M2) is surfaced
+ * only when the cached `mcp_status` reply carries the bridge's `stream` field
+ * (a plugin build that predates it simply omits the key — every pre-existing
+ * field is unchanged, so old pollers are unaffected).
  *
  * Read-only over the lifecycle watchdog's cached `mcp_status` probe
  * (`bridge/lifecycle.ts`) — it never probes the editor itself, so polling is
@@ -27,6 +32,29 @@ export interface StatusView {
   project: string | null;
   /** Epoch ms of the last watchdog probe, or null before the first one. */
   lastProbeAt: number | null;
+  /** Pixel Streaming state; present only when the plugin reports it. */
+  stream?: StreamView;
+}
+
+export interface StreamView {
+  active: boolean;
+  viewerPort: number | null;
+  streamers: string[];
+}
+
+/** Map the bridge's snake_case `stream` field to the /status camelCase view.
+ *  Returns undefined (field omitted) when the cached probe has no stream. */
+function streamViewOf(status: Record<string, unknown> | null): StreamView | undefined {
+  const stream = status?.stream;
+  if (typeof stream !== "object" || stream === null || Array.isArray(stream)) return undefined;
+  const s = stream as Record<string, unknown>;
+  return {
+    active: s.active === true,
+    viewerPort: typeof s.viewer_port === "number" ? s.viewer_port : null,
+    streamers: Array.isArray(s.streamers)
+      ? s.streamers.filter((id): id is string => typeof id === "string")
+      : [],
+  };
 }
 
 function send(res: ServerResponse, code: number, body: unknown): void {
@@ -57,6 +85,8 @@ export async function handleStatusHttp(
       project: projectRoot ? basename(projectRoot.replace(/[\\/]+$/, "")) || null : null,
       lastProbeAt: snap?.probedAt ?? null,
     };
+    const stream = streamViewOf(snap?.status ?? null);
+    if (stream) view.stream = stream;
     send(res, 200, view);
     return true;
   }

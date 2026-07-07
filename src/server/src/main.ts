@@ -17,6 +17,7 @@ import { startLifecycleGuards } from "./bridge/lifecycle.ts";
 import { onSessionClosed } from "./pie/lease.ts";
 import { startPieReconciler } from "./pie/reconciler.ts";
 import { handleBuildHttp } from "./build/http.ts";
+import { handleControlHttp } from "./control/http.ts";
 import { handleStatusHttp } from "./status/http.ts";
 import { log } from "./log.ts";
 
@@ -85,6 +86,15 @@ const httpServer = createServer((req, res) => {
   if (url.startsWith("/build")) {
     handleBuildHttp(req, res).catch((err) => {
       log.error(`build request failed: ${err instanceof Error ? err.message : String(err)}`);
+      if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "internal server error" }));
+    });
+    return;
+  }
+  // Plain-HTTP Pixel Streaming control surface for the Portable backend (not MCP JSON-RPC).
+  if (url.startsWith("/control")) {
+    handleControlHttp(req, res).catch((err) => {
+      log.error(`control request failed: ${err instanceof Error ? err.message : String(err)}`);
       if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "internal server error" }));
     });

@@ -5,6 +5,30 @@ change that alters behavior.
 
 ## Unreleased
 
+- **Pixel Streaming 2 control (portable.dev#19 M2).** New
+  `Commands/MCPStreamingCommands.(h|cpp)` handler + bridge dispatch:
+  `stream_start` {viewer_port?=8890, streamer_port?=8888} sets the PS2 editor
+  CVars (Source=LevelEditorViewport, AutoStreamPIE=true,
+  UseRemoteSignallingServer=false), configures the embedded signalling server
+  (SetViewerPort FIRST — the Windows default is 80 — then SetStreamerPort +
+  SetSignallingDomain ws://127.0.0.1) and calls
+  IPixelStreaming2EditorModule::StartStreaming(LevelEditorViewport). Async by
+  nature (first launch may download the signalling-server bundle) — success
+  means `state:"starting"`; idempotent when already streaming. `stream_stop`
+  is idempotent; `stream_status` reports {active, viewer_port, streamer_port,
+  streamers[]}. Degrades to `feature_disabled` when the PS2 modules are
+  unavailable. Both mutators joined the dry-run blocklist; deliberately NOT
+  PIE-blocked (AutoStreamPIE hands the stream to the PIE viewport).
+- `mcp_status` now embeds `stream: {active, viewer_port, streamers}` read from
+  a lock-guarded cache on the bridge (written on the game thread by the
+  stream handlers + the editor streamer's OnStreamingStarted/Stopped
+  delegates) — the network-thread status path never queries the PS2 modules.
+- UnrealMCP now declares a hard dependency on the **PixelStreaming2** plugin
+  (uplugin ref + PixelStreaming2Editor/PixelStreaming2/PixelStreaming2Core/
+  PixelStreaming2Settings/PixelStreaming2Servers module deps) — this
+  force-enables PS2 for host projects that load UnrealMCP; accepted for the
+  M2 PoC.
+
 - `asset_textures_import`: optional per-image `settings.lod_group` (TEXTUREGROUP_*)
   and `settings.mip_gen` (TMGS_*) applied post-import alongside sRGB/compression —
   only when sent, so factory defaults (World / FromTextureGroup) otherwise stand.
