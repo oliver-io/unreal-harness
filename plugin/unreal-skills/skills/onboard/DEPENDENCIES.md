@@ -50,7 +50,7 @@ editor bridge never comes up, and no MCP tool works.
 - **Install:** official <https://git-scm.com> · `winget install Git.Git` ·
   macOS: Xcode CLT (`xcode-select --install`) or `brew install git` · Linux: distro package.
 - **Note (Windows):** Git for Windows also provides **Git Bash**, which the `.sh`
-  helpers (`scripts/openai-key.sh`, `scripts/google-key.sh`, `scripts/neo4j.sh`) run under.
+  helpers (`scripts/openai-key.sh`, `scripts/google-key.sh`, the neo4j skill's `neo4j.sh`) run under.
 
 ### Bun ≥ 1.3 / Unreal Engine
 - **Detect:** `bun --version`; engine handled by Part 1 (`scripts/find-engine.ps1`).
@@ -91,7 +91,8 @@ in the harness works until this builds.
 ### Server packages
 - **Why:** the MCP server's npm deps (`@modelcontextprotocol/sdk`, `zod`, `@google/genai`, …).
 - **Install:** `bun install` at the repo root — no separate machine installs.
-  (`plugin/unreal-skills/skills/neo4j/tool/` has its own `bun install`, run automatically by `scripts/neo4j.*` on first use.)
+  (the neo4j skill's bundled `tool/` has its own `bun install`, run automatically by the
+  skill's `neo4j.*` wrappers on first use.)
 
 ---
 
@@ -129,7 +130,7 @@ in the harness works until this builds.
 - **Enables:** AI icon/keycap generation (`gpt-image-1`, including background removal —
   no local rembg/ImageMagick).
 - **Needs:** the key (Part 3 of the skill) **and** Python 3.10+ with
-  `pip install -r plugin/unreal-skills/skills/icon/requirements.txt` (openai, httpx, python-dotenv,
+  `pip install -r requirements.txt` from the icon skill's directory (openai, httpx, python-dotenv,
   Pillow; add numpy for the `/see` geometry steps).
 - **Detect:** `scripts/openai-key.sh check`; `python -c "import openai, PIL"`.
 
@@ -170,12 +171,12 @@ in the harness works until this builds.
 - **Detect:** GIMP on PATH (`gimp --version`) or standard install locations; a
   `gimp-mcp` entry in the user's MCP client config (`claude mcp list`).
 
-### Docker + Neo4j 5 — Blueprint/graph projection (`/neo4j`, `plugin/unreal-skills/skills/neo4j/tool/`)
+### Docker + Neo4j 5 — Blueprint/graph projection (`/neo4j`, bundled `tool/`)
 - **Enables:** projecting Blueprints/StateTrees/materials into a queryable Neo4j graph.
 - **Needs:** any reachable **Neo4j 5** (Bolt). Docker is the documented default:
-  the exact `docker run … neo4j:5` line lives in `plugin/unreal-skills/skills/neo4j/tool/README.md`. Neo4j Desktop
+  the exact `docker run … neo4j:5` line lives in the neo4j skill's `tool/README.md`. Neo4j Desktop
   or an existing server works too. The Bolt driver is fetched by `bun install`
-  (automatic on first `scripts/neo4j.*` use).
+  (automatic on first `neo4j.*` wrapper use).
 - **Env:** `NEO4J_URI` (default `bolt://localhost:7687`), `NEO4J_USER` (default `neo4j`),
   `NEO4J_PASS` (**required**), optional `MCP_URL`, `UE_NEO4J_DATA_DIR`.
 - **Detect:** `docker --version` + `docker info` (daemon up), or an already-reachable

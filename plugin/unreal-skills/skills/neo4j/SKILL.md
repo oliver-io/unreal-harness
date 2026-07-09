@@ -19,21 +19,18 @@ This skill is the doctrine for doing that **in this harness, generically**. It r
 through the harness's own canonical MCP read tools and derives what to ingest from the
 *live project* — it bakes in no specific game's assets, paths, password, or schema.
 
-**A runnable, generic ingester is bundled with this skill at `tool/` (next to this
-SKILL.md)**; the harness repo additionally wraps it as `scripts/neo4j.{ps1,sh}`.
-It implements everything below — discover from the live
+**A runnable, generic ingester ships with the harness: `${CLAUDE_SKILL_DIR}/tool/`** (wrapped by
+`${CLAUDE_SKILL_DIR}/neo4j.{ps1,sh}`). It implements everything below — discover from the live
 project, read via the canonical MCP tools, shape any asset's JSON into a graph, and
 load idempotently with indexes. Prefer it over hand-rolling an ingest; reach for the
 doctrine when extending it (new asset type, curated schema) or when a project already
 has its own pipeline. Quick start:
 
 ```bash
-cd <this-skill-dir>/tool && bun install          # first run only
-bun run src/cli.ts discover                      # what exists + reader coverage
-bun run src/cli.ts ingest --class StateTree      # graph all StateTrees (additive)
-bun run src/cli.ts ingest --dir /Game/Foo/ --with-refs  # a subtree + cross-asset edges
-bun run src/cli.ts query "MATCH (n) RETURN labels(n)[0], count(*)"
-# (harness repo only: scripts/neo4j.{ps1,sh} wraps the same CLI)
+${CLAUDE_SKILL_DIR}/neo4j.ps1 discover                       # what exists + reader coverage
+${CLAUDE_SKILL_DIR}/neo4j.ps1 ingest --class StateTree       # graph all StateTrees (additive)
+${CLAUDE_SKILL_DIR}/neo4j.ps1 ingest --dir /Game/Foo/ --with-refs   # a subtree + cross-asset edges
+${CLAUDE_SKILL_DIR}/neo4j.ps1 query "MATCH (n) RETURN labels(n)[0], count(*)"
 ```
 
 > Follows the architecture-document doctrine (concepts, contracts, constraints — lead
@@ -257,15 +254,15 @@ MATCH (b:Blueprint)-[:INHERITS_FROM*]->(c {name:$base}) RETURN b.name;
 
 ## Status / honesty
 
-- The harness **bundles a working ingester** at `tool/` (bundled with this skill) (Bun/TS, wrapped by
-  `scripts/neo4j.{ps1,sh}`) implementing the read→shape→load pipeline above. Validated
+- The harness **ships a working ingester** at `${CLAUDE_SKILL_DIR}/tool/` (Bun/TS, wrapped by
+  `${CLAUDE_SKILL_DIR}/neo4j.{ps1,sh}`) implementing the read→shape→load pipeline above. Validated
   end-to-end against a live editor (resolved `EXEC`/`DATA_*` wires, `CHILD_OF` component
   hierarchy, `FEEDS_MATERIAL_INPUT`, cross-asset `REFERENCES`).
-- **Typed ontological shapers** (`tool/src/ontology.ts`) produce the curated schema
+- **Typed ontological shapers** (`${CLAUDE_SKILL_DIR}/tool/src/ontology.ts`) produce the curated schema
   above for `Blueprint`, `StateTree`, `Material` — resolving cross-references into edges
   and normalizing types (`EStateTreeStateType::State` → `State`), not just walking JSON.
   `MaterialInstanceConstant`, `NiagaraSystem`, `DataTable` (+ `*DataAsset`) use the
-  generic walk (`tool/src/shape.ts`); other classes list as *(no reader)*.
+  generic walk (`${CLAUDE_SKILL_DIR}/tool/src/shape.ts`); other classes list as *(no reader)*.
 - To give a new type first-class treatment, add a `Handler` (multi-call `read` + typed
   `shape`) to `TYPED` in `ontology.ts`; for a quick generic mapping, add a row to
   `readers.ts`. Keep `id`-keyed MERGE + per-label indexes as the invariant.

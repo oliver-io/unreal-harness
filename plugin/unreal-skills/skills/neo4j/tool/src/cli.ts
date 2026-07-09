@@ -284,7 +284,7 @@ async function main() {
     case "clear": return cmdClear(cfg);
     default:
       log("Usage: ue-neo4j <discover|pull|ingest|query|verify|clear> [flags]");
-      log("See the header of src/cli.ts or plugin/unreal-skills/skills/neo4j/tool/README.md for flags.");
+      log("See the header of src/cli.ts or the neo4j skill's tool/README.md for flags.");
       process.exit(cmd ? 1 : 0);
   }
 }

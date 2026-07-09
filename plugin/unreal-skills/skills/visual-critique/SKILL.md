@@ -43,19 +43,19 @@ Exactly one of `--reference` (image) or `--desired` (text) is given, and that ch
 ## Usage
 ```bash
 # IMAGE mode — render vs a reference image
-bun ${CLAUDE_PLUGIN_ROOT}/skills/visual-critique/critique.ts \
+bun ${CLAUDE_SKILL_DIR}/critique.ts \
   --reference projects/<game>/assets/concept/<art>.png \
   --render    projects/<game>/Saved/Screenshots/<frame>.png \
   [--focus "floor material, panel occlusion"] [--context "ignore the debug overlay"] [--json] [--gate 85]
 
 # SPEC mode — render vs a written desired state
-bun ${CLAUDE_PLUGIN_ROOT}/skills/visual-critique/critique.ts \
+bun ${CLAUDE_SKILL_DIR}/critique.ts \
   --desired "a crimson, square, centered button with a thin gold border" \
   --render  projects/<game>/Saved/Screenshots/<frame>.png \
   [--focus "color, centering"] [--json] [--gate 90]
 
 # long specs: read the desired state from a file instead of inline
-bun ${CLAUDE_PLUGIN_ROOT}/skills/visual-critique/critique.ts --desired-file spec.txt --render shot.png --json
+bun ${CLAUDE_SKILL_DIR}/critique.ts --desired-file spec.txt --render shot.png --json
 ```
 - **Target (exactly one, required):** `--reference <img>` (IMAGE mode) **or** `--desired "<text>"` /
   `--desired-file <path>` (SPEC mode). `--render <img>` is always required.

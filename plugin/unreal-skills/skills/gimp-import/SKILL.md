@@ -167,7 +167,7 @@ reproducible by other contributors and invite drift in filenames/sizes that sile
 breaks the join key. Instead, **copy the skill's template into the consuming project**
 and commit it:
 
-- Template: `${CLAUDE_PLUGIN_ROOT}/skills/gimp-import/scripts/gimp_export_contract.py` — implements
+- Template: `${CLAUDE_SKILL_DIR}/scripts/gimp_export_contract.py` — implements
   the grammar parser, full-canvas per-leaf export, BASE compositing, scratch skipping,
   stale-PNG cleanup, `manifest.json` emission, **loud warnings for every
   non-conforming layer**, and the optional mask/bbox sidecars. Config-driven

@@ -1,6 +1,7 @@
 ---
 name: automated-tester
-description: Set up an automated, agent-observed end-to-end test (or a guarded dev loop) for an Unreal feature in this harness. Use when someone wants to "add a test", "test this feature end-to-end", "verify X works in PIE", "build a verification harness", "guard this feature with a test", or "make a guardrail loop for an agent building X". Opinionated: the engine constructs the scenario via typed C++ primitives, the agent observes the behaviour it controls through a DIFFERENT read primitive, no mocks, headless-first. Encodes docs/TESTING.md.
+description: >-
+  Set up an automated, agent-observed end-to-end test (or a guarded dev loop) for an Unreal feature in this harness. Use when someone wants to "add a test", "test this feature end-to-end", "verify X works in PIE", "build a verification harness", "guard this feature with a test", or "make a guardrail loop for an agent building X". Opinionated: the engine constructs the scenario via typed C++ primitives, the agent observes the behaviour it controls through a DIFFERENT read primitive, no mocks, headless-first. Encodes docs/TESTING.md.
 user-invocable: true
 allowed-tools: [AskUserQuestion, Bash, PowerShell, Read, Write, Edit, Grep, Glob, Skill, Agent, mcp__unrealMCP__*]
 ---
@@ -238,7 +239,7 @@ If you want this loop to run unattended on an interval, that's `/loop` (drive
 ## Bundled files
 
 ```
-.claude/skills/automated-tester/
+automated-tester/                # ${CLAUDE_SKILL_DIR}
   SKILL.md                       this playbook
   templates/integration.test.ts  Bun integration-test skeleton (AAA(O) + teardown)
   templates/verify-loop.ts       standing PASS/FAIL E2E verify-script skeleton (watchdog + finally pie_stop)

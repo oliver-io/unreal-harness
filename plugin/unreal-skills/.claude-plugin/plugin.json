@@ -1,9 +1,15 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "unreal-skills",
+  "displayName": "Unreal Harness Skills",
   "version": "0.1.0",
-  "description": "Portable Unreal Engine agent skills from the unreal-harness: verification (capture-pose, visual/video-critique, see), authoring (icon, texture, gimp-import, key-indicator-helper, progress-video), design & docs (architect, docs), advisors (ue-expert, position, npc_logic, networking, gamelift), analysis (neo4j graph projection), and build guidance. Assumes the UnrealMCP tool surface (harness MCP server + editor plugin) is reachable; harness-operating skills (onboard, bootstrap, automated-tester, refactor) remain in the harness repo.",
-  "author": { "name": "oliver-io" },
-  "mcpServers": {
-    "unrealMCP": { "type": "http", "url": "http://127.0.0.1:8765/mcp" }
-  }
+  "description": "The Unreal Claude Harness as an installable plugin: ~20 curated skills for C++-forward Unreal Engine development, visual feedback, automated testing, networking/hosting, and graph projection — plus the unrealMCP server that drives a live Unreal Editor over a TCP bridge.",
+  "author": {
+    "name": "oliver-io",
+    "url": "https://github.com/oliver-io"
+  },
+  "homepage": "https://github.com/oliver-io/unreal-harness",
+  "repository": "https://github.com/oliver-io/unreal-harness",
+  "license": "MIT",
+  "keywords": ["unreal-engine", "gamedev", "mcp", "skills", "ue5"]
 }

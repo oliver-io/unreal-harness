@@ -1,5 +1,5 @@
 # Host-side deps for the icon skill's generation/review scripts.
-#   pip install -r ${CLAUDE_PLUGIN_ROOT}/skills/icon/requirements.txt
+#   pip install -r requirements.txt   # run from this skill's directory
 # (the /see skill, used for icon geometry, additionally needs numpy)
 openai>=1.0
 httpx>=0.24

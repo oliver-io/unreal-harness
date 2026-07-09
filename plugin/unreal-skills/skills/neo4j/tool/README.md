@@ -5,7 +5,8 @@ queryable with Cypher. Reads through this harness's canonical MCP read tools, de
 the asset set from the running editor, and loads it idempotently. **Nothing here is
 game-specific** — no hardcoded asset paths, no fixed schema, no embedded credentials.
 
-This is the runnable companion to the `/neo4j` skill (`${CLAUDE_PLUGIN_ROOT}/skills/neo4j/`), which
+This is the runnable companion to the `/neo4j` skill (it is bundled at the skill's
+`tool/` subdirectory), which
 is the doctrine; this is the tool.
 
 ## How it works

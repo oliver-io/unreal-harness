@@ -34,7 +34,7 @@ visually clips a torn edge — that is why **both** layers exist and you must do
 ## Run it
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/skills/see/scripts/see.py <image> [options]
+python ${CLAUDE_SKILL_DIR}/scripts/see.py <image> [options]
 ```
 
 Deps: Pillow + numpy (no scipy). This repo's test toolchain already has them; if a bare

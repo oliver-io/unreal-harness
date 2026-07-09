@@ -95,7 +95,7 @@ is a design choice — **ask the user** if unclear; don't assume.
 ## Step 3 — Generate (host `Bash`) → review
 
 ```bash
-S=${CLAUDE_PLUGIN_ROOT}/skills/icon/scripts          # path to the bundled scripts
+S=${CLAUDE_SKILL_DIR}/scripts          # path to the bundled scripts
 python $S/iconify.py "a battle axe" --out axe                    # text → object icon
 python $S/iconify.py "crossed swords" --style glyph --out gw     # text → flat glyph
 python $S/iconify.py "an arrowhead"  --style glyph-mono --out ah # silhouette to runtime-tint
@@ -216,7 +216,7 @@ taking effect.
 ## Bundled files
 
 ```
-${CLAUDE_PLUGIN_ROOT}/skills/icon/
+icon/                       # ${CLAUDE_SKILL_DIR}
   SKILL.md
   scripts/iconify.py        generate → bg-remove → downscale (OpenAI gpt-image-1; Pillow)
   scripts/contact_sheet.py  review gate: composite icons on a checkerboard with labels

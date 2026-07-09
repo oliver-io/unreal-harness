@@ -68,8 +68,8 @@ job is to **measure your art, supply it, and size the widget** — the traps are
 Run the **`/see`** skill on each cap texture:
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/skills/see/scripts/see.py path/to/keycap_square.png
-python ${CLAUDE_PLUGIN_ROOT}/skills/see/scripts/see.py path/to/keycap_wide.png
+python ${CLAUDE_SKILL_DIR}/../see/scripts/see.py path/to/keycap_square.png
+python ${CLAUDE_SKILL_DIR}/../see/scripts/see.py path/to/keycap_wide.png
 ```
 
 From its JSON + annotated PNG, record per texture:

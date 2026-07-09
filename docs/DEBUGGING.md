@@ -140,3 +140,29 @@ This is not a failure: wait and poll `GET http://127.0.0.1:8765/build/status`
 until `in_progress` is `false`, then re-run. **Never kill the other build.** A
 crashed holder frees the lock automatically (PID liveness); a hung-but-alive one
 is bounded by the lock TTL. Contract: [`USAGE.md`](USAGE.md) §2.17 / §3.6.
+
+## 7. A successful build runs OLD code (external-plugin stale DLL)
+
+**Symptom:** `build-editor.ps1` reports *"Build succeeded"*, the editor relaunches
+and the module loads cleanly, but your C++ change has no effect (e.g. a new command
+"does nothing").
+
+**Cause:** UnrealMCP is loaded via `AdditionalPluginDirectories` (it lives outside the
+project's `Plugins/`). UBT writes the freshly-built `UnrealEditor-UnrealMCP.dll` into
+the **project's** `Binaries/Win64`, but the editor LOADS the plugin from the **plugin's
+own** `Binaries/Win64`. `Sync-ExternalPluginBinaries` in `build-editor.ps1` is meant to
+copy it across, but its guard **silently skips** when the plugin Binaries has no
+`UnrealEditor.modules` file (it doesn't) — so the editor keeps loading the STALE DLL.
+
+**Fix:** after every build, manually copy the fresh binaries and verify the timestamps
+match before relaunching:
+
+```sh
+SRC=".../MedievalCS/Binaries/Win64"
+DST=".../mcp/src/Plugin/UnrealMCP/Binaries/Win64"
+cp -f "$SRC/UnrealEditor-UnrealMCP.dll" "$DST/" && cp -f "$SRC/UnrealEditor-UnrealMCP.pdb" "$DST/"
+```
+
+The project's `UnrealEditor.modules` governs the load and carries the fresh BuildId, so
+no `.modules` is needed in the plugin dir — just the binaries. See
+[`EDITOR-STREAMING.md`](EDITOR-STREAMING.md) §7.

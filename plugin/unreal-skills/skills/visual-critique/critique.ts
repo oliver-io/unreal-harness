@@ -16,9 +16,9 @@
  * score" prompt produced contradictory criticism — do not reintroduce it.)
  *
  * Usage:
- *   bun ${CLAUDE_PLUGIN_ROOT}/skills/visual-critique/critique.ts --reference <img> --render <img> [options]
- *   bun ${CLAUDE_PLUGIN_ROOT}/skills/visual-critique/critique.ts --desired "<text>" --render <img> [options]
- *   bun ${CLAUDE_PLUGIN_ROOT}/skills/visual-critique/critique.ts --desired-file <path> --render <img> [options]
+ *   bun critique.ts --reference <img> --render <img> [options]
+ *   bun critique.ts --desired "<text>" --render <img> [options]
+ *   bun critique.ts --desired-file <path> --render <img> [options]
  * Options:
  *   --focus "<areas>"   Areas/attributes to scrutinize hardest (e.g. "floor material" / "color, centering").
  *   --context "<text>"  Scene ground truth; NOT penalized and NOT listed as a difference/violation.

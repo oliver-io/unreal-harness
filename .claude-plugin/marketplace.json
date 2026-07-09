@@ -1,11 +1,18 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-marketplace-manifest.json",
   "name": "unreal-harness",
-  "owner": { "name": "oliver-io" },
+  "description": "The Unreal Claude Harness marketplace — ships the unreal-skills plugin (Unreal Engine skills + the unrealMCP server).",
+  "version": "0.1.0",
+  "owner": {
+    "name": "oliver-io",
+    "url": "https://github.com/oliver-io"
+  },
   "plugins": [
     {
       "name": "unreal-skills",
       "source": "./plugin/unreal-skills",
-      "description": "Portable Unreal Engine agent skills (verification, authoring, advisors, neo4j analysis) that drive any project through the UnrealMCP tool surface."
+      "description": "Unreal Engine development skills + the unrealMCP live-editor bridge.",
+      "category": "gamedev"
     }
   ]
 }
