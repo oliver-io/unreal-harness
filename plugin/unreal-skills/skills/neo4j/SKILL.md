@@ -1,6 +1,7 @@
 ---
 name: neo4j
-description: Project a live Unreal project's assets — Blueprints, StateTrees, materials, Niagara, data tables — into a Neo4j graph database so their topology becomes queryable with Cypher. Use when someone wants to "dump/ingest assets into Neo4j", "graph the Blueprints", "build a Blueprint/StateTree graph", "query the project as a graph", "trace an execution/data-flow chain", "find all callers of X across Blueprints", "set up Neo4j for this project", or "index the AI StateTrees". Generic across ANY project driven by this harness — it reads through the harness's canonical MCP read tools and derives the asset set from the live project; it hardcodes no game-specific assets, paths, or schema. A read-only analysis projection, never a mutation path.
+description: >-
+  Project a live Unreal project's assets — Blueprints, StateTrees, materials, Niagara, data tables — into a Neo4j graph database so their topology becomes queryable with Cypher. Use when someone wants to "dump/ingest assets into Neo4j", "graph the Blueprints", "build a Blueprint/StateTree graph", "query the project as a graph", "trace an execution/data-flow chain", "find all callers of X across Blueprints", "set up Neo4j for this project", or "index the AI StateTrees". Generic across ANY project driven by this harness — it reads through the harness's canonical MCP read tools and derives the asset set from the live project; it hardcodes no game-specific assets, paths, or schema. A read-only analysis projection, never a mutation path.
 user-invocable: true
 allowed-tools: [Read, Grep, Glob, Bash, PowerShell, AskUserQuestion]
 ---

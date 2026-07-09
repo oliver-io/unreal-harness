@@ -1,6 +1,7 @@
 ---
 name: icon
-description: Produce a UI icon end-to-end for any UE project — pick the art style (object / glyph / glyph-mono), generate the art (GPT image gen → background removal → downscale to a crisp transparent PNG), review it on a checkerboard contact sheet, import it as a correctly-configured UTexture2D (sRGB + EditorIcon), then wire/display it (data-asset field, hardcoded path, or the bundled IconWidget) and verify it renders. Handles one icon or one coherent family (a glyph set, a category set) per run. Dispatch when an icon is missing/broken/wrong, or to generate a new set. NOT a project-wide icon audit.
+description: >-
+  Produce a UI icon end-to-end for any UE project — pick the art style (object / glyph / glyph-mono), generate the art (GPT image gen → background removal → downscale to a crisp transparent PNG), review it on a checkerboard contact sheet, import it as a correctly-configured UTexture2D (sRGB + EditorIcon), then wire/display it (data-asset field, hardcoded path, or the bundled IconWidget) and verify it renders. Handles one icon or one coherent family (a glyph set, a category set) per run. Dispatch when an icon is missing/broken/wrong, or to generate a new set. NOT a project-wide icon audit.
 user-invocable: true
 allowed-tools:
   - AskUserQuestion
@@ -53,12 +54,11 @@ A run is **done** only when the asset is imported **and** a real consumer resolv
 ## Two-process boundary
 
 - **Generation + review** are host-side (`Bash` → the bundled Python). Needs
-  `OPENAI_API_KEY` and Pillow. **Credential:** if no key is configured, the generation
-  command is gated by a `PreToolUse` hook (`.claude/hooks/openai-cred-gate.py`) that denies
-  the run with a setup reason — store the key once with
-  `printf %s '<key>' | scripts/openai-key.sh set` (writes the gitignored `.env`; the
-  `/onboard` skill offers this too), then re-run. Review (`contact_sheet.py`) and
-  `--skip-gen` need no key.
+  `OPENAI_API_KEY` and Pillow. **Credential:** ensure `OPENAI_API_KEY` is set in the
+  environment (or a gitignored `.env`). In the harness repo specifically, a `PreToolUse`
+  hook (`.claude/hooks/openai-cred-gate.py`) gates the generation command when no key is
+  configured — store it once with `printf %s '<key>' | scripts/openai-key.sh set`, then
+  re-run. Review (`contact_sheet.py`) and `--skip-gen` need no key.
 - **Import + wire + verify** need the **editor running** over the MCP bridge.
 
 ---

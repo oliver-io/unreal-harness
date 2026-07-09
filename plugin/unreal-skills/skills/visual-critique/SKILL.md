@@ -37,6 +37,8 @@ Exactly one of `--reference` (image) or `--desired` (text) is given, and that ch
 - Any time you're about to tell the user "this looks like the reference" or "this is what was asked for."
   Run this first.
 - Pick the mode by what your target actually is: a **picture** → `--reference`; a **description** → `--desired`.
+- **Stills only.** If the thing being judged is motion over time (an animation, a transition, VFX in
+  flight), use `/video-critique` — this skill judges a single frame.
 
 ## Usage
 ```bash

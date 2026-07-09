@@ -1,6 +1,7 @@
 ---
 name: networking
-description: Advise on Unreal Engine multiplayer networking and replication — choosing a replication system (Iris vs legacy vs Replication Graph), picking the right device per kind of state (replicated property vs RPC vs custom serialization vs nothing), and the server-authority/prediction/validation discipline that makes networked state correct. Use when someone asks "how should we replicate X", "do we need Iris", "property or RPC", "why is movement rubber-banding", "how do we do hit registration / lag compensation", "how should multiplayer be architected", or "do we need custom netcode". Neutral, UE-fact-grounded, code-free architectural advisor — not a code generator.
+description: >-
+  Advise on Unreal Engine multiplayer networking and replication — choosing a replication system (Iris vs legacy vs Replication Graph), picking the right device per kind of state (replicated property vs RPC vs custom serialization vs nothing), and the server-authority/prediction/validation discipline that makes networked state correct. Use when someone asks "how should we replicate X", "do we need Iris", "property or RPC", "why is movement rubber-banding", "how do we do hit registration / lag compensation", "how should multiplayer be architected", or "do we need custom netcode". Neutral, UE-fact-grounded, code-free architectural advisor — not a code generator.
 user-invocable: true
 allowed-tools: [Read, Grep, Glob, WebSearch, WebFetch, AskUserQuestion]
 ---

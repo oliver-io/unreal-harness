@@ -1,8 +1,8 @@
 /**
  * Tier 2 — server-side progressive disclosure via `catalog_*` meta-tools.
  *
- * For clients without native tool-search, these four tools collapse the 233-tool
- * schema tax to a handful of always-on tools. The agent discovers
+ * For clients without native tool-search, these four tools collapse the full-surface
+ * schema tax (a few hundred domain tools) to a handful of always-on tools. The agent discovers
  * (`catalog_domains` / `catalog_search`), inspects one schema on demand
  * (`catalog_describe`), then invokes (`catalog_call`) — schemas enter context
  * only when actually needed.

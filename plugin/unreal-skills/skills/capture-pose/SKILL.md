@@ -6,7 +6,7 @@ description: >
   (location/rotation/FOV/aspect) and reproduces it inside the running game (PIE) through the real game
   render path — no character driving, no camera flying — saving the shot so any later run can re-capture
   the identical view with zero human input. This is the sanctioned way to build the "fixed capture rig"
-  that CLAUDE.md / docs/TESTING.md require before any screenshot-based visual validation. Use when someone
+  that agent-observed testing doctrine requires (docs/TESTING.md in the harness repo) before any screenshot-based visual validation. Use when someone
   says "capture this view", "record my camera", "snapshot this framing in-game", "set up a repeatable
   shot of X", "make a capture rig for this", or "I framed it — grab it in the game". Pairs with
   /visual-critique for judging the captured frame (against a reference image or a written spec).

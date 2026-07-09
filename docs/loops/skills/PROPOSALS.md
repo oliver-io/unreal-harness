@@ -14,7 +14,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /position — ThirdPerson mesh offset is BP-template-authored, not an ACharacter C++ default (TASK-1)
 
-- **Skill**: `.claude/skills/position/SKILL.md`, §"The default ThirdPerson mesh offset (a UE
+- **Skill**: `plugin/unreal-skills/skills/position/SKILL.md`, §"The default ThirdPerson mesh offset (a UE
   template convention)".
 - **Test**: `tests/skills/test_position_conventions.py` (the coordinate-convention battery;
   3/3 green against a live editor 2026-07-02).
@@ -42,7 +42,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /networking — runtime multiplayer claims are STRUCTURALLY untestable in this harness (TASK-2, ledger note)
 
-- **Skill**: `.claude/skills/networking/SKILL.md` + `reference/REPLICATION.md` /
+- **Skill**: `plugin/unreal-skills/skills/networking/SKILL.md` + `reference/REPLICATION.md` /
   `reference/AUTHORITY.md` — the core runtime claims (Iris vs legacy behaviour, the CMC
   ServerMove seam, COND_* condition overrides, RPC drop/ordering rules, distance relevancy
   culling, late-join state delivery, prediction/reconciliation).
@@ -67,7 +67,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /npc_logic — runtime AI-behavior claims deliberately NOT tested (TASK-3, ledger note)
 
-- **Skill**: `.claude/skills/npc_logic/SKILL.md` — the runtime layers: perception event
+- **Skill**: `plugin/unreal-skills/skills/npc_logic/SKILL.md` — the runtime layers: perception event
   timing, pawn-side awareness memory, target stabilization/decay, StateTree runtime
   semantics ("tree orchestrates, C++ thinks").
 - **Test**: only the static Layer-3 vocabulary is guarded
@@ -90,7 +90,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /npc_logic — team-affiliation gotcha is source-confirmed CORRECT; credit it (TASK-3)
 
-- **Skill**: `.claude/skills/npc_logic/SKILL.md:67` ("**`NoTeam` vs `NoTeam` resolves to
+- **Skill**: `plugin/unreal-skills/skills/npc_logic/SKILL.md:67` ("**`NoTeam` vs `NoTeam` resolves to
   *Friendly*, and friendly stimuli get silently dropped** — a classic 'my AI ignores the
   player' bug") and the pitfall recap at `SKILL.md:166`.
 - **Test**: n/a (engine-source fact; no fixture AI to observe it on — see the ledger
@@ -119,7 +119,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /networking — AUTHORITY.md calls the plugin "Mover (2.0)"; the 5.7 descriptor says VersionName 1.0 (TASK-2)
 
-- **Skill**: `.claude/skills/networking/reference/AUTHORITY.md:103` — "Epic's **Mover (2.0)**
+- **Skill**: `plugin/unreal-skills/skills/networking/reference/AUTHORITY.md:103` — "Epic's **Mover (2.0)**
   plugin is the intended successor to the `CharacterMovementComponent`…".
 - **Test**: n/a (naming nit; no behaviour to test).
 - **Evidence** (read this task):
@@ -134,7 +134,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /ue-expert — STALE: direct field writes to NetUpdateFrequency/MinNetUpdateFrequency are deprecated since 5.5 (TASK-4)
 
-- **Skill**: `.claude/skills/ue-expert/SKILL.md:126` — "**Set replication tuning at
+- **Skill**: `plugin/unreal-skills/skills/ue-expert/SKILL.md:126` — "**Set replication tuning at
   constructor time (zero per-frame cost):** bucket actors by category and set
   `NetUpdateFrequency`/`MinNetUpdateFrequency`/`NetPriority`/dormancy once."
 - **Test**: n/a (C++ authoring guidance; deprecation is a compile-time fact, no runtime
@@ -156,7 +156,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /networking — RPC net-type claim is source-confirmed CORRECT, but the authoring primitive it funnels into is UNREACHABLE (TASK-5)
 
-- **Skill**: `.claude/skills/networking/reference/REPLICATION.md:71,108`,
+- **Skill**: `plugin/unreal-skills/skills/networking/reference/REPLICATION.md:71,108`,
   `reference/AUTHORITY.md:29-33` — a Blueprint RPC is a custom event whose net type is one
   of Run-on-Server / Run-on-Client / Multicast, exactly one at a time, and the type governs
   routing.
@@ -212,7 +212,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /npc_logic — Layer-3 placement claims are source-confirmed CORRECT and now machine-checked (TASK-6)
 
-- **Skill**: `.claude/skills/npc_logic/SKILL.md:89-92` — the Layer-3 placement claims:
+- **Skill**: `plugin/unreal-skills/skills/npc_logic/SKILL.md:89-92` — the Layer-3 placement claims:
   the AI component schema is the decision layer's schema (:89); "Conditions gate
   transitions; tasks own behavior" (:90); "Parallel tasks compose a mode … two tasks
   under one state, not a sub-tree" (:92).
@@ -266,7 +266,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /capture-pose — rig validation leans entirely on a vision verdict; lead with the mechanical assertions (TASK-7)
 
-- **Skill**: `.claude/skills/capture-pose/SKILL.md` — the "confirm the rig works" step
+- **Skill**: `plugin/unreal-skills/skills/capture-pose/SKILL.md` — the "confirm the rig works" step
   validates the capture via a `/visual-critique` framing score (SKILL.md:64-74), a vision
   judgment the repo's own VERBOTEN rule treats as the weakest evidence class.
 - **Test**: none — deliberately NOT built. The core "the render reproduces the framing"
@@ -289,7 +289,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /ue-expert — coordinate/rotation claims are now machine-checked by the /position battery (TASK-4, cross-reference)
 
-- **Skill**: `.claude/skills/ue-expert/SKILL.md` — the coordinate/transform convention
+- **Skill**: `plugin/unreal-skills/skills/ue-expert/SKILL.md` — the coordinate/transform convention
   bullets (forward axis, yaw handedness, transform composition order) that overlap
   `/position`'s jurisdiction.
 - **Test**: `tests/skills/test_position_conventions.py` (TASK-1, 3/3 green) pins forward=+X,
@@ -306,7 +306,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /visual-critique + gemini-cred-gate — Gemini key env-var naming is inconsistent across the repo (TASK-8)
 
-- **Skill/machinery**: `.claude/skills/visual-critique/critique.ts` `loadKey()` and
+- **Skill/machinery**: `plugin/unreal-skills/skills/visual-critique/critique.ts` `loadKey()` and
   `.claude/hooks/gemini-cred-gate.py` `key_configured()` accept ONLY
   `GOOGLE_STUDIO_API_KEY`; the Bun server prefers `GEMINI_API_KEY` and merely tolerates
   the studio spelling (`src/server/src/config.ts:119,126`), and server-side user-facing
@@ -335,7 +335,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /position — directional semantics now perceptually machine-checked; the literal IK arm-raise is a PRIMITIVE GAP (TASK-9, iteration 3, 2026-07-03)
 
-- **Skill**: `.claude/skills/position/SKILL.md` §1.1 — the perceptual consequences of the
+- **Skill**: `plugin/unreal-skills/skills/position/SKILL.md` §1.1 — the perceptual consequences of the
   coordinate conventions: with forward=+X and +Z up, world +Y renders screen-RIGHT of a
   +X-facing viewpoint, and +Z renders UP.
 - **Test**: `tests/skills/test_position_perceptual_directions.py` — colored-marker
@@ -406,7 +406,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /texture + material authoring — both graph idioms now perceptually machine-checked (TASK-10, iteration 3, 2026-07-03)
 
-- **Skill**: `.claude/skills/texture/SKILL.md` (and the material-authoring primitives its
+- **Skill**: `plugin/unreal-skills/skills/texture/SKILL.md` (and the material-authoring primitives its
   workflow rides on: `material_create shading_model:Unlit`, `material_add_expression`
   incl. the Custom-HLSL escape hatch, `material_connect`, `material_apply_to_actor`).
 - **Test**: `tests/skills/test_texture_perceptual.py` — 3/3 green on the FIRST full
@@ -449,7 +449,7 @@ names the skill, the associated test (if any), the evidence, and the proposed ch
 
 ### /capture-pose — framing differential is the anti-rubber-stamp pattern for capture claims; editor-level pose→pixels tracking is now machine-checked, the PIE path xfails on the open bug (TASK-11, iteration 3, 2026-07-03)
 
-- **Skill**: `.claude/skills/capture-pose/SKILL.md` — the core claim that a recorded pose,
+- **Skill**: `plugin/unreal-skills/skills/capture-pose/SKILL.md` — the core claim that a recorded pose,
   replayed through the capture rig, governs the pixels that come back.
 - **Test**: `tests/skills/test_capture_pose_framing.py` — first full
   `tests/run.ps1 --ue-mode=gui` launch: **1 passed, 1 xfailed in 37.3s**, clean teardown

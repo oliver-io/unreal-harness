@@ -1,6 +1,7 @@
 ---
 name: gamelift
-description: Advise on integrating AWS GameLift (GameLift Servers) — choosing a hosting model, designing game session queues and FlexMatch matchmaking, and deciding how much of the match/place/run lifecycle to own vs delegate to AWS. Use when someone asks "how do I set up a GameLift queue", "add matchmaking", "how should we host dedicated servers", "do we need FlexMatch", "custom control plane vs AWS-native", "why are placements timing out", or wants to understand GameLift's hosting/placement model before building. Neutral, vendor-fact-grounded, code-free advisor — not a code generator.
+description: >-
+  Advise on integrating AWS GameLift (GameLift Servers) — choosing a hosting model, designing game session queues and FlexMatch matchmaking, and deciding how much of the match/place/run lifecycle to own vs delegate to AWS. Use when someone asks "how do I set up a GameLift queue", "add matchmaking", "how should we host dedicated servers", "do we need FlexMatch", "custom control plane vs AWS-native", "why are placements timing out", or wants to understand GameLift's hosting/placement model before building. Neutral, vendor-fact-grounded, code-free advisor — not a code generator.
 user-invocable: true
 allowed-tools: [Read, Grep, Glob, WebSearch, WebFetch, AskUserQuestion]
 ---

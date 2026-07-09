@@ -33,6 +33,20 @@ same change that alters behavior.
   cadence, zero extra bridge traffic); zero-state (editorUp false, lastProbeAt
   null) is HTTP 200 before the first probe so pollers branch on fields, not
   errors. Loopback-only like the rest of the listener.
+- **Portable skills extracted into the `unreal-skills` Claude Code plugin**
+  (`plugin/unreal-skills/`, marketplace manifest at `.claude-plugin/marketplace.json`).
+  18 skills moved out of `.claude/skills/` (verification, authoring, design/docs,
+  advisors, analysis, build); the Unreal->Neo4j ingester moved from `tools/neo4j/`
+  into the skill itself (`plugin/unreal-skills/skills/neo4j/tool/`,
+  `scripts/neo4j.{ps1,sh}` repointed). Harness-operating skills (`onboard`,
+  `bootstrap`, `automated-tester`, `refactor`) stay in `.claude/skills/`. Install
+  elsewhere: `/plugin marketplace add <this repo>` then `/plugin install
+  unreal-skills@unreal-harness`; the plugin manifest also declares the harness's
+  MCP endpoint (`http://127.0.0.1:8765/mcp`), so installing it auto-wires the
+  Unreal tool surface in any repo when the harness server is running. All moved SKILL.md frontmatter descriptions
+  converted to YAML block scalars (`claude plugin validate` now passes; the old
+  plain scalars with embedded `:` were silently dropping metadata).
+
 - **Test-harness project-identity guard.** Editor-gated tests can no longer run
   against a project the harness doesn't own: the Bun `editorSuite` now verifies the
   attached editor's `project_context` (settings_paths[0]) matches the test project
@@ -70,7 +84,7 @@ same change that alters behavior.
   re-import, a committed per-project export script (in-session or headless
   `gimp-console-3`; ad-hoc exports rejected) emitting a validating `manifest.json`,
   and optional CPU hit-mask (`WMSK`) + bounding-box sidecars for irregular-shape
-  interaction. New template: `.claude/skills/gimp-import/scripts/gimp_export_contract.py`.
+  interaction. New template: `plugin/unreal-skills/skills/gimp-import/scripts/gimp_export_contract.py`.
 - `physics_material_create`: typed creation of `UPhysicalMaterial` assets
   (friction / static friction / restitution / density; optional per-material
   combine modes that also flip their override flags). Closes the gap where the

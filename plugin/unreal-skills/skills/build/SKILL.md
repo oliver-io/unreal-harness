@@ -1,6 +1,7 @@
 ---
 name: build
-description: Build an Unreal Engine project across its flavors — the editor target for local play-in-editor (PIE), a standalone/packaged Windows client, and a dedicated server (local dev or a cooked Linux build for remote/cloud hosting). Use when someone wants to "build the game", "build the editor", "compile the project", "package for Windows", "cook content", "make a client/server build", "build the dedicated server", "make a shipping build", "build for the cloud/GameLift", or asks which build command they need and what config/platform to use. Generic across any UE project with similar Editor/Game/Server target architecture — it derives names from the project, hardcodes none. Knows the compile-vs-cook-vs-package distinction, the target matrix, and the constraints that silently break builds.
+description: >-
+  Build an Unreal Engine project across its flavors — the editor target for local play-in-editor (PIE), a standalone/packaged Windows client, and a dedicated server (local dev or a cooked Linux build for remote/cloud hosting). Use when someone wants to "build the game", "build the editor", "compile the project", "package for Windows", "cook content", "make a client/server build", "build the dedicated server", "make a shipping build", "build for the cloud/GameLift", or asks which build command they need and what config/platform to use. Generic across any UE project with similar Editor/Game/Server target architecture — it derives names from the project, hardcodes none. Knows the compile-vs-cook-vs-package distinction, the target matrix, and the constraints that silently break builds.
 user-invocable: true
 allowed-tools: [Read, Grep, Glob, Bash, AskUserQuestion]
 ---
@@ -84,7 +85,8 @@ The default "build the game so I can play it / drive it with the MCP." Compiles 
 **Editor** target (project module + every enabled plugin, including this repo's
 UnrealMCP). No cook, no package — the editor cooks on demand.
 
-**This repo already scripts it** — prefer the script over a raw UBT line:
+**The harness repo already scripts it** — when working there, prefer the script over a
+raw UBT line (elsewhere, use the UBT line below directly):
 
 ```bash
 scripts/build-editor.ps1                 # builds <Project>Editor, Development, Win64

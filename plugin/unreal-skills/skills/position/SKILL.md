@@ -1,6 +1,7 @@
 ---
 name: position
-description: Specialist for reasoning about the position, orientation, and spatial geometry of objects in an Unreal Engine world — actors, the camera, skeletal-mesh bones, sockets, attached meshes, and projectiles. Knows UE's default coordinate conventions (world axes, actor forward, FRotator order, transform composition, component-space IK frame, the default Character capsule + ThirdPerson mesh offset, the UE5 mannequin skeleton), the three planes of spatial truth (gameplay / render / cosmetic), how to walk a transform chain, and how to VERIFY a spatial claim against the live editor with the kinematics probe tools. Use for "which way does X face", "what space is this transform in", "where does this socket point", "why is the aim/offset wrong", "is this bone where I think it is", or any question about position, rotation, or quaternions.
+description: >-
+  Specialist for reasoning about the position, orientation, and spatial geometry of objects in an Unreal Engine world — actors, the camera, skeletal-mesh bones, sockets, attached meshes, and projectiles. Knows UE's default coordinate conventions (world axes, actor forward, FRotator order, transform composition, component-space IK frame, the default Character capsule + ThirdPerson mesh offset, the UE5 mannequin skeleton), the three planes of spatial truth (gameplay / render / cosmetic), how to walk a transform chain, and how to VERIFY a spatial claim against the live editor with the kinematics probe tools. Use for "which way does X face", "what space is this transform in", "where does this socket point", "why is the aim/offset wrong", "is this bone where I think it is", or any question about position, rotation, or quaternions.
 user-invocable: true
 allowed-tools:
   - Read

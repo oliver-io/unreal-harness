@@ -228,7 +228,7 @@ bridge operation (server-sendable wire names ∩ C++ dispatch keys, plus `ping`;
 regenerate with `tests/tools/regen_operations.py` after adding a command). The
 check fails while any manifest op lacks a test — and it is **expected to be red
 until coverage is complete**: the failure message *is* the scoreboard, a completion
-percentage plus the exact list of uncovered ops (~246/281 as of 2026-07). It also
+percentage plus the exact list of uncovered ops (276/281 as of 2026-07-04). It also
 catches typo'd op names (a `@covers` name absent from the manifest fails
 immediately). Server-local tools (`catalog_*`, `video_analyze`, composites, …)
 never touch the bridge and are excluded from the manifest by construction; live
@@ -236,10 +236,11 @@ legacy wire overrides (e.g. `bp_add_node` sends `add_blueprint_node`) appear und
 their wire names.
 
 > **Known asymmetry:** the Bun suite (`src/server/test/`) **mirrors** the pytest
-> tests but does **not** yet enforce a coverage gate. When you add a command, add the
-> `@covers` pytest test (keeps the oracle green) *and* mirror it into the Bun suite
-> for the fast in-process path. Closing this gap (a Bun coverage oracle) is a
-> standing harness improvement.
+> tests. It enforces its own coverage gate only for the **server-local** tools that
+> pytest's manifest can't see (`src/server/test/coverage.test.ts` — `catalog_*`,
+> `code_*`, `result_read`, composites, etc.); bridge-op coverage is still enforced
+> pytest-side only. When you add a command, add the `@covers` pytest test (keeps the
+> oracle green) *and* mirror it into the Bun suite for the fast in-process path.
 
 ---
 
