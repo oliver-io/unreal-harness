@@ -5,6 +5,31 @@ change that alters behavior.
 
 ## Unreleased
 
+- **Touch-gesture editor camera control (portable.dev#19).** `MCPStreamingCommands`
+  handles `emitUIInteraction` camera commands from the phone over the PS2 data
+  channel: `look`/`pan`/`dolly` (drag/pinch), `orbit`+`orbitStart` (hold-then-drag
+  around a hit-tested pivot), `tap`/`focus` (hit-test select / F-frame), `pie`, and
+  `viewres`. Applied to the STREAMED level viewport via
+  `GetFirstActiveLevelViewport()` — **not** `GCurrentLevelEditingViewportClient`,
+  which is null on an untouched (unfocused) streamed editor and silently no-opped
+  every gesture (the "gestures do nothing" RCA). Full reference:
+  [`docs/EDITOR-STREAMING.md`](../../../docs/EDITOR-STREAMING.md).
+- **Smooth camera integration (AAA feel).** look/pan/dolly no longer apply on packet
+  arrival (irregular WebRTC/JS cadence → stutter); they accumulate and a per-frame
+  `FTSTicker` bleeds them into the camera with light exponential smoothing (~30ms)
+  and redraws every frame while in motion — steady render cadence, not packet cadence.
+  Idle → no forced redraw. (`MCPTickCameraSmoothing`.)
+- **Phone-aspect editor-window matching (`{t:"viewres",w,h}`), HARDENED.** The reshape
+  is `SWindow::Resize` on the same window PS2 captures; applying it INLINE as the
+  stream went active deadlocked the encoder (editor hung, no crash dump). Now it is
+  never inline: `MCPScheduleViewResGameThread` defers + debounces (~2.5s quiet) and
+  **retries until resolved** (`EMCPViewResResult`) — a fresh stream isn't realized at
+  the debounce mark, and the old one-shot gave up there (the "wrong res until the
+  third reconnect" race). Never during PIE; no-op within 2% aspect tolerance.
+- **Full-rate rendering while streaming.** `OnStreamingStarted` disables
+  `UEditorPerformanceSettings::bThrottleCPUWhenNotForeground` (restored on stop) so the
+  editor keeps ticking/rendering for the phone when the PC window is unfocused.
+
 - **Pixel Streaming 2 control (portable.dev#19 M2).** New
   `Commands/MCPStreamingCommands.(h|cpp)` handler + bridge dispatch:
   `stream_start` {viewer_port?=8890, streamer_port?=8888} sets the PS2 editor

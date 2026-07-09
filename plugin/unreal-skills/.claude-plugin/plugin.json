@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "unreal-skills",
+  "displayName": "Unreal Harness Skills",
+  "version": "0.1.0",
+  "description": "The Unreal Claude Harness as an installable plugin: ~20 curated skills for C++-forward Unreal Engine development, visual feedback, automated testing, networking/hosting, and graph projection — plus the unrealMCP server that drives a live Unreal Editor over a TCP bridge.",
+  "author": {
+    "name": "oliver-io",
+    "url": "https://github.com/oliver-io"
+  },
+  "homepage": "https://github.com/oliver-io/unreal-harness",
+  "repository": "https://github.com/oliver-io/unreal-harness",
+  "license": "MIT",
+  "keywords": ["unreal-engine", "gamedev", "mcp", "skills", "ue5"]
+}

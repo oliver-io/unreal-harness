@@ -6,16 +6,27 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "bash",
-            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/openai-cred-gate.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/openai-cred-gate.py\"",
+            "shell": "bash"
           },
           {
             "type": "command",
-            "shell": "bash",
-            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/gemini-cred-gate.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/gemini-cred-gate.py\"",
+            "shell": "bash"
           }
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "unreal-skills@unreal-harness": true
+  },
+  "extraKnownMarketplaces": {
+    "unreal-harness": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
   }
 }

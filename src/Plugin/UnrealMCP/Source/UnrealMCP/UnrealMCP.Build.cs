@@ -118,7 +118,8 @@ public class UnrealMCP : ModuleRules
 				// accepted for the PoC.
 				"PixelStreaming2Editor",   // IPixelStreaming2EditorModule (Start/StopStreaming, ports)
 				"PixelStreaming2",         // IPixelStreaming2Module (GetStreamerIds / FindStreamer)
-				"PixelStreaming2Core",     // IPixelStreaming2Streamer (IsStreaming, start/stop events)
+				"PixelStreaming2Core",     // IPixelStreaming2Streamer (IsStreaming, start/stop events, GetInputHandler)
+				"PixelStreaming2Input",    // IPixelStreaming2InputHandler (RegisterMessageHandler "UIInteraction" — touch camera control)
 				"PixelStreaming2Settings", // EPixelStreaming2EditorStreamTypes (PixelStreaming2SettingsEnums.h)
 				"PixelStreaming2Servers"   // PixelStreaming2Servers.h (transitively included by the editor-module interface)
 			}

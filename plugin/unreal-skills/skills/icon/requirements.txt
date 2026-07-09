@@ -1,0 +1,7 @@
+# Host-side deps for the icon skill's generation/review scripts.
+#   pip install -r requirements.txt   # run from this skill's directory
+# (the /see skill, used for icon geometry, additionally needs numpy)
+openai>=1.0
+httpx>=0.24
+python-dotenv>=1.0
+Pillow>=10.0

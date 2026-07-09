@@ -165,6 +165,26 @@ Other agents may be driving the **same** live editor, tree, and build lock right
 - **Pre-existing build errors in files you didn't edit → HANDS OFF.** No stubs, no
   signature "fixes", even if they block your link — report them as someone else's WIP.
   The only files you may touch to fix a build are ones you already changed this task.
+- **🚫 NEVER CLEAN THE ENGINE BUILD CACHE WITHOUT EXPLICIT CONFIRMATION — top destructive footgun.**
+  Do NOT pass **`-Rebuild`** or **`-Clean`** to `Build.bat`, and do NOT delete
+  `Engine/Binaries`, `Engine/Intermediate`, or a target's obj/DLLs. This engine is a **source
+  build relocated C:→D:**, so a clean **deletes the cached engine build** and forces a **full
+  ~2h recompile from scratch** — and if interrupted it leaves the engine un-bootable
+  ("Missing <Project> Modules" / "different engine version"). There is no backup. Confirming a
+  clean is a **gate**, every time, no exceptions. Use ONLY plain incremental builds
+  (`Build.bat <Target> Win64 Development -Project=<uproject> -WaitMutex`, **no** `-Rebuild`/
+  `-Clean`) — they preserve the cache and rebuild only what changed. To land a plugin change,
+  build **only the changed module** or use `editor_live_coding_compile`; never the whole target.
+- **🚫 NEVER copy the project's `UnrealEditor.modules` into a plugin's `Binaries/Win64/`.**
+  The editor's module check (`FModuleManager::IsModuleUpToDate` → `FindModulePathsInDirectory`)
+  reads **every** `.modules` manifest on the search path and requires each module to resolve to
+  **exactly one** file (`ModulePathMap.Num() == 1`). The project manifest lists ALL project
+  modules (game + plugins); copying it into a plugin dir makes those modules appear **twice** →
+  `Num()==2` → **"Incompatible or missing module"** on boot, which **no rebuild fixes** (it's a
+  manifest dup, not a build problem). When syncing a freshly-built plugin DLL to its `Binaries`
+  dir (the dual-output gotcha), copy **only the `.dll`/`.pdb`** — leave the plugin's own
+  `.modules` alone (or delete it so it's skipped; the editor then loads the module from the
+  project manifest). A stale/absent plugin manifest is harmless; a project-manifest copy is fatal.
 - **Full rebuild kills everyone's session — ask first.** Prefer
   `editor_live_coding_compile` for `.cpp`-body edits; reflection changes (`UPROPERTY`/
   `UFUNCTION`/headers/vtable) need the stop → build → launch cycle, serialized by the

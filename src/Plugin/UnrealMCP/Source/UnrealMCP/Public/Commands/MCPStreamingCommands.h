@@ -4,6 +4,7 @@
 #include "Json.h"
 
 class UMCPBridge;
+class IPixelStreaming2Streamer;
 
 /**
  * Snapshot of the editor's Pixel Streaming 2 state, cached on the bridge so
@@ -42,7 +43,11 @@ struct FMCPStreamState
  * status) when the PixelStreaming2 plugin or its modules are unavailable.
  *
  * NOT in the PIE blocklist on purpose: streaming must keep working during a
- * Play-In-Editor session (AutoStreamPIE hands the stream to the PIE viewport).
+ * Play-In-Editor session. AutoStreamPIE is deliberately OFF (stream_start sets
+ * the CVar false): the phone's {t:"pie",on} UIInteraction command starts PIE
+ * IN the level viewport (DestinationSlateViewport), so the single "Editor"
+ * streamer keeps showing the game and the UIInteraction binding stays live —
+ * a second PIE streamer ("DefaultStreamer") would fork viewers and lack it.
  */
 class FMCPStreamingCommands
 {
@@ -61,8 +66,16 @@ private:
     void RefreshStreamStateCache();
 
     /** Bind (once) to the editor streamer's OnStreamingStarted/Stopped events so
-     *  the cache also tracks stops that don't come through stream_stop. */
+     *  the cache also tracks stops that don't come through stream_stop. Also binds
+     *  the touch-gesture camera-control handler on the streamer's input handler. */
     void EnsureStreamerDelegatesBound();
+
+    /** Register the "UIInteraction" data-channel message handler on the given
+     *  streamer's input handler, so mobile camera-delta commands drive the active
+     *  level-editor viewport free camera (portable.dev#19 touch camera control).
+     *  Static + stateless (drives the global active viewport) so it is safe to
+     *  call from the streamer's OnStreamingStarted delegate. Idempotent. */
+    static void BindCameraControl(IPixelStreaming2Streamer* Streamer);
 
     /** Owning bridge (the handler is a TSharedPtr member of the bridge, so the
      *  raw back-pointer cannot outlive it; delegate lambdas re-guard with a
