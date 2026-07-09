@@ -2,8 +2,14 @@
  * Plain-HTTP liveness surface, for an EXTERNAL local process (e.g. the
  * Portable backend) to poll editor state without an MCP session:
  *
- *   GET /status → { editorUp, phase, pieActive, liveCodingInProgress,
- *                   project, lastProbeAt, stream? }
+ *   GET /status → neutral stream-source protocol:
+ *                   { ready, phase, meta:{pieActive,liveCodingInProgress},
+ *                     project, lastProbeAt, stream? }
+ *                 plus LEGACY aliases (dual-emit for back-compat):
+ *                   editorUp (=ready), pieActive, liveCodingInProgress.
+ * Neutral consumers read `ready`/`meta`; the top-level editorUp/pieActive/
+ * liveCodingInProgress are retained only until no legacy poller remains.
+ * See mobile-vgit/docs/STREAM-SOURCE-PROTOCOL.md.
  *
  * `stream` ({active, viewerPort, streamers} — portable.dev#19 M2) is surfaced
  * only when the cached `mcp_status` reply carries the bridge's `stream` field
@@ -23,11 +29,27 @@ import { basename } from "node:path";
 import { getLastEditorStatus, type EnginePhase } from "../bridge/lifecycle.ts";
 
 export interface StatusView {
-  /** True when the last watchdog classification was not "down". */
-  editorUp: boolean;
+  // ── neutral stream-source protocol (primary contract; see
+  //    mobile-vgit/docs/STREAM-SOURCE-PROTOCOL.md) ──
+  /** Neutral readiness flag — mirror of the legacy `editorUp`. */
+  ready: boolean;
+  /** Producer lifecycle phase. */
   phase: EnginePhase;
+  /**
+   * Opaque producer-specific blob. Neutral consumers stash this without reading
+   * it; producers carry their own flags here (PIE / live-coding state, etc.).
+   */
+  meta: Record<string, unknown>;
+
+  // ── legacy aliases — retained for back-compat; neutral consumers read
+  //    `ready`/`meta`. Safe to drop once no legacy poller remains. ──
+  /** LEGACY alias of `ready`. True when the last watchdog classification was not "down". */
+  editorUp: boolean;
+  /** LEGACY alias of `meta.pieActive`. */
   pieActive: boolean;
+  /** LEGACY alias of `meta.liveCodingInProgress`. */
   liveCodingInProgress: boolean;
+
   /** Basename of UNREAL_PROJECT_ROOT, or null when unset. */
   project: string | null;
   /** Epoch ms of the last watchdog probe, or null before the first one. */
@@ -77,11 +99,18 @@ export async function handleStatusHttp(
     // Same env-first convention as domains/editor.ts — config.ts does not
     // wrap UNREAL_PROJECT_ROOT.
     const projectRoot = process.env.UNREAL_PROJECT_ROOT;
+    const ready = phase !== "down";
+    const pieActive = snap?.status?.pie_active === true;
+    const liveCodingInProgress = snap?.status?.live_coding_in_progress === true;
     const view: StatusView = {
-      editorUp: phase !== "down",
+      // Neutral fields (primary contract).
+      ready,
       phase,
-      pieActive: snap?.status?.pie_active === true,
-      liveCodingInProgress: snap?.status?.live_coding_in_progress === true,
+      meta: { pieActive, liveCodingInProgress },
+      // Legacy aliases (dual-emit for back-compat).
+      editorUp: ready,
+      pieActive,
+      liveCodingInProgress,
       project: projectRoot ? basename(projectRoot.replace(/[\\/]+$/, "")) || null : null,
       lastProbeAt: snap?.probedAt ?? null,
     };

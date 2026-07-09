@@ -240,25 +240,45 @@ UnrealMCP is present, the transitive dep means the current session can usually a
 
 **B. Harness running** — `bun run mcp` in `unreal/mcp/` listens on loopback `127.0.0.1:8765`
 (`UNREAL_MCP_PORT`) and bridges to the running editor over TCP **55557** (MCPBridge). It serves
-`GET /status`, `POST /control/stream/{start,stop}`. It talks to whatever editor is up — no
-per-project config.
+`GET /status`, `POST /control/stream/{start,stop}`, and `GET /stream-source` (the
+self-describing descriptor — see **D**). It talks to whatever editor is up — no per-project config.
+
+**Neutral `/status` contract (stream-source protocol).** `GET /status` speaks the neutral
+schema from `mobile-vgit/docs/STREAM-SOURCE-PROTOCOL.md` — the primary fields are:
+
+- `ready: boolean` — producer is up / reachable.
+- `phase: string` — producer lifecycle phase.
+- `meta: { pieActive, liveCodingInProgress }` — opaque producer-specific blob a neutral
+  consumer stashes without interpreting.
+- `project`, `lastProbeAt`, and `stream?` (`{active, viewerPort, streamers}`) as before.
+
+For back-compat the harness **also dual-emits** the LEGACY aliases at the top level:
+`editorUp` (= `ready`), `pieActive`, `liveCodingInProgress`. These are retained only until no
+legacy poller remains — neutral consumers should read `ready`/`meta`.
 
 **C. Portable api — all defaults, no config needed** if the harness is on 8765:
 `PORTABLE_ENGINE_STATUS_URL` = `http://127.0.0.1:8765/status`, `PORTABLE_ENGINE_CONTROL_URL`
 = `http://127.0.0.1:8765`, `PORTABLE_STREAM_VIEWER_PORT` = `8890`. The api polls `/status` →
 UE badge → tap → `POST /control/stream/start` → reverse-proxies viewer **8890** through the relay.
 
-**Ports:** 8765 harness (status/control/mcp) · 55557 editor TCP bridge · 8890 PS2 viewer/HTTP ·
-8888 PS2 streamer WS.
+**Ports / endpoints:** 8765 harness (`/mcp` · `/status` · `/control/stream/{start,stop}` ·
+`/stream-source`) · 55557 editor TCP bridge · 8890 PS2 viewer/HTTP · 8888 PS2 streamer WS.
 
-**D. Forward-looking config artifact — `portable.json` at the project root.** Not consumed yet
-(Phase 2 of `mobile-vgit/docs/STREAM-SOURCE-PROTOCOL.md` §4), but authored now as the durable,
-machine-readable declaration of the source (kind/control/player/input/match). It replaces the
-hardcoded env defaults once the manifest reader lands. See `unreal/mobile-game/portable.json`.
+**D. Self-describing descriptor — `GET /stream-source`.** The harness serves a neutral
+`StreamSourceDescriptor` over its control port describing THIS producer: `sourceId`,
+`sourceKind`, `title`, `icon`, `control.{baseUrl,status,start,stop,descriptor}`,
+`player.{type,signalling,viewerPort,urlParams}`, `input.{scheme,controls}`, and an opaque
+`meta` (`{engine, pieCapable}`). Ports come from `config.ts` (`mcpPort`/`viewerPort`).
+
+This **REPLACES the deprecated static `portable.json`** model: a producer now describes itself
+at runtime over its control port, so there is no per-repo config file to author or keep in sync
+(`unreal/mobile-game/portable.json` is deprecated and slated for removal). See
+`mobile-vgit/docs/STREAM-SOURCE-PROTOCOL.md`.
 
 **Smoke test (no phone needed):**
 ```bash
-curl -s http://127.0.0.1:8765/status                       # editorUp:true, project:"<name>"
+curl -s http://127.0.0.1:8765/stream-source                # neutral descriptor (replaces portable.json)
+curl -s http://127.0.0.1:8765/status                       # ready:true (legacy editorUp:true), project:"<name>"
 curl -s -X POST http://127.0.0.1:8765/control/stream/start -d '{"viewerPort":8890}'  # {ok:true,...}
 curl -s http://127.0.0.1:8765/status                       # stream.active:true, streamers:["Editor"]
 curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8890/   # 200 = player page serving

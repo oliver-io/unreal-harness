@@ -57,13 +57,36 @@ describe("GET /status", () => {
     expect(res.headers.get("content-type")).toBe("application/json");
     const body: any = await res.json();
     expect(body).toEqual({
-      editorUp: false,
+      ready: false,
       phase: "down",
+      meta: { pieActive: false, liveCodingInProgress: false },
+      editorUp: false,
       pieActive: false,
       liveCodingInProgress: false,
       project: null,
       lastProbeAt: null,
     });
+  });
+
+  test("neutral fields mirror the legacy aliases (ready===editorUp, meta.pieActive===legacy pieActive)", async () => {
+    lifecycle.setLastEditorStatus({
+      phase: "interactive",
+      status: {
+        ready: true,
+        phase: "interactive",
+        pie_active: true,
+        live_coding_in_progress: true,
+      },
+      probedAt: 1_720_000_000_000,
+    });
+    const res = await fetch(`${base}/status`);
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect(body.ready).toBe(body.editorUp);
+    expect(body.meta.pieActive).toBe(body.pieActive);
+    expect(body.meta.liveCodingInProgress).toBe(body.liveCodingInProgress);
+    expect(body.ready).toBe(true);
+    expect(body.meta).toEqual({ pieActive: true, liveCodingInProgress: true });
   });
 
   test("interactive snapshot: editorUp true, PIE/live-coding flags surfaced verbatim", async () => {
@@ -81,8 +104,10 @@ describe("GET /status", () => {
     expect(res.status).toBe(200);
     const body: any = await res.json();
     expect(body).toEqual({
-      editorUp: true,
+      ready: true,
       phase: "interactive",
+      meta: { pieActive: true, liveCodingInProgress: false },
+      editorUp: true,
       pieActive: true,
       liveCodingInProgress: false,
       project: null,
@@ -180,8 +205,10 @@ describe("GET /status", () => {
     const body: any = await res.json();
     expect("stream" in body).toBe(false);
     expect(body).toEqual({
-      editorUp: true,
+      ready: true,
       phase: "interactive",
+      meta: { pieActive: true, liveCodingInProgress: false },
+      editorUp: true,
       pieActive: true,
       liveCodingInProgress: false,
       project: null,

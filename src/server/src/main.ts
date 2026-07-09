@@ -19,6 +19,7 @@ import { startPieReconciler } from "./pie/reconciler.ts";
 import { handleBuildHttp } from "./build/http.ts";
 import { handleControlHttp } from "./control/http.ts";
 import { handleStatusHttp } from "./status/http.ts";
+import { handleDescriptorHttp } from "./descriptor/http.ts";
 import { log } from "./log.ts";
 
 const MCP_PATH = "/mcp";
@@ -104,6 +105,16 @@ const httpServer = createServer((req, res) => {
   if (url.startsWith("/status")) {
     handleStatusHttp(req, res).catch((err) => {
       log.error(`status request failed: ${err instanceof Error ? err.message : String(err)}`);
+      if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "internal server error" }));
+    });
+    return;
+  }
+  // Plain-HTTP self-describing StreamSourceDescriptor for external local pollers
+  // (replaces the deprecated static portable.json; not MCP JSON-RPC).
+  if (url.startsWith("/stream-source")) {
+    handleDescriptorHttp(req, res).catch((err) => {
+      log.error(`stream-source request failed: ${err instanceof Error ? err.message : String(err)}`);
       if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "internal server error" }));
     });
