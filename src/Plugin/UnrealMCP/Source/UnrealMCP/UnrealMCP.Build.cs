@@ -99,6 +99,7 @@ public class UnrealMCP : ModuleRules
 				"Slate",
 				"SlateCore",
 				"LevelEditor",        // SLevelViewport + FLevelEditorModule for editor_window_screenshot viewport mode
+				"StatusBar",          // UStatusBarSubsystem::ForceDismissDrawer (PIE tap: the Output Log drawer shadows the viewport hit-test)
 
 				"Kismet",
 				"Projects",

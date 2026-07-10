@@ -7,6 +7,11 @@
 #include "Async/Async.h"                    // AsyncTask, ENamedThreads (defensive game-thread marshal)
 #include "Serialization/MemoryReader.h"     // FMemoryReader (UIInteraction payload)
 #include "Math/RotationMatrix.h"            // FRotationMatrix camera basis
+#include "Misc/CommandLine.h"               // NVENC leak guard: command-line override parse
+#include "Misc/ConfigCacheIni.h"            // NVENC leak guard: GGameIni D3D12UsesCUDA flag
+#include "Misc/EngineVersion.h"             // NVENC leak guard: 5.7+ gate
+#include "Misc/Parse.h"                     // NVENC leak guard: FParse::Bool
+#include "RHI.h"                            // NVENC leak guard: RHIGetInterfaceType / IsRHIDeviceNVIDIA
 
 // Editor level-viewport camera (touch-gesture camera control, portable.dev#19).
 #include "Editor.h"                         // UnrealEd: GCurrentLevelEditingViewportClient, GEditor
@@ -23,6 +28,7 @@
 // All modules already in UnrealMCP.Build.cs (Engine/UnrealEd public; LevelEditor/
 // Slate/SlateCore private) — deliberately NO IMainFrameModule (module not a dep).
 #include "SLevelViewport.h"                 // LevelEditor: SLevelViewport::GetLevelViewportClient
+#include "StatusBarSubsystem.h"             // StatusBar: ForceDismissDrawer (PIE tap — the Output Log drawer shadows the viewport)
 #include "SEditorViewport.h"                // UnrealEd: SEditorViewport::GetSceneViewport
 #include "Slate/SceneViewport.h"            // Engine: FSceneViewport::FindWindow / GetSizeXY
 #include "Widgets/SWindow.h"                // SlateCore: SWindow::Resize / GetClientSizeInScreen
@@ -142,6 +148,77 @@ namespace
             return false;
         }
         return true;
+    }
+
+    // ── NVENC-D3D12 memory-leak guard (see ../mcp/docs/BUGS.md: "Editor OOM-killed
+    // after long Pixel Streaming sessions") ──────────────────────────────────────
+    // UE 5.7+ regression: FVideoEncoderNVENCD3D12::SendFrame registers/unregisters
+    // the input texture and output bitstream with the driver EVERY encoded frame,
+    // and recent NVIDIA drivers retain host memory across that churn (~65-115 MB/s
+    // while any viewer is subscribed) until the editor is silently OOM-killed
+    // (fail-fast inside nvEncodeAPI64.dll, no crash dialog). ue5-main added an
+    // [AVCodecs.NvEnc] D3D12UsesCUDA flag that routes D3D12 frames through the
+    // safe pre-5.7 CUDA pathway — but NO stock 5.7 engine has that code, so on a
+    // standard engine the flag is inert and the default H.264 hardware path leaks.
+    //
+    // Guard: when this process would take the leaking path (5.7+, D3D12 RHI,
+    // NVIDIA GPU, hardware codec) and D3D12UsesCUDA is NOT set, force the
+    // verified-safe VP8 software codec before streaming starts. Users on a
+    // patched source build or an engine that ships the flag opt back into NVENC
+    // by setting [AVCodecs.NvEnc] D3D12UsesCUDA=1 in DefaultGame.ini (the exact
+    // flag the engine itself reads), or -AVCodecs.NvEnc.D3D12UsesCUDA=true.
+    void MCPApplyNvEncD3D12LeakGuard()
+    {
+#if PLATFORM_WINDOWS
+        const FEngineVersion& Ver = FEngineVersion::Current();
+        const bool bLeakProneEngine =
+            Ver.GetMajor() > 5 || (Ver.GetMajor() == 5 && Ver.GetMinor() >= 7);
+        if (!bLeakProneEngine || !GDynamicRHI)
+        {
+            return;
+        }
+        if (RHIGetInterfaceType() != ERHIInterfaceType::D3D12 || !IsRHIDeviceNVIDIA())
+        {
+            return;
+        }
+
+        // Mirror the engine-side read exactly (GGameIni, command line overrides).
+        bool bD3D12UsesCUDA = false;
+        GConfig->GetBool(TEXT("AVCodecs.NvEnc"), TEXT("D3D12UsesCUDA"), bD3D12UsesCUDA, GGameIni);
+        FParse::Bool(FCommandLine::Get(), TEXT("AVCodecs.NvEnc.D3D12UsesCUDA="), bD3D12UsesCUDA);
+        if (bD3D12UsesCUDA)
+        {
+            UE_LOG(LogUnrealMCP, Log,
+                TEXT("MCPStreaming: NVENC leak guard — D3D12UsesCUDA is set; assuming an engine that ")
+                TEXT("honors it (patched 5.7 source build or 5.8+) and keeping the hardware encoder. ")
+                TEXT("On a STOCK 5.7 engine this flag is inert and the leak persists — if editor ")
+                TEXT("private bytes climb while a viewer is connected, unset the flag to fall back to VP8."));
+            return;
+        }
+
+        IConsoleVariable* CodecVar =
+            IConsoleManager::Get().FindConsoleVariable(TEXT("PixelStreaming2.Encoder.Codec"));
+        if (!CodecVar)
+        {
+            return; // no PS2 codec CVar (plugin unavailable) — nothing to guard
+        }
+        const FString Codec = CodecVar->GetString();
+        if (Codec.Equals(TEXT("VP8"), ESearchCase::IgnoreCase) ||
+            Codec.Equals(TEXT("VP9"), ESearchCase::IgnoreCase))
+        {
+            return; // already on a software codec — safe
+        }
+
+        CodecVar->Set(TEXT("VP8"), ECVF_SetByCode);
+        UE_LOG(LogUnrealMCP, Warning,
+            TEXT("MCPStreaming: NVENC leak guard — forced the Pixel Streaming codec from %s to VP8 ")
+            TEXT("(software). This engine (%d.%d, D3D12 RHI, NVIDIA GPU) takes the UE 5.7+ NVENC-D3D12 ")
+            TEXT("path that leaks host memory every encoded frame on recent NVIDIA drivers and ")
+            TEXT("eventually OOM-kills the editor. To use hardware H.264 instead, run an engine with ")
+            TEXT("the AVCodecs.NvEnc D3D12UsesCUDA backport (ue5-main) and set [AVCodecs.NvEnc] ")
+            TEXT("D3D12UsesCUDA=1 in DefaultGame.ini. Details: docs/BUGS.md."),
+            *Codec, Ver.GetMajor(), Ver.GetMinor());
+#endif // PLATFORM_WINDOWS
     }
 
     TSharedPtr<FJsonObject> MCPStreamingUnavailableError()
@@ -455,8 +532,162 @@ namespace
      *  (FLevelEditorViewportClient::ProcessClick): child actors resolve to
      *  their outermost parent, SelectNone + SelectActor(bNotify=true) fires
      *  NoteSelectionChange (outliner/details stay in sync). */
+    /** During an active PIE session, a phone tap must be a real CLICK — synthesized
+     *  Slate pointer events at the tap position (they route into UMG widgets AND the
+     *  game viewport's player input), never an editor hit-proxy selection. GAME THREAD
+     *  ONLY. Maps normalized 0..1 video coords through the streamed level-viewport
+     *  widget's cached geometry into absolute desktop coords. */
+    void MCPApplyPieClickGameThread(double NX, double NY)
+    {
+        FLevelEditorModule* LevelEditorModule =
+            FModuleManager::GetModulePtr<FLevelEditorModule>(TEXT("LevelEditor"));
+        if (!LevelEditorModule)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCP PIE tap: LevelEditor module not loaded"));
+            return;
+        }
+        const TSharedPtr<IAssetViewport> ActiveViewport = LevelEditorModule->GetFirstActiveViewport();
+        if (!ActiveViewport.IsValid())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCP PIE tap: no active level viewport"));
+            return;
+        }
+
+        const FGeometry& Geo = ActiveViewport->AsWidget()->GetCachedGeometry();
+        const FVector2D LocalSize = Geo.GetLocalSize();
+        if (LocalSize.X <= 0.f || LocalSize.Y <= 0.f)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCP PIE tap: zero-size viewport geometry"));
+            return;
+        }
+        const FVector2D Abs = Geo.LocalToAbsolute(FVector2D(NX * LocalSize.X, NY * LocalSize.Y));
+
+        // The status-bar OUTPUT LOG DRAWER expands OVER the lower viewport (the MCP's
+        // own console execs open it), and its list swallows the hit-test — the streamed
+        // video shows the game while the desktop hit-test sees the drawer. Dismiss it,
+        // and bring the viewport's window to front for good measure.
+        if (GEditor)
+        {
+            if (UStatusBarSubsystem* StatusBar = GEditor->GetEditorSubsystem<UStatusBarSubsystem>())
+            {
+                StatusBar->ForceDismissDrawer();
+            }
+        }
+        {
+            TSharedPtr<SWindow> ViewportWindow =
+                FSlateApplication::Get().FindWidgetWindow(ActiveViewport->AsWidget());
+
+            // Transient floating windows ('Message Log' popped by a map check or a
+            // live-coding notice) shadow the streamed viewport in SLATE's window order
+            // while being invisible on the desktop (behind the main window) — clicks
+            // would route into a window the phone viewer cannot see. They can be CHILD
+            // windows of the main window (LocateWindowUnderMouse recurses children), so
+            // walk the whole tree. Destroy the known notification shadows; the viewer's
+            // tap must hit what the stream shows.
+            TArray<TSharedRef<SWindow>> Stack =
+                FSlateApplication::Get().GetInteractiveTopLevelWindows();
+            while (Stack.Num() > 0)
+            {
+                const TSharedRef<SWindow> Win = Stack.Pop();
+                Stack.Append(Win->GetChildWindows());
+                if (Win == ViewportWindow)
+                {
+                    continue;
+                }
+                const FSlateRect R = Win->GetRectInScreen();
+                const bool bContainsPoint =
+                    Abs.X >= R.Left && Abs.X <= R.Right && Abs.Y >= R.Top && Abs.Y <= R.Bottom;
+                if (!bContainsPoint)
+                {
+                    continue;
+                }
+                const FString Title = Win->GetTitle().ToString();
+                if (Title == TEXT("Message Log") || Title == TEXT("Output Log"))
+                {
+                    UE_LOG(LogTemp, Display,
+                        TEXT("MCP PIE tap: destroying shadow window '%s' over the streamed viewport"), *Title);
+                    Win->RequestDestroyWindow();
+                }
+                else if (!Title.IsEmpty() && Title != TEXT("FullAutoChess - Unreal Editor") && !Title.Contains(TEXT("Unreal Editor")))
+                {
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("MCP PIE tap: window '%s' overlaps the tap point and may swallow it"), *Title);
+                }
+            }
+
+            if (ViewportWindow.IsValid())
+            {
+                ViewportWindow->BringToFront();
+            }
+        }
+
+        // Diagnostic: what does Slate's hit-test find at that absolute point, and which
+        // top-level windows overlap it (a floating Output Log etc. can shadow the game)?
+        {
+            for (const TSharedRef<SWindow>& Win : FSlateApplication::Get().GetInteractiveTopLevelWindows())
+            {
+                const FSlateRect Rect = Win->GetRectInScreen();
+                if (Abs.X >= Rect.Left && Abs.X <= Rect.Right && Abs.Y >= Rect.Top && Abs.Y <= Rect.Bottom)
+                {
+                    UE_LOG(LogTemp, Verbose, TEXT("MCP PIE tap: overlapping window '%s' rect=(%.0f,%.0f)-(%.0f,%.0f) visible=%d"),
+                        *Win->GetTitle().ToString(), Rect.Left, Rect.Top, Rect.Right, Rect.Bottom,
+                        Win->IsVisible() ? 1 : 0);
+                }
+            }
+            FWidgetPath Path = FSlateApplication::Get().LocateWindowUnderMouse(
+                Abs, FSlateApplication::Get().GetInteractiveTopLevelWindows());
+            FString Breadcrumb;
+            for (int32 i = 0; i < Path.Widgets.Num(); ++i)
+            {
+                Breadcrumb += Path.Widgets[i].Widget->GetTypeAsString();
+                if (i < Path.Widgets.Num() - 1) { Breadcrumb += TEXT(" > "); }
+            }
+            UE_LOG(LogTemp, Verbose, TEXT("MCP PIE tap: n=(%.3f,%.3f) abs=%s window='%s' path=%s"),
+                NX, NY, *Abs.ToString(),
+                Path.IsValid() ? *Path.GetWindow()->GetTitle().ToString() : TEXT("none"),
+                *Breadcrumb);
+        }
+
+        FSlateApplication& Slate = FSlateApplication::Get();
+        const FVector2D PrevPos = Slate.GetCursorPos();
+
+        // A prior click typically made the game viewport CAPTURE the mouse (default
+        // "capture permanently on click"); captured pointers route every subsequent
+        // event to the captor, bypassing UMG hit-testing entirely. A phone tap has no
+        // notion of an ongoing capture — release it so each tap routes to what the
+        // viewer actually sees.
+        Slate.ReleaseAllPointerCapture();
+
+        // Move → press → release, exactly like a hardware click at that point.
+        Slate.SetCursorPos(Abs);
+        FPointerEvent MoveEvent(
+            FSlateApplication::CursorPointerIndex, Abs, PrevPos,
+            TSet<FKey>(), EKeys::Invalid, 0, FModifierKeysState());
+        Slate.ProcessMouseMoveEvent(MoveEvent);
+
+        FPointerEvent DownEvent(
+            FSlateApplication::CursorPointerIndex, Abs, Abs,
+            TSet<FKey>({ EKeys::LeftMouseButton }), EKeys::LeftMouseButton, 0, FModifierKeysState());
+        const bool bDownHandled = Slate.ProcessMouseButtonDownEvent(nullptr, DownEvent);
+
+        FPointerEvent UpEvent(
+            FSlateApplication::CursorPointerIndex, Abs, Abs,
+            TSet<FKey>(), EKeys::LeftMouseButton, 0, FModifierKeysState());
+        const bool bUpHandled = Slate.ProcessMouseButtonUpEvent(UpEvent);
+        UE_LOG(LogTemp, Verbose, TEXT("MCP PIE tap: down_handled=%d up_handled=%d"),
+            bDownHandled ? 1 : 0, bUpHandled ? 1 : 0);
+    }
+
     void MCPApplyPointCommandGameThread(const FString& Type, double NX, double NY)
     {
+        // PIE: taps are clicks (game/UMG input), not editor selection. Long-press
+        // "focus" stays editor-only (no-op during PIE rather than a surprise click).
+        if (GEditor && GEditor->IsPlaySessionInProgress() && Type == TEXT("tap"))
+        {
+            MCPApplyPieClickGameThread(NX, NY);
+            return;
+        }
+
         FLevelEditorViewportClient* VC = MCPGetStreamedLevelViewportClient();
         if (!VC || !VC->Viewport || !GEditor)
         {
@@ -968,6 +1199,35 @@ namespace
 
         MCPDispatchCameraCommand(Descriptor);
     }
+
+    /** Agent-testable tap: drives the SAME path a phone {t:"tap"} takes (PIE →
+     *  synthesized Slate click; editor → hit-proxy select). Also the sanctioned
+     *  workaround for GAP-030 (raw pie_send_mouse doesn't actuate Slate UI).
+     *  Usage: MCP.Stream.Tap <nx 0..1> <ny 0..1> */
+    static FAutoConsoleCommand GMCPStreamTapCmd(
+        TEXT("MCP.Stream.Tap"),
+        TEXT("Synthesize a viewer tap at normalized viewport coords (PIE: real Slate click; editor: tap-select). Usage: MCP.Stream.Tap 0.5 0.58"),
+        FConsoleCommandWithArgsDelegate::CreateStatic(
+            [](const TArray<FString>& Args)
+            {
+                if (Args.Num() < 2)
+                {
+                    return;
+                }
+                const double NX = FCString::Atod(*Args[0]);
+                const double NY = FCString::Atod(*Args[1]);
+                if (IsInGameThread())
+                {
+                    MCPApplyPointCommandGameThread(TEXT("tap"), NX, NY);
+                }
+                else
+                {
+                    AsyncTask(ENamedThreads::GameThread, [NX, NY]()
+                    {
+                        MCPApplyPointCommandGameThread(TEXT("tap"), NX, NY);
+                    });
+                }
+            }));
 }
 
 FMCPStreamingCommands::FMCPStreamingCommands(UMCPBridge* InBridge)
@@ -1011,6 +1271,11 @@ TSharedPtr<FJsonObject> FMCPStreamingCommands::HandleStreamStart(const TSharedPt
     {
         return MCPStreamingUnavailableError();
     }
+
+    // Safe-by-default for stock 5.7 engines: force VP8 when this process would take
+    // the leaking NVENC-D3D12 path (runs BEFORE the already-streaming early return so
+    // late joiners on a live stream negotiate the safe codec too).
+    MCPApplyNvEncD3D12LeakGuard();
 
     // Idempotent: an already-live stream is success, reported at its CURRENT
     // ports (a second start with different ports does not rebind the running
