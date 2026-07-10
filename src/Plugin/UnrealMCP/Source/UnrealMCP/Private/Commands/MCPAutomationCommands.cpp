@@ -33,6 +33,9 @@
 #include "ILiveCodingModule.h"
 #include "Misc/CoreDelegates.h"
 #include "Containers/Ticker.h"
+#include "LevelEditor.h"       // pie_start in_viewport: resolve the level viewport
+#include "IAssetViewport.h"    // FRequestPlaySessionParams::DestinationSlateViewport
+#include "Modules/ModuleManager.h"
 
 #include "Windows/AllowWindowsPlatformTypes.h"
 #include <Windows.h>
@@ -351,6 +354,17 @@ TSharedPtr<FJsonObject> FMCPAutomationCommands::HandleStartPIE(
 		}
 	}
 
+	// Optional: run PIE inside the level-editor viewport instead of the floating
+	// window from the Play settings. This is what a streamed session wants — the
+	// single "Editor" Pixel Streaming producer captures the level viewport, so
+	// in-viewport PIE is the only mode a remote phone viewer can actually see
+	// (mirrors MCPApplyPieToggleGameThread in MCPStreamingCommands.cpp).
+	bool bInViewport = false;
+	if (Params.IsValid())
+	{
+		Params->TryGetBoolField(TEXT("in_viewport"), bInViewport);
+	}
+
 	// Generate session ID before requesting play
 	ActiveSessionId = FGuid::NewGuid().ToString();
 
@@ -363,7 +377,7 @@ TSharedPtr<FJsonObject> FMCPAutomationCommands::HandleStartPIE(
 	// fires at the top of FEngineLoop::Tick — outside any UWorld::Tick — so
 	// the world teardown is safe there.
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
-		[MapToLoad](float) -> bool
+		[MapToLoad, bInViewport](float) -> bool
 		{
 			if (GEditor && !GEditor->IsPlaySessionInProgress())
 			{
@@ -372,6 +386,23 @@ TSharedPtr<FJsonObject> FMCPAutomationCommands::HandleStartPIE(
 					FEditorFileUtils::LoadMap(MapToLoad, false, true);
 				}
 				FRequestPlaySessionParams SessionParams;
+				if (bInViewport)
+				{
+					// Replicate the toolbar "Play in viewport": target the first
+					// active perspective level viewport. Falls back to default
+					// (Play-settings window) when none resolves.
+					if (FLevelEditorModule* LevelEditorModule =
+						FModuleManager::GetModulePtr<FLevelEditorModule>(TEXT("LevelEditor")))
+					{
+						const TSharedPtr<IAssetViewport> ActiveLevelViewport =
+							LevelEditorModule->GetFirstActiveViewport();
+						if (ActiveLevelViewport.IsValid() &&
+							ActiveLevelViewport->GetAssetViewportClient().IsPerspective())
+						{
+							SessionParams.DestinationSlateViewport = ActiveLevelViewport;
+						}
+					}
+				}
 				GEditor->RequestPlaySession(SessionParams);
 			}
 			return false;   // one-shot

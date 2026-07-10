@@ -113,6 +113,26 @@ rather than inventing detail.
 The lost ledger's numbering can't be recovered, so new entries are unnumbered to
 avoid colliding with lost GAP ids.
 
+### `asset_dataasset_set_property` cannot write a struct array whose element holds a `TSoftObjectPtr`
+
+Found building FullAutoChess Wave 0 (2026-07-09, `mobile-game/`). Setting/appending
+`UFACBotRegistry::Entries` (`TArray<FFACBotRegistryEntry>`, element =
+`{EFACBotId Id; TSoftObjectPtr<UFACBotDefinition> Definition;}`) always fails with
+"Failed to convert … against the array's inner type", in all shapes tried: full-array
+`set` with element objects, single-element `append`, soft ref as `"/Path/DA.DA"`,
+as `"/Path/DA"`, and as the UE5 struct form `{"AssetPath":{"PackageName":…,
+"AssetName":…},"SubPathString":""}`. Scalar/struct writes on the same class work
+(`BotId` enum-by-name, `BaseStats` nested JSON, `Ability`, `TargetPreference` all
+fine), so the defect is specific to struct-array elements containing a soft object
+ptr — likely the JsonValueToUProperty pass over the inner `FSoftObjectProperty`.
+Also of note: `actor_set_property` on plain `AActor::Tags` (`TArray<FName>`) fails
+the same way ("Expected object, received string" / TArray convert), and
+`actor_spawn`'s `scale` param rejects the same object shape `location` accepts.
+Workaround used: skip hand-authored registry entries; register an AssetManager
+`PrimaryAssetTypesToScan` ("FACBot") in `DefaultGame.ini` and resolve ids by
+`GetPrimaryAssetPath` fallback in C++ (`UFACBotRegistry::FindDefinition`).
+**Status: open.**
+
 ### `pie_capture_from_pose` pixels do not track the requested pose
 
 Found by the skill-test loop (2026-07-03, TASK-9, live GUI debugging). Four different
@@ -267,6 +287,64 @@ the forensics in `docs/loops/tests/TASKS.md` `foliage_inspect` annotation).
   `actor_not_found` negative tests still run everywhere. **Rule for all agents: do
   not spawn-and-delete `/Script/Landscape.Landscape` (or any `ALandscapeProxy`
   subclass) in a shared editor session, ever — including "harmless" probes.**
+
+### Editor OOM-killed after long Pixel Streaming sessions — per-frame NVENC memory leak (silent termination, no crash dialog)
+
+Found in the FullAutoChess project (2026-07-09, `mobile-game/` Portable-app
+streaming). After ~100 min with a Portable viewer subscribed to the editor-viewport
+stream (`stream_start` path, PixelStreaming2 + EpicRtc + hardware H.264), the editor
+process terminated **silently** — both `editor-gui.log` and `MCP_Unified.log` stop at
+the same millisecond mid-WebRTC-heartbeat with no `LogExit`/callstack, and no
+CrashReportClient dialog. Windows System Event 2004 (Resource-Exhaustion-Detector) at
+the death second shows `UnrealEditor.exe` at **~98.7 GB virtual memory**; Application
+Event 1000 blames **`nvEncodeAPI64.dll`** (NVENC, driver 32.0.15.9186) with
+`0xc0000409` fail-fast. OOM is why there is no dialog: a memory-starved process
+cannot spawn CRC, so the failure reads as "the engine just vanished."
+
+**Root cause (CONFIRMED 2026-07-09, code + controlled measurement + community):** a
+UE 5.7 regression in the NVENC **D3D12** encoder path. `FVideoEncoderNVENCD3D12::
+SendFrame` (`Engine/Plugins/Experimental/AVCodecs/NVCodecs/.../VideoEncoderNVENCD3D12.cpp`)
+calls `nvEncRegisterResource`/`nvEncUnregisterResource` on the input texture AND the
+output bitstream buffer **every frame**; recent NVIDIA drivers retain host-side
+allocations across that churn (written-once pages: private bytes climb, working set
+and handle count stay flat), until an allocation inside `nvEncodeAPI64.dll`
+fail-fasts. Not reconnect-driven (the crashed session had ~5 connects); the variable
+is time spent encoding — any subscribed viewer encodes the viewport at frame rate
+regardless of PIE/user activity. Measured: **~65–115 MB/s while encoding** (private
++393 MB/min avg over an 11 min window with intermittent viewing), flat when idle,
+~85% of it NOT reclaimed on player disconnect. Differential proof: forcing
+`PixelStreaming2.Encoder.Codec VP8` (CPU path, no NVENC/D3D12 registration) with an
+actively-encoding viewer → **~37 MB/min ≈ flat** (~100× less). Community
+corroboration: "PixelStreaming Memory Leak in 5.7+" (Epic forums, Apr 2026) — same
+symptom, same workaround, regression vs 5.6, blamed on recent NVIDIA drivers.
+
+- **Fix (applied):** backported the ue5-main `D3D12UsesCUDA` toggle into the source
+  build's `NVENCModule.cpp` (routes D3D12 frames through `FVideoEncoderNVENCCUDA`
+  — the pre-5.7 CUDA pathway — instead of the leaking D3D12-registration pathway)
+  and set `[AVCodecs.NvEnc] D3D12UsesCUDA=1` in the game project's
+  `Config/DefaultGame.ini` (read from `GGameIni`; also settable via
+  `-AVCodecs.NvEnc.D3D12UsesCUDA=true`).
+- **Harness guard (stock-engine consumers):** no stock 5.7 engine has the toggle
+  (verified: upstream `5.7` branch has zero hits for it — it exists only in
+  ue5-main), so `stream_start` now runs `MCPApplyNvEncD3D12LeakGuard()`
+  (`MCPStreamingCommands.cpp`): on UE 5.7+, D3D12 RHI, NVIDIA GPU, hardware codec,
+  with `D3D12UsesCUDA` unset, it forces `PixelStreaming2.Encoder.Codec VP8`
+  (software, verified flat) with a Warning explaining why; setting the flag opts
+  back into NVENC for patched/5.8+ engines. Both paths verified live: unset flag →
+  `forced ... from H264 to VP8`, `LastSetBy: Code`; set flag → codec stays `H264`,
+  `LastSetBy: ProjectSetting`.
+- **Detection:** sample `(Get-Process UnrealEditor).PrivateMemorySize64` during
+  streaming — a steady positive slope while the editor idles with a subscribed
+  viewer is this bug (private bytes, not VM: reserved VM is ~139 GB at rest).
+- **Fallback workarounds:** force a software codec (`PixelStreaming2.Encoder.Codec
+  VP8`, verified flat); `stream_stop` when idle; try a newer NVIDIA driver (leak
+  seen on 32.0.15.9186). **Status: FIXED & VERIFIED (2026-07-09)** — with the
+  backport + flag active, an 18-minute continuous H.264/NVENC session to a live
+  Portable viewer held private bytes flat (~4.69 GB ±10 MB during encoding, after a
+  one-time ~620 MB session-setup step) and released fully on disconnect (4.18 GB
+  after, at/below the pre-session baseline — the broken path retained ~85%). The
+  broken path accrued ~1 GB every 10–15 s under identical conditions and would have
+  OOM'd twice over in that window. Re-verify after any engine or driver update.
 
 ---
 
