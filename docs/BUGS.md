@@ -81,6 +81,19 @@ rather than inventing detail.
   (steals keyboard focus from the editor window — leave off otherwise).
 - **Bites:** TESTING §5, `/automated-tester` §2 (Tier-2 specifics).
 
+## GAP-063 — streamed/synthetic taps near the top of the viewport hit the PIE toolbar, not the game
+
+- **Symptom:** `MCP.Stream.Tap` (and real phone taps over Pixel Streaming) at
+  ny < ~0.045 land on the editor's in-viewport PIE toolbar (`SMultiBoxWidget`
+  over `SLevelViewport`) instead of the game — UI anchored in the top strip is
+  unreachable in streamed PIE. Found 2026-07-17 (FullAutoChess pass bar spans
+  ny 0.006–0.072; its top half was dead to taps). Packaged builds unaffected.
+- **Workaround:** keep tappable game UI below ny ≈ 0.05 in streamed PIE, or
+  tap the lower half of top-anchored widgets.
+- **Fix ideas:** subtract the toolbar strip from the tap mapping in the stream
+  input path, or hide the in-viewport toolbar while streaming.
+- **Status: open.**
+
 ## GAP-031 — GameMode `BeginPlay` does not reliably fire in PIE
 
 - **Symptom:** scenario orchestration hung off the GameMode's `BeginPlay` never runs
