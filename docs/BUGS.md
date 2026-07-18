@@ -507,3 +507,21 @@ Issues understood but parked (the bugfix loop `docs/loops/mcp/mcp-bugfix-loop.md
 consumes this list).
 
 - *(empty)*
+
+## 2026-07-17 — findings from mobile-game hanging-fixtures task
+- **Fab (Interchange/GLTF) imports produced geometry-less StaticMeshes** ("Bad MeshDescription" in log, zero bounds) for two Megascans fixtures; workaround: convert the FabLibrary temp GLTF to OBJ (trimesh, m→cm + Y-up→Z-up, keep det>0) and import via asset_import_mesh. `asset_import_mesh` rejects .gltf directly (FBX factory).
+- **pie_capture_from_pose is defeated in FullAutoChess menu levels**: the FACMenuCameraDirector/CameraActor stack re-asserts the view, so the temp-camera swap never renders — captures return the menu framing. Pausing does not help. Workaround: temporarily move the FACStation.* marker in the editor world and reboot PIE.
+- **MCP.Stream.Tap silently no-ops when Pixel Streaming is not active** — taps only actuate with an active stream (stream_start). Confirm stream_status before synthetic taps.
+- **PIE lease FIFO cannot arbitrate same-session multi-agent use**: all agents in one MCP client share a session id ("you_hold: true" for everyone), so concurrent agents ride/steal each other's PIE sessions and drive UI in them.
+
+## GAP-064 — MCP server (bun) unbounded memory growth on long sessions
+**Observed 2026-07-18 (mobile-game session):** the run-server.ps1 bun process reached
+**10.28 GB RSS** after ~2 days of heavy screenshot/stream/tool traffic, starving the
+host until the Unreal editor hard-OOM-crashed ("Ran out of memory allocating 16 MiB
+... paging file is too small") during an ordinary UI capture. Restarting the server
+freed the memory instantly; no editor-side leak involved.
+**Suspects:** screenshot/result payload retention (large base64/binary buffers kept in
+tool-result history or log buffers), stream frame caches, unified-log accumulation.
+**Workaround:** bounce run-server.ps1 on long sessions; check `Get-Process bun` when
+RAM is tight.
+**Fix wanted:** cap/stream large payload buffers, periodic GC audit, RSS self-watchdog.
