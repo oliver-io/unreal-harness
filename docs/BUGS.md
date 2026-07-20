@@ -525,3 +525,47 @@ tool-result history or log buffers), stream frame caches, unified-log accumulati
 **Workaround:** bounce run-server.ps1 on long sessions; check `Get-Process bun` when
 RAM is tight.
 **Fix wanted:** cap/stream large payload buffers, periodic GC audit, RSS self-watchdog.
+
+### 2026-07-20 — same leak, 6x worse, and it HIDES FROM RSS CHECKS
+Second occurrence in the same project, and the diagnosis cost hours because the
+workaround above (`Get-Process bun`, i.e. working set) **does not see it**:
+
+| Metric | Value |
+|---|---|
+| bun `PrivateMemorySize64` (commit) | **58.12 GB** |
+| bun `WorkingSet64` (RSS) | **0.06 GB** |
+| System commit charge | 126.5 / 137.4 GB (host has ~32 GB RAM + pagefile) |
+| After `Stop-Process` on the one bun PID | commit 126.5 GB → **67.8 GB** |
+
+Uptime at kill: **~44 h** (`bun.exe run src/server/src/main.ts`, started 07-18 16:38 —
+the *same process* as the original report, having grown 10 GB → 58 GB).
+
+**What it broke, none of it obviously memory-related:**
+- Android `RunUAT BuildCookRun` died at the link step with `LLVM ERROR: out of memory`
+  (5m37s in, after a full recompile).
+- UBA killed every compile worker instantly: `Killed process ... Low on memory
+  (131.2gb/137.4gb). Kill threshold is 130.5gb`. **UBA was CORRECT** — we initially
+  mis-filed this as a UBA bug ("it counts standby cache") and defaulted
+  `build-editor.ps1` to `-NoUBA`. The real cause was this leak eating the commit
+  limit. Comment corrected in that script.
+- A morning of editor crashes (incl. one in `FAssetDataGatherer` on boot) that read
+  as unrelated flakiness.
+
+**Detection that actually works** — commit, not RSS, and it is a single process:
+```powershell
+Get-Process bun | Sort-Object PrivateMemorySize64 -Descending |
+  Select-Object Id,@{n='Commit_GB';e={[math]::Round($_.PrivateMemorySize64/1GB,2)}},
+                  @{n='WS_GB';e={[math]::Round($_.WorkingSet64/1GB,2)}}
+# and the host-level symptom:
+(Get-Counter '\Memory\Committed Bytes').CounterSamples[0].CookedValue/1GB
+```
+A 58 GB commit / 60 MB working-set process is invisible to Task Manager's default
+Memory column and to any `WorkingSet64` sort — which is why the original workaround
+note failed us. **Commit-vs-RSS is the tell: this leak is reserved-but-untouched
+address space.**
+
+**Fix wanted (revised):** an RSS watchdog is insufficient — watch **commit**, and
+self-restart or hard-cap at a threshold. Given it reached 58 GB of commit with a
+60 MB working set, suspect large `ArrayBuffer`/`Buffer` allocations that are never
+touched after allocation (screenshot/stream payload buffers sized then abandoned)
+rather than a classic retained-object leak.
