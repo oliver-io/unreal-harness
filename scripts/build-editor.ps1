@@ -17,7 +17,14 @@
 param(
     [string]$Project = $env:UNREAL_PROJECT_ROOT,
     [string]$Target,
-    [string]$Configuration = "Development"
+    [string]$Configuration = "Development",
+    # UBA (Unreal Build Accelerator) judges "low on memory" against SYSTEM COMMITTED
+    # bytes, which counts standby/cache — on a 128 GB box sitting at ~8 GB of real
+    # working set it reports 131/137 GB and instantly kills every compile worker
+    # ("Killed process ... Low on memory ... Kill threshold is 130.5gb"), so builds
+    # spin forever or fail. Observed repeatedly 2026-07-19/20; -NoUBA built the same
+    # target in 28 s. Default OFF for that reason; pass -UseUBA to opt back in.
+    [switch]$UseUBA
 )
 
 $ErrorActionPreference = "Stop"
@@ -96,7 +103,9 @@ $buildId = Enter-BuildLock -Target "$Target Win64 $Configuration" -Label $label
 try {
     Write-Host "=== Building $Target ($Configuration, Win64) ==="
     Write-Host "    project: $uproject"
-    & $buildBat $Target Win64 $Configuration "-Project=$uproject" -WaitMutex
+    $extraArgs = @()
+    if (-not $UseUBA) { $extraArgs += "-NoUBA" }
+    & $buildBat $Target Win64 $Configuration "-Project=$uproject" -WaitMutex @extraArgs
     $code = $LASTEXITCODE
     if ($code -eq 0) {
         Write-Host "=== Build succeeded ==="
