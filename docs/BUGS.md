@@ -569,3 +569,11 @@ self-restart or hard-cap at a threshold. Given it reached 58 GB of commit with a
 60 MB working set, suspect large `ArrayBuffer`/`Buffer` allocations that are never
 touched after allocation (screenshot/stream payload buffers sized then abandoned)
 rather than a classic retained-object leak.
+
+## GAP-065 — PIE-lease FIFO deadlocks behind dead queued sessions
+**Observed 2026-07-20 (mobile-game, 8-agent window):** the PIE lease queue had 5
+QUEUED sessions whose worker processes were dead; only the lease HOLDER has a TTL,
+waiters have no staleness eviction, so the queue deadlocked — no live agent could
+ever be promoted. Workaround: restart run-server.ps1 (lease state is in-memory).
+**Fix wanted:** staleness eviction for queue WAITERS (heartbeat or queue-position
+TTL), mirroring the holder's 10-min lease expiry.
