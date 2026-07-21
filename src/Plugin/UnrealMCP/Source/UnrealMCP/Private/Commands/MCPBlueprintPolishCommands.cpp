@@ -36,6 +36,21 @@ namespace
             if (N->NodeGuid.ToString().Equals(NodeId, ESearchCase::IgnoreCase)) return N;
             if (N->GetName().Equals(NodeId, ESearchCase::IgnoreCase))           return N;
         }
+        // GAP-066 fallback: unique node TITLE (refuse on ambiguity).
+        UEdGraphNode* TitleMatch = nullptr;
+        int32 TitleMatchCount = 0;
+        for (UEdGraphNode* N : Graph->Nodes)
+        {
+            if (!N) continue;
+            const FString Title = N->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+            const FString ListTitle = N->GetNodeTitle(ENodeTitleType::ListView).ToString();
+            if (Title.Equals(NodeId, ESearchCase::IgnoreCase) || ListTitle.Equals(NodeId, ESearchCase::IgnoreCase))
+            {
+                ++TitleMatchCount;
+                TitleMatch = N;
+            }
+        }
+        if (TitleMatchCount == 1) return TitleMatch;
         return nullptr;
     }
 

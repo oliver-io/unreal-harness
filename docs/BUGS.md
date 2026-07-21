@@ -578,15 +578,44 @@ ever be promoted. Workaround: restart run-server.ps1 (lease state is in-memory).
 **Fix wanted:** staleness eviction for queue WAITERS (heartbeat or queue-position
 TTL), mirroring the holder's 10-min lease expiry.
 
-## GAP-066 — bp_connect_pins / bp_delete_node need node GUIDs no read tool exposes
+## GAP-066 — read/connect node-id KEY mismatch (read emits `name`, mutators consume `node_id`) — FIXED 2026-07-21
 **Observed 2026-07-21 (mobile-game, Gunner barrel-spin ABP wiring):** adding a
 Transform(Modify)Bone node to an AnimBP AnimGraph worked (bp_add_node), and its
-inner properties set fine (bp_set_inner_node_property, incl. struct-literal
-`(BoneName="cannon_barrel_R")`), but `bp_connect_pins` and `bp_delete_node` reject
-the node identifiers that bp_read / bp_list_node_pins report ("Node not found") —
-they want FGuids that no read surface exposes. Result: the pose chain could not be
-wired (barrel bone spin left unconnected; Root still passes straight through, so the
-graph is behaviour-neutral and compiles clean). **Fix wanted:** either surface each
-node's FGuid in the read tools, or accept the same title/id bp_read returns in
-connect/delete. Workaround: none from the tools — the wiring needs manual editor work
-or a GUID the tools don't provide.
+inner properties set fine, but `bp_connect_pins` / `bp_delete_node` appeared to reject
+the identifiers a read tool reported ("Node not found") — leading to the claim that
+connect "needs a GUID no read tool exposes."
+
+**Real root cause (NOT a tool limitation — a KEY-NAME inconsistency):** the mutation
+resolvers (`FBPConnector::FindNodeById`, `FNodeDeleter::FindNodeByID`,
+`FNodePropertyManager::FindNodeByID`) already matched **`NodeGuid.ToString()` OR
+`UEdGraphNode::GetName()`**. The value they wanted — `GetName()`, e.g.
+`AnimGraphNode_ModifyBone_0` — WAS present in every read dump. But the graph-dump read
+tools (`analyze_blueprint_graph`, `bp_get_function_details`, `get_blueprint_info`)
+emitted that value under the key **`"name"`**, alongside a human `"title"`
+("Transform (Modify) Bone") and NO `node_id` / GUID key at all. The mutation tools
+consume a param named **`node_id`**. So a caller reading the AnimGraph found no
+`node_id` field, and the natural pick — the readable `title` — is exactly what the
+resolvers did NOT accept → "Node not found." The round-trip was undiscoverable, not
+impossible. (`bp_list_node_pins` already keyed its id `node_id`, so only the graph-dump
+readers diverged.)
+
+**Fix (both approaches applied):**
+1. **Reads now emit the round-trip keys.** `analyze_blueprint_graph`,
+   `bp_get_function_details`, and `get_blueprint_info` now emit per node
+   `node_id` (== `GetName()`, the exact string the resolvers match) AND
+   `node_guid` (== `NodeGuid.ToString()`), keeping `name`/`class`/`title` for
+   readability. The key a read returns is now the key a mutator consumes.
+   (`MCPBlueprintCommands.cpp`, node-emit sites ~2555 / ~2900 / ~3585.)
+2. **Resolvers hardened with a unique-TITLE fallback.** All three node resolvers
+   (BPConnector, NodeDeleter, NodePropertyManager) — plus the `bp_disconnect_pin`
+   resolver in `MCPBlueprintPolishCommands.cpp` — now fall back, after GUID+GetName,
+   to matching `GetNodeTitle(FullTitle|ListView)` when it identifies EXACTLY one node
+   (refusing on ambiguity rather than mutating the wrong node). So even the readable
+   `title` now round-trips when unambiguous.
+
+**Validated:** barrel-spin pose chain on ABP_FAC_BattleRobot wired end-to-end
+(LocalToComponentSpace → Transform(Modify)Bone → ComponentToLocalSpace → Output,
+BarrelSpinAngle → ModifyBone Rotation.Roll) using node ids taken straight from a read
+tool, and the orphan `LocalToComponentSpace_1` deleted via `bp_delete_node` — both
+using read-emitted ids. Was: "tool limitation." Now: fixed, read/connect node-id
+contract reconciled.

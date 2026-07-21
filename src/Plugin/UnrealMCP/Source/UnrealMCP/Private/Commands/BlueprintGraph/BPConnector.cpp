@@ -257,6 +257,28 @@ UK2Node* FBPConnector::FindNodeById(UEdGraph* Graph, const FString& NodeId)
         }
     }
 
+    // GAP-066 fallback: accept a human-readable node TITLE (what read tools emit as
+    // `title`, e.g. "Transform (Modify) Bone") when it UNIQUELY identifies one node.
+    // Guard against ambiguity: if a title matches >1 node, refuse (return nullptr)
+    // rather than pick the wrong one.
+    UK2Node* TitleMatch = nullptr;
+    int32 TitleMatchCount = 0;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (!Node) { continue; }
+        const FString Title = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+        const FString ListTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+        if (Title.Equals(NodeId, ESearchCase::IgnoreCase) || ListTitle.Equals(NodeId, ESearchCase::IgnoreCase))
+        {
+            ++TitleMatchCount;
+            TitleMatch = Cast<UK2Node>(Node);
+        }
+    }
+    if (TitleMatchCount == 1)
+    {
+        return TitleMatch;
+    }
+
     return nullptr;
 }
 
