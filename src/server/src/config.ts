@@ -47,6 +47,25 @@ export const config = {
   bridgeHost: process.env.UNREAL_BRIDGE_HOST ?? "127.0.0.1",
   bridgePort: num(process.env.UNREAL_BRIDGE_PORT, 55557),
 
+  /**
+   * Pixel Streaming ports advertised in the self-describing StreamSourceDescriptor
+   * (GET /stream-source) and used as the /control/stream/start defaults.
+   *   viewerPort   — the signalling/web player port the phone connects to.
+   *   streamerPort — the in-engine PS2 streamer port.
+   */
+  viewerPort: num(process.env.UNREAL_MCP_VIEWER_PORT, 8890),
+  streamerPort: num(process.env.UNREAL_MCP_STREAMER_PORT, 8888),
+
+  /**
+   * Self-describing StreamSourceDescriptor identity (GET /stream-source). This
+   * neutral descriptor is served over the control port and REPLACES the static
+   * per-repo portable.json — a producer describes itself at runtime.
+   *   streamSourceId    — stable id; defaults to `source:<mcpPort>` when unset.
+   *   streamSourceTitle — human title; neutral default when unset.
+   */
+  streamSourceId: process.env.UNREAL_MCP_STREAM_SOURCE_ID ?? "",
+  streamSourceTitle: process.env.UNREAL_MCP_STREAM_SOURCE_TITLE ?? "Unreal Editor",
+
   logLevel: (process.env.UNREAL_MCP_LOG_LEVEL ?? "info") as
     | "debug"
     | "info"

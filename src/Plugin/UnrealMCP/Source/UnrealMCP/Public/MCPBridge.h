@@ -42,6 +42,7 @@
 #include "Commands/MCPDiagnosticsCommands.h"
 #include "Commands/MCPBlueprintPolishCommands.h"
 #include "Commands/MCPKinematicsCommands.h"
+#include "Commands/MCPStreamingCommands.h"
 #include "MCPLogCollector.h"
 #include "MCPBridge.generated.h"
 
@@ -83,6 +84,17 @@ public:
 	 * can collect it. Thread-safe (takes LiveCodingCS). See GAP-060.
 	 */
 	void FinishLiveCoding(const FString& InResult);
+
+	/**
+	 * Cached Pixel Streaming state (portable.dev#19 M2). mcp_status answers
+	 * synchronously on the NETWORK thread and must not query the PS2 modules
+	 * (game-thread shaped) — it reads this cache instead. Written on the game
+	 * thread by the stream_* handlers (FMCPStreamingCommands) and by the editor
+	 * streamer's OnStreamingStarted/Stopped delegates; both accessors take
+	 * StreamStateCS, so they are safe from any thread.
+	 */
+	void SetStreamState(const FMCPStreamState& InState);
+	FMCPStreamState GetStreamState() const;
 
 private:
 	// Server state
@@ -136,6 +148,10 @@ private:
 	ELiveCodingPhase LiveCodingPhase = ELiveCodingPhase::Idle;
 	FString LiveCodingResult;  // serialized envelope string; valid only when Phase==Done
 
+	/** Pixel Streaming state cache (see Set/GetStreamState above). */
+	mutable FCriticalSection StreamStateCS;
+	FMCPStreamState StreamState;
+
 	TSharedPtr<FSocket> ListenerSocket;
 	TSharedPtr<FSocket> ConnectionSocket;
 	FRunnableThread* ServerThread;
@@ -178,6 +194,7 @@ private:
 	TSharedPtr<FMCPDiagnosticsCommands> DiagnosticsCommands;
 	TSharedPtr<FMCPBlueprintPolishCommands> BlueprintPolishCommands;
 	TSharedPtr<FMCPKinematicsCommands> KinematicsCommands;
+	TSharedPtr<FMCPStreamingCommands> StreamingCommands;
 
 	// Unified log collector
 	TUniquePtr<FMCPLogCollector> LogCollector;

@@ -81,6 +81,19 @@ rather than inventing detail.
   (steals keyboard focus from the editor window — leave off otherwise).
 - **Bites:** TESTING §5, `/automated-tester` §2 (Tier-2 specifics).
 
+## GAP-063 — streamed/synthetic taps near the top of the viewport hit the PIE toolbar, not the game
+
+- **Symptom:** `MCP.Stream.Tap` (and real phone taps over Pixel Streaming) at
+  ny < ~0.045 land on the editor's in-viewport PIE toolbar (`SMultiBoxWidget`
+  over `SLevelViewport`) instead of the game — UI anchored in the top strip is
+  unreachable in streamed PIE. Found 2026-07-17 (FullAutoChess pass bar spans
+  ny 0.006–0.072; its top half was dead to taps). Packaged builds unaffected.
+- **Workaround:** keep tappable game UI below ny ≈ 0.05 in streamed PIE, or
+  tap the lower half of top-anchored widgets.
+- **Fix ideas:** subtract the toolbar strip from the tap mapping in the stream
+  input path, or hide the in-viewport toolbar while streaming.
+- **Status: open.**
+
 ## GAP-031 — GameMode `BeginPlay` does not reliably fire in PIE
 
 - **Symptom:** scenario orchestration hung off the GameMode's `BeginPlay` never runs
@@ -112,6 +125,26 @@ rather than inventing detail.
 
 The lost ledger's numbering can't be recovered, so new entries are unnumbered to
 avoid colliding with lost GAP ids.
+
+### `asset_dataasset_set_property` cannot write a struct array whose element holds a `TSoftObjectPtr`
+
+Found building FullAutoChess Wave 0 (2026-07-09, `mobile-game/`). Setting/appending
+`UFACBotRegistry::Entries` (`TArray<FFACBotRegistryEntry>`, element =
+`{EFACBotId Id; TSoftObjectPtr<UFACBotDefinition> Definition;}`) always fails with
+"Failed to convert … against the array's inner type", in all shapes tried: full-array
+`set` with element objects, single-element `append`, soft ref as `"/Path/DA.DA"`,
+as `"/Path/DA"`, and as the UE5 struct form `{"AssetPath":{"PackageName":…,
+"AssetName":…},"SubPathString":""}`. Scalar/struct writes on the same class work
+(`BotId` enum-by-name, `BaseStats` nested JSON, `Ability`, `TargetPreference` all
+fine), so the defect is specific to struct-array elements containing a soft object
+ptr — likely the JsonValueToUProperty pass over the inner `FSoftObjectProperty`.
+Also of note: `actor_set_property` on plain `AActor::Tags` (`TArray<FName>`) fails
+the same way ("Expected object, received string" / TArray convert), and
+`actor_spawn`'s `scale` param rejects the same object shape `location` accepts.
+Workaround used: skip hand-authored registry entries; register an AssetManager
+`PrimaryAssetTypesToScan` ("FACBot") in `DefaultGame.ini` and resolve ids by
+`GetPrimaryAssetPath` fallback in C++ (`UFACBotRegistry::FindDefinition`).
+**Status: open.**
 
 ### `pie_capture_from_pose` pixels do not track the requested pose
 
@@ -268,6 +301,64 @@ the forensics in `docs/loops/tests/TASKS.md` `foliage_inspect` annotation).
   not spawn-and-delete `/Script/Landscape.Landscape` (or any `ALandscapeProxy`
   subclass) in a shared editor session, ever — including "harmless" probes.**
 
+### Editor OOM-killed after long Pixel Streaming sessions — per-frame NVENC memory leak (silent termination, no crash dialog)
+
+Found in the FullAutoChess project (2026-07-09, `mobile-game/` Portable-app
+streaming). After ~100 min with a Portable viewer subscribed to the editor-viewport
+stream (`stream_start` path, PixelStreaming2 + EpicRtc + hardware H.264), the editor
+process terminated **silently** — both `editor-gui.log` and `MCP_Unified.log` stop at
+the same millisecond mid-WebRTC-heartbeat with no `LogExit`/callstack, and no
+CrashReportClient dialog. Windows System Event 2004 (Resource-Exhaustion-Detector) at
+the death second shows `UnrealEditor.exe` at **~98.7 GB virtual memory**; Application
+Event 1000 blames **`nvEncodeAPI64.dll`** (NVENC, driver 32.0.15.9186) with
+`0xc0000409` fail-fast. OOM is why there is no dialog: a memory-starved process
+cannot spawn CRC, so the failure reads as "the engine just vanished."
+
+**Root cause (CONFIRMED 2026-07-09, code + controlled measurement + community):** a
+UE 5.7 regression in the NVENC **D3D12** encoder path. `FVideoEncoderNVENCD3D12::
+SendFrame` (`Engine/Plugins/Experimental/AVCodecs/NVCodecs/.../VideoEncoderNVENCD3D12.cpp`)
+calls `nvEncRegisterResource`/`nvEncUnregisterResource` on the input texture AND the
+output bitstream buffer **every frame**; recent NVIDIA drivers retain host-side
+allocations across that churn (written-once pages: private bytes climb, working set
+and handle count stay flat), until an allocation inside `nvEncodeAPI64.dll`
+fail-fasts. Not reconnect-driven (the crashed session had ~5 connects); the variable
+is time spent encoding — any subscribed viewer encodes the viewport at frame rate
+regardless of PIE/user activity. Measured: **~65–115 MB/s while encoding** (private
++393 MB/min avg over an 11 min window with intermittent viewing), flat when idle,
+~85% of it NOT reclaimed on player disconnect. Differential proof: forcing
+`PixelStreaming2.Encoder.Codec VP8` (CPU path, no NVENC/D3D12 registration) with an
+actively-encoding viewer → **~37 MB/min ≈ flat** (~100× less). Community
+corroboration: "PixelStreaming Memory Leak in 5.7+" (Epic forums, Apr 2026) — same
+symptom, same workaround, regression vs 5.6, blamed on recent NVIDIA drivers.
+
+- **Fix (applied):** backported the ue5-main `D3D12UsesCUDA` toggle into the source
+  build's `NVENCModule.cpp` (routes D3D12 frames through `FVideoEncoderNVENCCUDA`
+  — the pre-5.7 CUDA pathway — instead of the leaking D3D12-registration pathway)
+  and set `[AVCodecs.NvEnc] D3D12UsesCUDA=1` in the game project's
+  `Config/DefaultGame.ini` (read from `GGameIni`; also settable via
+  `-AVCodecs.NvEnc.D3D12UsesCUDA=true`).
+- **Harness guard (stock-engine consumers):** no stock 5.7 engine has the toggle
+  (verified: upstream `5.7` branch has zero hits for it — it exists only in
+  ue5-main), so `stream_start` now runs `MCPApplyNvEncD3D12LeakGuard()`
+  (`MCPStreamingCommands.cpp`): on UE 5.7+, D3D12 RHI, NVIDIA GPU, hardware codec,
+  with `D3D12UsesCUDA` unset, it forces `PixelStreaming2.Encoder.Codec VP8`
+  (software, verified flat) with a Warning explaining why; setting the flag opts
+  back into NVENC for patched/5.8+ engines. Both paths verified live: unset flag →
+  `forced ... from H264 to VP8`, `LastSetBy: Code`; set flag → codec stays `H264`,
+  `LastSetBy: ProjectSetting`.
+- **Detection:** sample `(Get-Process UnrealEditor).PrivateMemorySize64` during
+  streaming — a steady positive slope while the editor idles with a subscribed
+  viewer is this bug (private bytes, not VM: reserved VM is ~139 GB at rest).
+- **Fallback workarounds:** force a software codec (`PixelStreaming2.Encoder.Codec
+  VP8`, verified flat); `stream_stop` when idle; try a newer NVIDIA driver (leak
+  seen on 32.0.15.9186). **Status: FIXED & VERIFIED (2026-07-09)** — with the
+  backport + flag active, an 18-minute continuous H.264/NVENC session to a live
+  Portable viewer held private bytes flat (~4.69 GB ±10 MB during encoding, after a
+  one-time ~620 MB session-setup step) and released fully on disconnect (4.18 GB
+  after, at/below the pre-session baseline — the broken path retained ~85%). The
+  broken path accrued ~1 GB every 10–15 s under identical conditions and would have
+  OOM'd twice over in that window. Re-verify after any engine or driver update.
+
 ---
 
 ## Dead wire names report (2026-07-02)
@@ -416,3 +507,115 @@ Issues understood but parked (the bugfix loop `docs/loops/mcp/mcp-bugfix-loop.md
 consumes this list).
 
 - *(empty)*
+
+## 2026-07-17 — findings from mobile-game hanging-fixtures task
+- **Fab (Interchange/GLTF) imports produced geometry-less StaticMeshes** ("Bad MeshDescription" in log, zero bounds) for two Megascans fixtures; workaround: convert the FabLibrary temp GLTF to OBJ (trimesh, m→cm + Y-up→Z-up, keep det>0) and import via asset_import_mesh. `asset_import_mesh` rejects .gltf directly (FBX factory).
+- **pie_capture_from_pose is defeated in FullAutoChess menu levels**: the FACMenuCameraDirector/CameraActor stack re-asserts the view, so the temp-camera swap never renders — captures return the menu framing. Pausing does not help. Workaround: temporarily move the FACStation.* marker in the editor world and reboot PIE.
+- **MCP.Stream.Tap silently no-ops when Pixel Streaming is not active** — taps only actuate with an active stream (stream_start). Confirm stream_status before synthetic taps.
+- **PIE lease FIFO cannot arbitrate same-session multi-agent use**: all agents in one MCP client share a session id ("you_hold: true" for everyone), so concurrent agents ride/steal each other's PIE sessions and drive UI in them.
+
+## GAP-064 — MCP server (bun) unbounded memory growth on long sessions
+**Observed 2026-07-18 (mobile-game session):** the run-server.ps1 bun process reached
+**10.28 GB RSS** after ~2 days of heavy screenshot/stream/tool traffic, starving the
+host until the Unreal editor hard-OOM-crashed ("Ran out of memory allocating 16 MiB
+... paging file is too small") during an ordinary UI capture. Restarting the server
+freed the memory instantly; no editor-side leak involved.
+**Suspects:** screenshot/result payload retention (large base64/binary buffers kept in
+tool-result history or log buffers), stream frame caches, unified-log accumulation.
+**Workaround:** bounce run-server.ps1 on long sessions; check `Get-Process bun` when
+RAM is tight.
+**Fix wanted:** cap/stream large payload buffers, periodic GC audit, RSS self-watchdog.
+
+### 2026-07-20 — same leak, 6x worse, and it HIDES FROM RSS CHECKS
+Second occurrence in the same project, and the diagnosis cost hours because the
+workaround above (`Get-Process bun`, i.e. working set) **does not see it**:
+
+| Metric | Value |
+|---|---|
+| bun `PrivateMemorySize64` (commit) | **58.12 GB** |
+| bun `WorkingSet64` (RSS) | **0.06 GB** |
+| System commit charge | 126.5 / 137.4 GB (host has ~32 GB RAM + pagefile) |
+| After `Stop-Process` on the one bun PID | commit 126.5 GB → **67.8 GB** |
+
+Uptime at kill: **~44 h** (`bun.exe run src/server/src/main.ts`, started 07-18 16:38 —
+the *same process* as the original report, having grown 10 GB → 58 GB).
+
+**What it broke, none of it obviously memory-related:**
+- Android `RunUAT BuildCookRun` died at the link step with `LLVM ERROR: out of memory`
+  (5m37s in, after a full recompile).
+- UBA killed every compile worker instantly: `Killed process ... Low on memory
+  (131.2gb/137.4gb). Kill threshold is 130.5gb`. **UBA was CORRECT** — we initially
+  mis-filed this as a UBA bug ("it counts standby cache") and defaulted
+  `build-editor.ps1` to `-NoUBA`. The real cause was this leak eating the commit
+  limit. Comment corrected in that script.
+- A morning of editor crashes (incl. one in `FAssetDataGatherer` on boot) that read
+  as unrelated flakiness.
+
+**Detection that actually works** — commit, not RSS, and it is a single process:
+```powershell
+Get-Process bun | Sort-Object PrivateMemorySize64 -Descending |
+  Select-Object Id,@{n='Commit_GB';e={[math]::Round($_.PrivateMemorySize64/1GB,2)}},
+                  @{n='WS_GB';e={[math]::Round($_.WorkingSet64/1GB,2)}}
+# and the host-level symptom:
+(Get-Counter '\Memory\Committed Bytes').CounterSamples[0].CookedValue/1GB
+```
+A 58 GB commit / 60 MB working-set process is invisible to Task Manager's default
+Memory column and to any `WorkingSet64` sort — which is why the original workaround
+note failed us. **Commit-vs-RSS is the tell: this leak is reserved-but-untouched
+address space.**
+
+**Fix wanted (revised):** an RSS watchdog is insufficient — watch **commit**, and
+self-restart or hard-cap at a threshold. Given it reached 58 GB of commit with a
+60 MB working set, suspect large `ArrayBuffer`/`Buffer` allocations that are never
+touched after allocation (screenshot/stream payload buffers sized then abandoned)
+rather than a classic retained-object leak.
+
+## GAP-065 — PIE-lease FIFO deadlocks behind dead queued sessions
+**Observed 2026-07-20 (mobile-game, 8-agent window):** the PIE lease queue had 5
+QUEUED sessions whose worker processes were dead; only the lease HOLDER has a TTL,
+waiters have no staleness eviction, so the queue deadlocked — no live agent could
+ever be promoted. Workaround: restart run-server.ps1 (lease state is in-memory).
+**Fix wanted:** staleness eviction for queue WAITERS (heartbeat or queue-position
+TTL), mirroring the holder's 10-min lease expiry.
+
+## GAP-066 — read/connect node-id KEY mismatch (read emits `name`, mutators consume `node_id`) — FIXED 2026-07-21
+**Observed 2026-07-21 (mobile-game, Gunner barrel-spin ABP wiring):** adding a
+Transform(Modify)Bone node to an AnimBP AnimGraph worked (bp_add_node), and its
+inner properties set fine, but `bp_connect_pins` / `bp_delete_node` appeared to reject
+the identifiers a read tool reported ("Node not found") — leading to the claim that
+connect "needs a GUID no read tool exposes."
+
+**Real root cause (NOT a tool limitation — a KEY-NAME inconsistency):** the mutation
+resolvers (`FBPConnector::FindNodeById`, `FNodeDeleter::FindNodeByID`,
+`FNodePropertyManager::FindNodeByID`) already matched **`NodeGuid.ToString()` OR
+`UEdGraphNode::GetName()`**. The value they wanted — `GetName()`, e.g.
+`AnimGraphNode_ModifyBone_0` — WAS present in every read dump. But the graph-dump read
+tools (`analyze_blueprint_graph`, `bp_get_function_details`, `get_blueprint_info`)
+emitted that value under the key **`"name"`**, alongside a human `"title"`
+("Transform (Modify) Bone") and NO `node_id` / GUID key at all. The mutation tools
+consume a param named **`node_id`**. So a caller reading the AnimGraph found no
+`node_id` field, and the natural pick — the readable `title` — is exactly what the
+resolvers did NOT accept → "Node not found." The round-trip was undiscoverable, not
+impossible. (`bp_list_node_pins` already keyed its id `node_id`, so only the graph-dump
+readers diverged.)
+
+**Fix (both approaches applied):**
+1. **Reads now emit the round-trip keys.** `analyze_blueprint_graph`,
+   `bp_get_function_details`, and `get_blueprint_info` now emit per node
+   `node_id` (== `GetName()`, the exact string the resolvers match) AND
+   `node_guid` (== `NodeGuid.ToString()`), keeping `name`/`class`/`title` for
+   readability. The key a read returns is now the key a mutator consumes.
+   (`MCPBlueprintCommands.cpp`, node-emit sites ~2555 / ~2900 / ~3585.)
+2. **Resolvers hardened with a unique-TITLE fallback.** All three node resolvers
+   (BPConnector, NodeDeleter, NodePropertyManager) — plus the `bp_disconnect_pin`
+   resolver in `MCPBlueprintPolishCommands.cpp` — now fall back, after GUID+GetName,
+   to matching `GetNodeTitle(FullTitle|ListView)` when it identifies EXACTLY one node
+   (refusing on ambiguity rather than mutating the wrong node). So even the readable
+   `title` now round-trips when unambiguous.
+
+**Validated:** barrel-spin pose chain on ABP_FAC_BattleRobot wired end-to-end
+(LocalToComponentSpace → Transform(Modify)Bone → ComponentToLocalSpace → Output,
+BarrelSpinAngle → ModifyBone Rotation.Roll) using node ids taken straight from a read
+tool, and the orphan `LocalToComponentSpace_1` deleted via `bp_delete_node` — both
+using read-emitted ids. Was: "tool limitation." Now: fixed, read/connect node-id
+contract reconciled.

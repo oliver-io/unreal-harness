@@ -171,6 +171,17 @@ Multi-resolution rung:
 | Node pins | `bp_list_node_pins(node_id)` | Pin names + types + directions |
 | Graphs | `bp_list_graphs` | Every graph the BP owns |
 
+**Node-id round-trip contract (GAP-066):** every read that enumerates graph nodes
+(`bp_read`, `bp_inspect`/`analyze_blueprint_graph`, `bp_get_function_details`,
+`bp_list_node_pins`) emits, per node, a **`node_id`** field (and a stable
+**`node_guid`**). That `node_id` is the EXACT string the mutation tools
+(`bp_connect_pins`, `bp_delete_node`, `bp_set_node_property`, `bp_disconnect_pin`)
+accept as their `source_node_id` / `target_node_id` / `node_id` param — copy it
+straight through, no GUID lookup needed. (The human-readable `title`, e.g.
+"Transform (Modify) Bone", is also accepted as a node id when it uniquely identifies
+one node in the graph; ambiguous titles are refused.) The `name` field mirrors
+`node_id` for back-compat — prefer `node_id`.
+
 ### 2.3. Reflection (`class_*`, `enum_*`)
 
 Read-only — never dirties packages.

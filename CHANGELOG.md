@@ -5,6 +5,34 @@ same change that alters behavior.
 
 ## Unreleased
 
+- **Pixel Streaming control (portable.dev#19 M2).** New `stream` domain
+  (`src/server/src/domains/streaming.ts`): `stream_start`
+  ({viewer_port?=8890, streamer_port?=8888}, async — success means
+  `state:"starting"`), `stream_stop` (idempotent), `stream_status`
+  ({active, viewer_port, streamer_port, streamers[]}) — 1:1 bridge forwards to
+  the plugin's new `MCPStreamingCommands` handler. `stream_start`/`stream_stop`
+  joined `DRY_RUN_UNSUPPORTED` (mirroring C++); NOT PIE-blocked by design.
+- Plain-HTTP `POST /control/stream/{start,stop}` control surface
+  (`src/server/src/control/http.ts`, routed in `main.ts` beside `/build*` and
+  `/status*`) for the Portable backend: start takes `{viewerPort?}` and answers
+  `200 {ok:true, viewerPort, streamerPort:8888, state:"starting"}` or
+  `503 {ok:false, error}` (editor down / bridge refused / C++ error envelope);
+  stop answers `200 {ok:true}` or the same 503 shape; unknown `/control` paths
+  404. Unlike `/status` it dispatches REAL bridge commands per request.
+- `GET /status` gains an optional `stream: {active, viewerPort, streamers}`
+  field, mapped from the `stream` object the plugin now embeds in `mcp_status`
+  (read from the same cached watchdog probe — zero extra bridge traffic).
+  Omitted when the plugin predates the field; all pre-existing fields unchanged.
+
+- Plain-HTTP `GET /status` liveness endpoint (`src/server/src/status/http.ts`),
+  routed in `main.ts` next to the `/build/*` surface: returns `{editorUp, phase,
+  pieActive, liveCodingInProgress, project, lastProbeAt}` so an external local
+  process (the Portable backend — portable.dev#19) can poll editor liveness
+  without an MCP session. Read-only over the lifecycle watchdog's newly cached
+  `mcp_status` probe (`getLastEditorStatus()` in `bridge/lifecycle.ts` — same 5s
+  cadence, zero extra bridge traffic); zero-state (editorUp false, lastProbeAt
+  null) is HTTP 200 before the first probe so pollers branch on fields, not
+  errors. Loopback-only like the rest of the listener.
 - **Portable skills extracted into the `unreal-skills` Claude Code plugin**
   (`plugin/unreal-skills/`, marketplace manifest at `.claude-plugin/marketplace.json`).
   18 skills moved out of `.claude/skills/` (verification, authoring, design/docs,

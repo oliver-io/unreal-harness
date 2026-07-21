@@ -324,7 +324,7 @@ const bpListNodePins = bridgeTool({
     "node ids are per-graph and reused across graphs, so an unscoped search can match a same-id node elsewhere.",
   input: z.object({
     blueprint_name: z.string().min(1),
-    node_id: z.string().min(1).describe("Node GUID or display name."),
+    node_id: z.string().min(1).describe("The node's `node_id` from a read tool (its GetName() id) — or its `node_guid`, or a unique display `title`."),
     graph_name: z.string().optional().describe("Optional graph name; searches all if omitted."),
     function_name: z.string().optional().describe("Alias for graph_name (function graph to scope to)."),
     from_state: z.string().optional(),
@@ -496,7 +496,7 @@ const bpDisconnectPin = bridgeTool({
     "reused across graphs, so an unscoped search can match a same-id node in the wrong graph.",
   input: z.object({
     bp_path: z.string().min(1),
-    node_id: z.string().min(1).describe("Source node GUID or display name."),
+    node_id: z.string().min(1).describe("Source node's `node_id` from a read tool (its GetName() id) — or its `node_guid`, or a unique display `title`."),
     pin_name: z.string().min(1).describe("Pin to disconnect."),
     target_node_id: z.string().default("").describe("Optional peer node to sever just that one link."),
     target_pin_name: z.string().default("").describe("Optional peer pin to sever just that one link."),
@@ -661,7 +661,7 @@ const bpDeleteNode = bridgeTool({
     "graph (defaults to EventGraph); from_state/to_state target a transition rule graph. dry_run supported.",
   input: z.object({
     blueprint_name: z.string().min(1),
-    node_id: z.string().min(1).describe("Node GUID or name."),
+    node_id: z.string().min(1).describe("The node's `node_id` from a read tool (its GetName() id) — or its `node_guid`, or a unique display `title`."),
     function_name: z.string().optional().describe("Function graph name; defaults to EventGraph."),
     from_state: z.string().optional(),
     to_state: z.string().optional(),
@@ -686,12 +686,13 @@ const bpConnectPins = bridgeTool({
   domain: "bp",
   description:
     "Connect a source output pin to a target input pin between two existing nodes. function_name selects " +
-    "a function graph (else EventGraph); from_state/to_state target a transition rule graph. dry_run supported.",
+    "a function graph (else EventGraph); from_state/to_state target a transition rule graph. dry_run supported. " +
+    "source_node_id/target_node_id: pass the `node_id` a read tool (bp_inspect/bp_read/bp_list_node_pins) reports for the node — it round-trips verbatim (the `node_guid` or a unique `title` are also accepted).",
   input: z.object({
     blueprint_name: z.string().min(1),
-    source_node_id: z.string().min(1),
+    source_node_id: z.string().min(1).describe("Source node id — the `node_id` field from a read tool (or its `node_guid`, or a unique `title`)."),
     source_pin_name: z.string().min(1).describe("Output pin on the source node."),
-    target_node_id: z.string().min(1),
+    target_node_id: z.string().min(1).describe("Target node id — the `node_id` field from a read tool (or its `node_guid`, or a unique `title`)."),
     target_pin_name: z.string().min(1).describe("Input pin on the target node."),
     function_name: z.string().optional().describe("Function graph name; defaults to EventGraph."),
     from_state: z.string().optional(),
@@ -724,7 +725,7 @@ const bpSetNodeProperty = bridgeTool({
     "set_function_call, set_event_type — supply `action` plus its parameters). Phase-3 actions are destructive. dry_run supported.",
   input: z.object({
     blueprint_name: z.string().min(1),
-    node_id: z.string().min(1),
+    node_id: z.string().min(1).describe("The `node_id` a read tool (bp_inspect/bp_read) reports for the node — round-trips verbatim (its `node_guid` or a unique `title` also work)."),
     property_name: z.string().default("").describe("Legacy mode: property to set (used when action is unset)."),
     property_value: z.unknown().optional().describe("Legacy mode: value to set."),
     function_name: z.string().optional().describe("Function graph name; defaults to EventGraph."),

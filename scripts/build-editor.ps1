@@ -17,7 +17,18 @@
 param(
     [string]$Project = $env:UNREAL_PROJECT_ROOT,
     [string]$Target,
-    [string]$Configuration = "Development"
+    [string]$Configuration = "Development",
+    # UBA (Unreal Build Accelerator) kills compile workers when system COMMIT charge
+    # nears the commit limit ("Killed process ... Low on memory (131.2gb/137.4gb),
+    # kill threshold 130.5gb"). NOTE (corrected 2026-07-20): that check is CORRECT,
+    # not buggy — this box has ~32 GB RAM plus a large pagefile, and a leaked bun MCP
+    # server holding 58 GB of COMMIT (with a 60 MB working set, so it hides from any
+    # RAM/working-set check) really had it at the limit. Bouncing the server dropped
+    # commit 126 GB -> 68 GB. So: if UBA starts killing workers, FIRST check
+    # `Get-Process bun | Select PrivateMemorySize64` and bounce run-server.ps1 —
+    # do not assume UBA is lying. -NoUBA stays the default because UBA's parallelism
+    # is a poor fit for 32 GB regardless; pass -UseUBA to opt back in.
+    [switch]$UseUBA
 )
 
 $ErrorActionPreference = "Stop"
@@ -96,7 +107,9 @@ $buildId = Enter-BuildLock -Target "$Target Win64 $Configuration" -Label $label
 try {
     Write-Host "=== Building $Target ($Configuration, Win64) ==="
     Write-Host "    project: $uproject"
-    & $buildBat $Target Win64 $Configuration "-Project=$uproject" -WaitMutex
+    $extraArgs = @()
+    if (-not $UseUBA) { $extraArgs += "-NoUBA" }
+    & $buildBat $Target Win64 $Configuration "-Project=$uproject" -WaitMutex @extraArgs
     $code = $LASTEXITCODE
     if ($code -eq 0) {
         Write-Host "=== Build succeeded ==="

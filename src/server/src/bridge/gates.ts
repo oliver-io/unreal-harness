@@ -113,6 +113,7 @@ export const DRY_RUN_UNSUPPORTED: ReadonlySet<string> = new Set([
   "material_function_create", "mpc_create", "niagara_script_create",
   "physics_material_create",
   "pie_record_start", "pie_record_stop", "pie_record_arm", "pie_record_disarm",
+  "stream_start", "stream_stop",
   "struct_create", "widget_add_child", "widget_bind_handler", "widget_create",
   "widget_set_property",
 ]);

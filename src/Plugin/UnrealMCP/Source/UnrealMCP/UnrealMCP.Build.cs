@@ -99,6 +99,7 @@ public class UnrealMCP : ModuleRules
 				"Slate",
 				"SlateCore",
 				"LevelEditor",        // SLevelViewport + FLevelEditorModule for editor_window_screenshot viewport mode
+				"StatusBar",          // UStatusBarSubsystem::ForceDismissDrawer (PIE tap: the Output Log drawer shadows the viewport hit-test)
 
 				"Kismet",
 				"Projects",
@@ -111,7 +112,17 @@ public class UnrealMCP : ModuleRules
 				"IKRigEditor",       // UIKRigController, UIKRetargeterController, factory classes
 				"AnimationBlueprintLibrary", // UAnimPoseExtensions for sampling AnimSequence frames as retarget poses
 				"GameplayTagsEditor", // IGameplayTagsEditorModule (todo/9_gameplay_tag_registry.md)
-				"MovieSceneCapture"  // FFrameGrabber (pie_record_* back-buffer capture)
+				"MovieSceneCapture",  // FFrameGrabber (pie_record_* back-buffer capture)
+
+				// Pixel Streaming 2 editor streaming (stream_* commands, portable.dev#19 M2).
+				// Hard-enables the PixelStreaming2 plugin for host projects (uplugin ref) —
+				// accepted for the PoC.
+				"PixelStreaming2Editor",   // IPixelStreaming2EditorModule (Start/StopStreaming, ports)
+				"PixelStreaming2",         // IPixelStreaming2Module (GetStreamerIds / FindStreamer)
+				"PixelStreaming2Core",     // IPixelStreaming2Streamer (IsStreaming, start/stop events, GetInputHandler)
+				"PixelStreaming2Input",    // IPixelStreaming2InputHandler (RegisterMessageHandler "UIInteraction" — touch camera control)
+				"PixelStreaming2Settings", // EPixelStreaming2EditorStreamTypes (PixelStreaming2SettingsEnums.h)
+				"PixelStreaming2Servers"   // PixelStreaming2Servers.h (transitively included by the editor-module interface)
 			}
 		);
 

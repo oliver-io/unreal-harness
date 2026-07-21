@@ -2552,6 +2552,12 @@ TSharedPtr<FJsonObject> FMCPBlueprintCommands::HandleReadBlueprintContent(const 
                     if (Node)
                     {
                         TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+                        // GAP-066: `node_id` is the round-trip key that bp_connect_pins /
+                        // bp_delete_node / bp_set_node_property consume; it MUST equal what
+                        // those resolvers match (GetName()). `node_guid` is the stable
+                        // alternate id. `name`/`title` retained for back-compat/readability.
+                        NodeObj->SetStringField(TEXT("node_id"), Node->GetName());
+                        NodeObj->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
                         NodeObj->SetStringField(TEXT("name"), Node->GetName());
                         NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
                         NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
@@ -2897,6 +2903,11 @@ TSharedPtr<FJsonObject> FMCPBlueprintCommands::HandleAnalyzeBlueprintGraph(const
             if (MaxNodes > 0 && NodeArray.Num() >= MaxNodes) { break; }
 
             TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+            // GAP-066: emit `node_id` (== GetName(), the exact string the mutation
+            // resolvers match) and `node_guid` so a node id read here round-trips
+            // straight into bp_connect_pins / bp_delete_node / bp_set_node_property.
+            NodeObj->SetStringField(TEXT("node_id"), Node->GetName());
+            NodeObj->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
             NodeObj->SetStringField(TEXT("name"), Node->GetName());
             NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
             NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
@@ -3582,6 +3593,10 @@ TSharedPtr<FJsonObject> FMCPBlueprintCommands::HandleGetBlueprintFunctionDetails
                 if (Node)
                 {
                     TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+                    // GAP-066: `node_id` (== GetName()) + `node_guid` are the round-trip
+                    // ids the mutation tools consume; `name`/`title` kept for readability.
+                    NodeObj->SetStringField(TEXT("node_id"), Node->GetName());
+                    NodeObj->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
                     NodeObj->SetStringField(TEXT("name"), Node->GetName());
                     NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
                     NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());

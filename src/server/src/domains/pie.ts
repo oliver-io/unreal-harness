@@ -80,6 +80,7 @@ async function editorPieRunning(conn: UnrealConnection): Promise<boolean> {
 async function takeoverAndStart(
   conn: UnrealConnection,
   mapPath: string,
+  inViewport: boolean,
   signal: AbortSignal | undefined,
 ): Promise<Envelope> {
   if (await editorPieRunning(conn)) {
@@ -104,6 +105,7 @@ async function takeoverAndStart(
   }
   const params: Record<string, unknown> = {};
   if (mapPath) params.map_path = mapPath;
+  if (inViewport) params.in_viewport = true;
   return conn.sendCommand("pie_start", params);
 }
 
@@ -142,6 +144,15 @@ const pieStart = defineTool({
       .describe(
         "Optional human-readable label for the queue (e.g. a task name) — purely " +
           "diagnostic, shown to other agents in the lease/queue readout.",
+      ),
+    in_viewport: z
+      .union([z.boolean(), z.string()]) // string-coerce: stale client schemas send "true"
+      .default(false)
+      .transform((v) => v === true || v === "true" || v === "1")
+      .describe(
+        "Run PIE inside the level-editor viewport instead of the Play-settings " +
+          "window. Use when the editor viewport is being Pixel-Streamed (a remote " +
+          "viewer can only see in-viewport PIE).",
       ),
   }),
   handler: async (args, ctx: ToolContext) => {
@@ -189,7 +200,7 @@ const pieStart = defineTool({
     }
 
     // Fresh acquire → reconcile the editor and start a clean PIE.
-    const startEnv = await takeoverAndStart(ctx.conn, args.map_path, ctx.signal);
+    const startEnv = await takeoverAndStart(ctx.conn, args.map_path, args.in_viewport, ctx.signal);
     if (startEnv.status === "error") {
       // Don't hold a lease we couldn't use — release so the next agent proceeds.
       release(sessionId);

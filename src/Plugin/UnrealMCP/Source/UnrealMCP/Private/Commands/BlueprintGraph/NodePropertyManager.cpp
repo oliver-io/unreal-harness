@@ -414,7 +414,7 @@ TSharedPtr<FJsonObject> FNodePropertyManager::SetNodeProperty(const TSharedPtr<F
 		return FMCPCommonUtils::CreateErrorResponse(
 			TEXT("Missing 'node_id' parameter"),
 			EMCPErrorCode::InvalidArgument,
-			TEXT("Pass `node_id` (string) — the FGuid of the node to modify. Use `bp_inspect` to discover node IDs."));
+			TEXT("Pass `node_id` (string) — the `node_id` a read tool (`bp_inspect`/`bp_read`) reports for the node (its GetName() id); the `node_guid` or a unique `title` also work. Use `bp_inspect` to discover node IDs."));
 	}
 
 	// ===================================================
@@ -648,7 +648,7 @@ TSharedPtr<FJsonObject> FNodePropertyManager::EditNode(const TSharedPtr<FJsonObj
 		return FMCPCommonUtils::CreateErrorResponse(
 			TEXT("Missing 'node_id' parameter"),
 			EMCPErrorCode::InvalidArgument,
-			TEXT("Pass `node_id` (string) — the FGuid of the node to modify. Use `bp_inspect` to discover node IDs."));
+			TEXT("Pass `node_id` (string) — the `node_id` a read tool (`bp_inspect`/`bp_read`) reports for the node (its GetName() id); the `node_guid` or a unique `title` also work. Use `bp_inspect` to discover node IDs."));
 	}
 
 	FString Action;
@@ -1380,6 +1380,26 @@ UEdGraphNode* FNodePropertyManager::FindNodeByID(UEdGraph* Graph, const FString&
 		{
 			return Node;
 		}
+	}
+
+	// GAP-066 fallback: accept a human-readable node TITLE when it UNIQUELY
+	// identifies one node; refuse on ambiguity rather than mutate the wrong node.
+	UEdGraphNode* TitleMatch = nullptr;
+	int32 TitleMatchCount = 0;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (!Node) { continue; }
+		const FString Title = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+		const FString ListTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+		if (Title.Equals(NodeID, ESearchCase::IgnoreCase) || ListTitle.Equals(NodeID, ESearchCase::IgnoreCase))
+		{
+			++TitleMatchCount;
+			TitleMatch = Node;
+		}
+	}
+	if (TitleMatchCount == 1)
+	{
+		return TitleMatch;
 	}
 
 	return nullptr;
