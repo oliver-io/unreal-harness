@@ -577,3 +577,16 @@ waiters have no staleness eviction, so the queue deadlocked — no live agent co
 ever be promoted. Workaround: restart run-server.ps1 (lease state is in-memory).
 **Fix wanted:** staleness eviction for queue WAITERS (heartbeat or queue-position
 TTL), mirroring the holder's 10-min lease expiry.
+
+## GAP-066 — bp_connect_pins / bp_delete_node need node GUIDs no read tool exposes
+**Observed 2026-07-21 (mobile-game, Gunner barrel-spin ABP wiring):** adding a
+Transform(Modify)Bone node to an AnimBP AnimGraph worked (bp_add_node), and its
+inner properties set fine (bp_set_inner_node_property, incl. struct-literal
+`(BoneName="cannon_barrel_R")`), but `bp_connect_pins` and `bp_delete_node` reject
+the node identifiers that bp_read / bp_list_node_pins report ("Node not found") —
+they want FGuids that no read surface exposes. Result: the pose chain could not be
+wired (barrel bone spin left unconnected; Root still passes straight through, so the
+graph is behaviour-neutral and compiles clean). **Fix wanted:** either surface each
+node's FGuid in the read tools, or accept the same title/id bp_read returns in
+connect/delete. Workaround: none from the tools — the wiring needs manual editor work
+or a GUID the tools don't provide.
