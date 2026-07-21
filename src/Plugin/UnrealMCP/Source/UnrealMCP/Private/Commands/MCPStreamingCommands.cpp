@@ -1038,6 +1038,182 @@ namespace
             0.5f); // poll twice a second
     }
 
+    // ── Synthesized PIE drags (drag-and-drop across the streamed PIE UI) ─────
+    // Same Slate-synthesis strategy as the PIE tap, but the press and release are
+    // separated by per-frame interpolated mouse-move events with the left button
+    // HELD — that held-move stream is what lets UMG's DetectDragIfPressed /
+    // OnDragDetected machinery fire, so games that implement standard UMG
+    // drag-and-drop get working drags from this path with zero extra wiring.
+    //   Console: MCP.Stream.Drag <nx0> <ny0> <nx1> <ny1> [seconds=0.35]
+    //   Phone:   {t:"touch",ph:"s"|"m"|"e",x,y} — raw touch phases (the Portable
+    //            client buy-in for real finger drags during PIE; STATUS item 7).
+
+    /** Normalized 0..1 stream coords → absolute desktop coords via the streamed
+     *  level-viewport widget's cached geometry (same mapping as the PIE tap). */
+    bool MCPResolvePieAbs(double NX, double NY, FVector2D& OutAbs)
+    {
+        FLevelEditorModule* LevelEditorModule =
+            FModuleManager::GetModulePtr<FLevelEditorModule>(TEXT("LevelEditor"));
+        if (!LevelEditorModule)
+        {
+            return false;
+        }
+        const TSharedPtr<IAssetViewport> ActiveViewport = LevelEditorModule->GetFirstActiveViewport();
+        if (!ActiveViewport.IsValid())
+        {
+            return false;
+        }
+        const FGeometry& Geo = ActiveViewport->AsWidget()->GetCachedGeometry();
+        const FVector2D LocalSize = Geo.GetLocalSize();
+        if (LocalSize.X <= 0.f || LocalSize.Y <= 0.f)
+        {
+            return false;
+        }
+        OutAbs = Geo.LocalToAbsolute(FVector2D(
+            FMath::Clamp(NX, 0.0, 1.0) * LocalSize.X,
+            FMath::Clamp(NY, 0.0, 1.0) * LocalSize.Y));
+        return true;
+    }
+
+    void MCPSyntheticPointerMove(const FVector2D& Pos, bool bLeftHeld)
+    {
+        FSlateApplication& Slate = FSlateApplication::Get();
+        const FVector2D Prev = Slate.GetCursorPos();
+        Slate.SetCursorPos(Pos);
+        FPointerEvent MoveEvent(
+            FSlateApplication::CursorPointerIndex, Pos, Prev,
+            bLeftHeld ? TSet<FKey>({ EKeys::LeftMouseButton }) : TSet<FKey>(),
+            EKeys::Invalid, 0, FModifierKeysState());
+        Slate.ProcessMouseMoveEvent(MoveEvent);
+    }
+
+    void MCPSyntheticPointerDown(const FVector2D& Pos)
+    {
+        FSlateApplication& Slate = FSlateApplication::Get();
+        // A prior click may have left the game viewport holding pointer capture —
+        // release so the press routes to what the viewer actually sees (as the tap does).
+        Slate.ReleaseAllPointerCapture();
+        Slate.SetCursorPos(Pos);
+        FPointerEvent DownEvent(
+            FSlateApplication::CursorPointerIndex, Pos, Pos,
+            TSet<FKey>({ EKeys::LeftMouseButton }), EKeys::LeftMouseButton, 0, FModifierKeysState());
+        Slate.ProcessMouseButtonDownEvent(nullptr, DownEvent);
+    }
+
+    void MCPSyntheticPointerUp(const FVector2D& Pos)
+    {
+        FSlateApplication& Slate = FSlateApplication::Get();
+        FPointerEvent UpEvent(
+            FSlateApplication::CursorPointerIndex, Pos, Pos,
+            TSet<FKey>(), EKeys::LeftMouseButton, 0, FModifierKeysState());
+        Slate.ProcessMouseButtonUpEvent(UpEvent);
+    }
+
+    // Scripted-drag state. GAME THREAD ONLY; one drag at a time.
+    bool GMCPDragActive = false;
+    FVector2D GMCPDragFrom = FVector2D::ZeroVector;
+    FVector2D GMCPDragTo = FVector2D::ZeroVector;
+    double GMCPDragDuration = 0.35;
+    double GMCPDragElapsed = 0.0;
+    FTSTicker::FDelegateHandle GMCPDragTicker;
+
+    void MCPBeginPieDragGameThread(double NX0, double NY0, double NX1, double NY1, double Seconds)
+    {
+        if (!(GEditor && GEditor->IsPlaySessionInProgress()))
+        {
+            UE_LOG(LogUnrealMCP, Warning,
+                TEXT("MCP.Stream.Drag: no PIE session in progress — drag is a game (UMG) interaction"));
+            return;
+        }
+        if (GMCPDragActive)
+        {
+            UE_LOG(LogUnrealMCP, Warning, TEXT("MCP.Stream.Drag: a synthesized drag is already in flight — ignored"));
+            return;
+        }
+        FVector2D From, To;
+        if (!MCPResolvePieAbs(NX0, NY0, From) || !MCPResolvePieAbs(NX1, NY1, To))
+        {
+            UE_LOG(LogUnrealMCP, Warning, TEXT("MCP.Stream.Drag: could not resolve the streamed viewport geometry"));
+            return;
+        }
+        // Same drawer/shadow hygiene as the tap: the Output Log drawer or a floating
+        // Message Log over the viewport would swallow the press.
+        if (GEditor)
+        {
+            if (UStatusBarSubsystem* StatusBar = GEditor->GetEditorSubsystem<UStatusBarSubsystem>())
+            {
+                StatusBar->ForceDismissDrawer();
+            }
+        }
+
+        GMCPDragFrom = From;
+        GMCPDragTo = To;
+        GMCPDragDuration = FMath::Clamp(Seconds, 0.05, 5.0);
+        GMCPDragElapsed = 0.0;
+        GMCPDragActive = true;
+
+        MCPSyntheticPointerMove(From, /*bLeftHeld=*/false);
+        MCPSyntheticPointerDown(From);
+        UE_LOG(LogUnrealMCP, Display, TEXT("MCP.Stream.Drag: press at (%.0f,%.0f) → releasing at (%.0f,%.0f) over %.2fs"),
+            From.X, From.Y, To.X, To.Y, GMCPDragDuration);
+
+        GMCPDragTicker = FTSTicker::GetCoreTicker().AddTicker(
+            FTickerDelegate::CreateLambda([](float Dt) -> bool
+            {
+                GMCPDragElapsed += Dt;
+                const double Alpha = FMath::Clamp(GMCPDragElapsed / GMCPDragDuration, 0.0, 1.0);
+                const FVector2D Pos = FMath::Lerp(GMCPDragFrom, GMCPDragTo, Alpha);
+                MCPSyntheticPointerMove(Pos, /*bLeftHeld=*/true);
+                if (Alpha >= 1.0)
+                {
+                    MCPSyntheticPointerUp(GMCPDragTo);
+                    GMCPDragActive = false;
+                    GMCPDragTicker.Reset();
+                    UE_LOG(LogUnrealMCP, Display, TEXT("MCP.Stream.Drag: released"));
+                    return false;
+                }
+                return true;
+            }),
+            0.0f); // every frame — the held-move cadence UMG drag detection expects
+    }
+
+    /** Phone raw-touch phases during PIE ({t:"touch",ph,x,y}). "s"tart presses,
+     *  "m"ove drags with the button held, "e"nd releases — so a real finger drag
+     *  becomes a real Slate drag once the Portable client ships touch phases.
+     *  GAME THREAD ONLY. Ignored outside PIE (editor gestures own that space). */
+    bool GMCPTouchHeld = false;
+    void MCPApplyPieTouchGameThread(const FString& Phase, double NX, double NY)
+    {
+        if (!(GEditor && GEditor->IsPlaySessionInProgress()))
+        {
+            return;
+        }
+        FVector2D Abs;
+        if (!MCPResolvePieAbs(NX, NY, Abs))
+        {
+            return;
+        }
+        if (Phase == TEXT("s"))
+        {
+            MCPSyntheticPointerMove(Abs, /*bLeftHeld=*/false);
+            MCPSyntheticPointerDown(Abs);
+            GMCPTouchHeld = true;
+        }
+        else if (Phase == TEXT("m") && GMCPTouchHeld)
+        {
+            MCPSyntheticPointerMove(Abs, /*bLeftHeld=*/true);
+        }
+        else if (Phase == TEXT("e"))
+        {
+            if (GMCPTouchHeld)
+            {
+                MCPSyntheticPointerMove(Abs, /*bLeftHeld=*/true);
+                MCPSyntheticPointerUp(Abs);
+            }
+            GMCPTouchHeld = false;
+        }
+    }
+
     /** Parse one camera-command JSON descriptor and dispatch it to the game thread. */
     void MCPDispatchCameraCommand(const FString& Descriptor)
     {
@@ -1051,6 +1227,32 @@ namespace
         FString Type;
         if (!Obj->TryGetStringField(TEXT("t"), Type))
         {
+            return;
+        }
+
+        // {t:"touch",ph:"s"|"m"|"e",x,y} — raw touch phases during PIE (real
+        // finger drag-and-drop once the Portable client ships them). x/y BOTH
+        // required — a malformed descriptor must never press at (0,0).
+        if (Type == TEXT("touch"))
+        {
+            FString Phase;
+            double NX = 0.0, NY = 0.0;
+            if (!Obj->TryGetStringField(TEXT("ph"), Phase)
+                || !Obj->TryGetNumberField(TEXT("x"), NX) || !Obj->TryGetNumberField(TEXT("y"), NY))
+            {
+                return;
+            }
+            if (IsInGameThread())
+            {
+                MCPApplyPieTouchGameThread(Phase, NX, NY);
+            }
+            else
+            {
+                AsyncTask(ENamedThreads::GameThread, [Phase, NX, NY]()
+                {
+                    MCPApplyPieTouchGameThread(Phase, NX, NY);
+                });
+            }
             return;
         }
 
@@ -1225,6 +1427,40 @@ namespace
                     AsyncTask(ENamedThreads::GameThread, [NX, NY]()
                     {
                         MCPApplyPointCommandGameThread(TEXT("tap"), NX, NY);
+                    });
+                }
+            }));
+
+    /** Agent-testable drag: press → per-frame held moves → release through the
+     *  same synthesized-Slate path as MCP.Stream.Tap, so UMG drag-and-drop
+     *  (DetectDragIfPressed / OnDragDetected / OnDrop) actuates for real.
+     *  Usage: MCP.Stream.Drag <nx0> <ny0> <nx1> <ny1> [seconds=0.35] */
+    static FAutoConsoleCommand GMCPStreamDragCmd(
+        TEXT("MCP.Stream.Drag"),
+        TEXT("Synthesize a viewer drag in PIE from (nx0,ny0) to (nx1,ny1), normalized 0..1. Usage: MCP.Stream.Drag 0.5 0.9 0.5 0.55 0.35"),
+        FConsoleCommandWithArgsDelegate::CreateStatic(
+            [](const TArray<FString>& Args)
+            {
+                if (Args.Num() < 4)
+                {
+                    UE_LOG(LogUnrealMCP, Warning,
+                        TEXT("MCP.Stream.Drag needs 4 args: <nx0> <ny0> <nx1> <ny1> [seconds]"));
+                    return;
+                }
+                const double NX0 = FCString::Atod(*Args[0]);
+                const double NY0 = FCString::Atod(*Args[1]);
+                const double NX1 = FCString::Atod(*Args[2]);
+                const double NY1 = FCString::Atod(*Args[3]);
+                const double Seconds = Args.Num() >= 5 ? FCString::Atod(*Args[4]) : 0.35;
+                if (IsInGameThread())
+                {
+                    MCPBeginPieDragGameThread(NX0, NY0, NX1, NY1, Seconds);
+                }
+                else
+                {
+                    AsyncTask(ENamedThreads::GameThread, [NX0, NY0, NX1, NY1, Seconds]()
+                    {
+                        MCPBeginPieDragGameThread(NX0, NY0, NX1, NY1, Seconds);
                     });
                 }
             }));

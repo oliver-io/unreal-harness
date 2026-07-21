@@ -5,6 +5,17 @@ change that alters behavior.
 
 ## Unreleased
 
+- **Synthesized PIE drag-and-drop (portable.dev#19).** New `MCP.Stream.Drag <nx0>
+  <ny0> <nx1> <ny1> [seconds=0.35]` console command drives a viewer drag through the
+  same synthesized-Slate path as `MCP.Stream.Tap`: press → per-frame interpolated
+  mouse-moves with the left button HELD → release. The held-move stream is what lets
+  UMG's `DetectDragIfPressed`/`OnDragDetected`/`OnDrop` machinery fire, so games using
+  standard UMG drag-and-drop get working drags with zero extra wiring. Game-thread
+  only, one drag at a time; same drawer/pointer-capture hygiene as the tap. Also adds a
+  raw touch-phase wire path — `{t:"touch",ph:"s"|"m"|"e",x,y}` (start/move/end) — so a
+  real finger drag becomes a real Slate drag once the Portable client ships touch
+  phases; ignored outside PIE. `x`/`y` are both required so a malformed descriptor
+  never presses at (0,0).
 - **Touch-gesture editor camera control (portable.dev#19).** `MCPStreamingCommands`
   handles `emitUIInteraction` camera commands from the phone over the PS2 data
   channel: `look`/`pan`/`dolly` (drag/pinch), `orbit`+`orbitStart` (hold-then-drag
